@@ -44,9 +44,9 @@ public:
     ~Engine(){stop();}
     static aaudio_data_callback_result_t data(AAudioStream*,void* user,void* buffer,int32_t n){return static_cast<Engine*>(user)->render(static_cast<float*>(buffer),n);}
     static void error(AAudioStream*,void* user,aaudio_result_t e){auto* self=static_cast<Engine*>(user);self->params[11]=0;self->fault=e;self->running=false;}
-    bool start(int device,int outputDevice,int mode,bool withMic=true){
+    bool start(int device,int outputDevice,int mode,bool withMic=true,bool preserve=false){
         if(output&&running){if(withMic&&!input)return openMicrophone(device,mode);return true;}
-        if(output)stop();guideFrequency=0;guideEnvelope=0;pitchConfidence=0;pitchLevel=0;playback.reset();params[11]=0;monitorMode=mode;monitorLevel=mode>0?.18f:1.f;fault=0;frequency=0;frames=0;transport=0;pitchRing.reset();
+        if(output)stop();guideFrequency=0;guideEnvelope=0;pitchConfidence=0;pitchLevel=0;if(!preserve)playback.reset();params[11]=0;monitorMode=mode;monitorLevel=mode>0?.18f:1.f;fault=0;frequency=0;if(!preserve){frames=0;transport=0;}pitchRing.reset();
         {std::lock_guard<std::mutex> lock(notesMutex);notes.clear();hasActive=false;candidate=-1;candidateCount=0;}
         AAudioStreamBuilder* b=nullptr;AAudio_createStreamBuilder(&b);
         AAudioStreamBuilder_setDirection(b,AAUDIO_DIRECTION_OUTPUT);
@@ -62,14 +62,15 @@ public:
         if(result!=AAUDIO_OK){fault=result;output=nullptr;return false;}
         if(outputDevice>0&&AAudioStream_getDeviceId(output)!=outputDevice){AAudioStream_close(output);output=nullptr;fault=AAUDIO_ERROR_UNAVAILABLE;return false;}
         if(AAudioStream_getFormat(output)!=AAUDIO_FORMAT_PCM_FLOAT||AAudioStream_getChannelCount(output)!=2){AAudioStream_close(output);output=nullptr;fault=AAUDIO_ERROR_INVALID_FORMAT;return false;}
-        sr=AAudioStream_getSampleRate(output);
+        int oldRate=sr;sr=AAudioStream_getSampleRate(output);
+        if(preserve&&oldRate>0&&oldRate!=sr)localCursor=uint64_t(std::llround(double(localCursor.load())*sr/oldRate));
         AAudioStream_setBufferSizeInFrames(output,std::min(AAudioStream_getBufferCapacityInFrames(output),AAudioStream_getFramesPerBurst(output)*requestedBursts.load()));
         dsp.init(sr);feedback.init(sr,mode>0);composer.sampleRate(sr);
         {std::lock_guard<std::mutex> lock(vocalControl);if(!vocalLooper.sampleRate(sr)){AAudioStream_close(output);output=nullptr;fault=AAUDIO_ERROR_INTERNAL;return false;}}
         running=true;
-        if(withMic&&!openMicrophone(device,mode)){stop();return false;}
+        if(withMic&&!openMicrophone(device,mode)){stop(preserve);return false;}
         result=AAudioStream_requestStart(output);
-        if(result!=AAUDIO_OK){fault=result;stop();return false;}
+        if(result!=AAUDIO_OK){fault=result;stop(preserve);return false;}
         analyzer=std::thread([this]{analyze();});voiceAnalyzer=std::thread([this]{composer.analyze(running);});return true;
     }
     bool openMicrophone(int device,int mode){
@@ -82,22 +83,22 @@ public:
         if(device>0)AAudioStreamBuilder_setDeviceId(b,device);
         AAudioStreamBuilder_setErrorCallback(b,error,this);auto result=AAudioStreamBuilder_openStream(b,&input);AAudioStreamBuilder_delete(b);
         if(result!=AAUDIO_OK){fault=result;input=nullptr;return false;}
-        if(mode>0&&device>0&&AAudioStream_getDeviceId(input)!=device){AAudioStream_close(input);input=nullptr;fault=AAUDIO_ERROR_UNAVAILABLE;return false;}
+        if(device>0&&AAudioStream_getDeviceId(input)!=device){AAudioStream_close(input);input=nullptr;fault=AAUDIO_ERROR_UNAVAILABLE;return false;}
         if(AAudioStream_getFormat(input)!=AAUDIO_FORMAT_PCM_FLOAT||AAudioStream_getChannelCount(input)!=1||AAudioStream_getSampleRate(input)!=sr){AAudioStream_close(input);input=nullptr;fault=AAUDIO_ERROR_INVALID_FORMAT;return false;}
         monitorMode=mode;monitorLevel=mode>0?.18f:1.f;
         result=AAudioStream_requestStart(input);if(result!=AAUDIO_OK){AAudioStream_close(input);input=nullptr;fault=result;return false;}
         publishedInput.store(input,std::memory_order_release);return true;
     }
-    void microphoneOff(){publishedInput.store(nullptr,std::memory_order_release);params[11]=0;harmony.disable();harmony.clearPitch();frequency=0;pitchConfidence=0;pitchLevel=0;vocalLooper.cancel();
+    void microphoneOff(bool preserve=false){publishedInput.store(nullptr,std::memory_order_release);params[11]=0;if(!preserve)harmony.disable();harmony.clearPitch();frequency=0;pitchConfidence=0;pitchLevel=0;if(!preserve)vocalLooper.cancel();
         while(recordWriters.load()>0)std::this_thread::yield();
         if(input){AAudioStream_requestStop(input);AAudioStream_close(input);input=nullptr;}
         harmony.clearPitch();
     }
-    void stop(){guideFrequency=0;running=false;harmony.disable();vocalLooper.transport(0);stopRecord();
+    void stop(bool preserve=false){guideFrequency=0;running=false;if(!preserve){harmony.disable();vocalLooper.transport(0);}stopRecord();
         if(output){AAudioStream_requestStop(output);AAudioStream_close(output);output=nullptr;}
-        microphoneOff();
+        microphoneOff(preserve);
         if(voiceAnalyzer.joinable())voiceAnalyzer.join();
-        if(analyzer.joinable())analyzer.join();frequency=0;inRms=0;outRms=0;params[11]=0;localPlaying=false;
+        if(analyzer.joinable())analyzer.join();frequency=0;inRms=0;outRms=0;params[11]=0;if(!preserve)localPlaying=false;
     }
     float noise(){noiseState^=noiseState<<13;noiseState^=noiseState>>17;noiseState^=noiseState<<5;return int32_t(noiseState)/2147483648.f;}
     float band(const float* p,uint64_t sampleFrame){
@@ -258,6 +259,7 @@ JNI(jfloatArray) jfloatArray JNICALL Java_pro_livemic_studio_NativeAudio_pitchFr
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_seekLocal(JNIEnv*,jclass,jdouble seconds){engine.localSeek.request(seconds,engine.localDurationSeconds.load());}
 JNI(jdoubleArray) jdoubleArray JNICALL Java_pro_livemic_studio_NativeAudio_localPlaybackInfo(JNIEnv* e,jclass){double target=engine.localSeek.peek();double values[]={target>=0?target:double(engine.localCursor.load())/engine.sr,engine.localDurationSeconds.load()};auto a=e->NewDoubleArray(2);e->SetDoubleArrayRegion(a,0,2,values);return a;}
 
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_reroute(JNIEnv*,jclass,jint input,jint out,jint mode,jboolean mic){engine.stop(true);return engine.start(input,out,mode,mic,true);}
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_startPlayback(JNIEnv*,jclass,jint out,jint mode){return engine.start(0,out,mode,false);}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_microphoneOff(JNIEnv*,jclass){engine.microphoneOff();}
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeComposer_loadSoundFont(JNIEnv* e,jclass,jstring path){return engine.composer.load(str(e,path).c_str());}

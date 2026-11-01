@@ -7,6 +7,7 @@ import android.os.*;
 /** Owns audio and scheduled recording even while the Activity is backgrounded or recreated. */
 public class AudioService extends Service {
     public static final String RECORD="pro.livemic.RECORD",CANCEL="pro.livemic.CANCEL",FINISH="pro.livemic.FINISH",STOP="STOP",ROUTE="pro.livemic.ROUTE";
+    public static final String EFFECTS="pro.livemic.EFFECTS";
     public static final String PLAYBACK="pro.livemic.PLAYBACK",STOP_PLAYBACK="pro.livemic.STOP_PLAYBACK",COMPOSER_STOP="pro.livemic.COMPOSER_STOP",HARMONY_STOP="pro.livemic.HARMONY_STOP";
     public static volatile boolean composerRequested=false,harmonyRequested=false;
     public static PracticeSession practice;public static volatile boolean playbackActive=false;private boolean micForeground=false;private ComposerSession composer;private HarmonySession harmony;
@@ -64,22 +65,40 @@ public class AudioService extends Service {
     private void releaseAwake(){if(wakeLock.isHeld())wakeLock.release();}
     @Override public int onStartCommand(Intent intent,int flags,int id){
         String action=intent==null?"":intent.getAction();
-        if(PLAYBACK.equals(action)){try{micForeground=active;foreground(false);if(!playbackActive&&!active){if(routing==null){routing=new AudioRouting(this,0);routing.prepare();}if(!NativeAudio.startPlayback(routing.output,routing.mode))throw new IllegalStateException(AppLanguage.text(AudioService.this,"반주 출력 장치를 열지 못했습니다.","Could not open the backing output device."));}playbackActive=true;keepAwake();}catch(Exception e){error=e.getMessage();if(!active)stopSelf();}return START_NOT_STICKY;}
+        if(EFFECTS.equals(action)){syncEffects();return START_NOT_STICKY;}
+        if(PLAYBACK.equals(action)){try{syncEffects();micForeground=active;foreground(false);if(!playbackActive&&!active){if(routing==null){routing=new AudioRouting(this,0,false);routing.prepare();}if(!NativeAudio.startPlayback(routing.output,routing.mode))throw new IllegalStateException(AppLanguage.text(AudioService.this,"반주 출력 장치를 열지 못했습니다.","Could not open the backing output device."));}playbackActive=true;keepAwake();}catch(Exception e){error=e.getMessage();if(!active)stopSelf();}return START_NOT_STICKY;}
         if(STOP_PLAYBACK.equals(action)){composerRequested=false;harmony.stopNative();NativeComposer.transport(0);NativeAudio.playLocal(false);playbackActive=false;if(!active)stopSelf();return START_NOT_STICKY;}
         if(COMPOSER_STOP.equals(action)||HARMONY_STOP.equals(action)){schedulePlaybackRelease();return START_NOT_STICKY;}
         if(STOP.equals(action)){harmony.live(false);if(practice!=null)practice.stop(false);if(composer.capturing)composer.cancelPhrase();composer.voice(false);NativeAudio.set(11,0);countdown.cancel();finishRecording("");NativeAudio.microphoneOff();active=false;echoCancellation=false;micForeground=false;if(playbackActive){foreground(false);}else stopSelf();return START_NOT_STICKY;}
         if(CANCEL.equals(action)){if(waiting()){cancelSchedule();if(active)foreground(false);}else if(active)notifyState();else stopSelf();return START_NOT_STICKY;}
         if(FINISH.equals(action)){if(practice!=null&&practice.active){practice.stop(false);foreground(false);return START_NOT_STICKY;}android.util.Log.i("LiveMicRecord","Save requested");finishRecording("");if(active)foreground(false);else stopSelf();return START_NOT_STICKY;}
         if(ROUTE.equals(action)){
-            if(waiting()||RecordingManager.active){error=AppLanguage.text(AudioService.this,"예약 또는 녹음을 마친 뒤 출력 모드를 바꾸세요.","Finish the scheduled or active recording before changing output mode.");return START_NOT_STICKY;}
-            if(active){NativeAudio.set(11,0);if(routing!=null){routing.close();routing=null;}NativeAudio.stop();active=false;}
+            harmony.poll();
+            if(waiting()||RecordingManager.active||(practice!=null&&practice.active)||composer.capturing||harmony.state[4]>=0||harmony.state[5]>=0){error=AppLanguage.text(this,"예약, 녹음 또는 연습을 마친 뒤 장치를 바꾸세요.","Finish the countdown, recording, phrase capture, or practice before changing devices.");return START_NOT_STICKY;}
+            if(!active&&!playbackActive)return START_NOT_STICKY;
+            boolean wasActive=active;boolean monitor=wasActive&&NativeAudio.stats()[21]>.5f&&NativeAudio.stats()[17]<.5f;
+            AudioRouting previous=routing,next;try{next=new AudioRouting(this,0,wasActive);}catch(Exception e){if(previous!=null)previous.restoreSelection();error=message=e.getMessage();routeRevision++;return START_NOT_STICKY;}
+            try{
+                NativeAudio.set(11,0);NativeComposer.monitor(false);NativeHarmony.monitor(false);
+                if(previous!=null)previous.close();routing=next;routing.prepare();
+                NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts"+routing.mode,2));
+                if(!NativeAudio.reroute(routing.input,routing.output,routing.mode,wasActive))throw new IllegalStateException(AppLanguage.text(this,"선택한 오디오 장치를 열지 못했습니다.","Could not open the selected audio device."));
+                syncEffects();if(wasActive){routing.attachEffects();boolean safe=monitor&&canMonitor(this);NativeAudio.set(11,safe?1:0);NativeComposer.monitor(safe);NativeHarmony.monitor(safe);}
+                routeLabel=routing.label;echoCancellation=wasActive&&routing.echoEnabled();routeRevision++;foreground(false);
+            }catch(Exception e){
+                error=message=e.getMessage();if(routing!=null)routing.close();routing=previous;
+                boolean restored=false;
+                if(previous!=null){previous.restoreSelection();try{previous.prepare();NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts"+previous.mode,2));restored=NativeAudio.reroute(previous.input,previous.output,previous.mode,wasActive);if(restored){syncEffects();if(wasActive){previous.attachEffects();boolean safe=monitor&&canMonitor(this);NativeAudio.set(11,safe?1:0);NativeComposer.monitor(safe);NativeHarmony.monitor(safe);}routeLabel=previous.label;echoCancellation=wasActive&&previous.echoEnabled();}}catch(Exception ignored){restored=false;}}
+                routeRevision++;if(restored)foreground(false);else{active=false;playbackActive=false;echoCancellation=false;stopSelf();}
+            }
+            return START_NOT_STICKY;
         }
         boolean requested=RECORD.equals(action),external=requested&&intent.getBooleanExtra("capture",false);
         try {
             if(requested&&(waiting()||RecordingManager.active)){message=AppLanguage.text(AudioService.this,"이미 예약 또는 녹음 중입니다.","A recording is already scheduled or in progress.");return START_NOT_STICKY;}
             if(external&&(!BuildConfig.PLAYBACK_CAPTURE||!CaptureSupport.available()))throw new IllegalStateException(AppLanguage.text(AudioService.this,"이 버전은 마이크 녹음 전용입니다.","This version supports microphone recording only."));
-            micForeground=true;foreground(external);
-            if(!active){int device=intent==null?0:intent.getIntExtra("device",0);if(routing==null){routing=new AudioRouting(this,device);routing.prepare();}NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts"+routing.mode,2));
+            syncEffects();micForeground=true;foreground(external);
+            if(!active){int device=intent==null?0:intent.getIntExtra("device",0);if(routing!=null&&!active){routing.close();routing=null;}if(routing==null){routing=new AudioRouting(this,device);routing.prepare();}NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts"+routing.mode,2));
                 active=NativeAudio.start(routing.input,routing.output,routing.mode);
                 if(!active)throw new IllegalStateException(AppLanguage.text(AudioService.this,"선택한 오디오 경로를 열지 못했습니다. 장치 연결과 다른 녹음 앱을 확인하세요.","Could not open the selected audio route. Check the device connection and other recording apps."));
                 routing.attachEffects();boolean monitor=intent!=null&&intent.getBooleanExtra("monitor",false)&&canMonitor(this);NativeAudio.set(11,monitor?1:0);NativeHarmony.monitor(monitor);routeLabel=routing.label;echoCancellation=routing.echoEnabled();routeRevision++;
@@ -96,6 +115,7 @@ public class AudioService extends Service {
         }catch(Exception e){error=AppLanguage.text(AudioService.this,"녹음 준비 실패: ","Could not prepare recording: ")+e.getMessage();message=error;cancelSchedule();if(!active){if(routing!=null){routing.close();routing=null;}stopSelf();}else foreground(false);}
         return START_NOT_STICKY;
     }
+    private void syncEffects(){float[] defaults={1,.55f,.27f,2.2f,.14f,280,.25f,0,0,1,1,0,0,0,0,78,0,0,0,1};android.content.SharedPreferences p=getSharedPreferences("MainActivity",0);for(int i=0;i<defaults.length;i++)if(i!=11&&i!=12&&i!=13)NativeAudio.set(i,p.getFloat("p"+i,defaults[i]));if(routing!=null)routing.syncNoiseReduction();}
     private void schedulePlaybackRelease(){schedulePlaybackRelease(0);}
     private void schedulePlaybackRelease(int attempt){main.postDelayed(()->{if(destroying||active||!playbackActive||composerRequested||harmonyRequested)return;
         composer.poll();harmony.poll();float[] stats=NativeAudio.stats();

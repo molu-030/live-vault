@@ -1,6 +1,6 @@
-# Live Vault 3.5 — Android native preview
+# Live Vault 3.6 — Android native preview
 
-**3.5.0-preview / versionCode 15**는 공용 다이얼 라이브 콘솔과 반주 안정성 개선을 담은 개인용 개발 체크포인트입니다. [3.5 명세](docs/LIVE_VAULT_V3_5_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_5_VALIDATION.md). 공개 standard APK는 3.2.1을 유지합니다.
+**3.6.0-preview / versionCode 16**은 상단 탐색과 라이브 반주·입출력 조작을 개선한 개인용 개발 체크포인트입니다. [3.6 명세](docs/LIVE_VAULT_V3_6_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_6_VALIDATION.md). 공개 standard APK는 3.2.1을 유지합니다.
 
 파트별 연주 강도·타이밍·필인, 악기군별 반주와 코드 연결, 성부 이름 및 녹음 진행 표시를 추가했습니다. 실제 목소리 품질, 마이크·Bluetooth·지연은 실기기 검증이 남아 있습니다. 개인용 오버레이/APK는 공개 저장소에 포함하지 않습니다.
 
@@ -8,7 +8,7 @@
 
 실시간 마이크 모니터링, 보컬 효과, 단선율 MIDI 채보, 반주, 카메라 녹화를 위한 Android 프로젝트입니다.
 
-> **현재 상태: 개발 중인 체크포인트.** Galaxy S26 Ultra의 화면 비율을 기준으로 여백과 크기를 조정하고 녹음·영상·연습의 주 조작 버튼을 하단에 고정했습니다. 실제 창 크기와 시스템 영역을 읽어 배치하므로 해상도/화면 확대 설정에도 대응합니다. 색상·로고·하단 3탭은 유지했습니다. [배치와 검증 범위](docs/GALAXY_S26_ULTRA_LAYOUT.md).
+> **현재 상태: 개발 중인 체크포인트.** Galaxy S26 Ultra의 화면 비율을 기준으로 여백과 크기를 조정하고 녹음·영상·연습의 주 조작 버튼을 하단에 고정했습니다. 실제 창 크기와 시스템 영역을 읽어 배치하므로 해상도/화면 확대 설정에도 대응합니다. 색상과 로고를 유지하고 3개 주요 탐색 버튼을 상단에 배치했습니다. [배치와 검증 범위](docs/GALAXY_S26_ULTRA_LAYOUT.md).
 
 ## 미리보기 APK
 
