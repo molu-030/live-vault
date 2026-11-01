@@ -75,6 +75,7 @@ public:
     void sampleRate(int sr){std::lock_guard<std::mutex> lock(setupMutex);rate=sr;sample=0;if(backing){tsf_set_output(backing,TSF_STEREO_INTERLEAVED,sr,-7);tsf_set_output(live,TSF_STEREO_INTERLEAVED,sr,-7);}}
     bool publish(const std::vector<Event>& data,double length,double bar,double bpm,int k,int s){std::lock_guard<std::mutex> lock(publishMutex);int slot=-1;for(int i=0;i<3;i++){int free=0;if(plans[i].status.compare_exchange_strong(free,1)){slot=i;break;}}if(slot<0)return false;Plan& p=plans[slot];p.events=data;p.beats=length;p.bar=bar;p.bpm=bpm;p.key=k;p.scale=s;p.status=2;int old=pending.exchange(slot,std::memory_order_acq_rel);if(old>=0)plans[old].status=0;return true;}
     void transport(int c){command=c;}
+    void clearSolo(){for(auto& value:solo)value.store(false);}
     void track(int ch,float v,float p,bool m,bool s){if(ch>=0&&ch<8){gain[ch]=v;pan[ch]=p;mute[ch]=m;solo[ch]=s;overrideTrack[ch]=true;}}
     void settings(bool enabled,int pr,int md,int oct,bool range,bool sn,int rsp,int q,bool rh,bool mix,float conf,float gt){bool starting=enabled&&!voiceEnabled.load();voiceEnabled=enabled;program=pr;mode=md;octave=oct;autoRange=range;snap=sn;response=rsp;quality=q;rhythm=rh;mixVoice=mix;confidence=conf;gate=gt;if(starting)voiceMonitor=true;voiceRevision++;}
     void monitor(bool enabled){voiceMonitor=enabled;}
@@ -115,7 +116,7 @@ public:
                 }
             }
             for(int j=0;j<pendingStrings;j++)if(onFrame[j]<=sample){tsf_channel_note_on(live,0,onNote[j],onVelocity[j]);voiceNotes[voiceCount++]=onNote[j];onFrame[j]=UINT64_MAX;}
-            if(sample%32==0){for(int ch=0;ch<8;ch++){float target=(overrideTrack[ch]?gain[ch].load():partGain[ch])*((mute[ch]||(anySolo&&!solo[ch]))?0:1);smoothGain[ch]+=(target-smoothGain[ch])*.15f;tsf_channel_set_volume(backing,ch,smoothGain[ch]);tsf_channel_set_pan(backing,ch,std::clamp(.5f+(overrideTrack[ch]?pan[ch].load():partPan[ch])*.5f,0.f,1.f));}tsf_channel_midi_control(live,0,11,int(expression*127));tsf_channel_set_pitchwheel(live,0,std::clamp(8192+int(cents/200*8192),0,16383));}
+            if(sample%32==0){for(int ch=0;ch<8;ch++){float target=(overrideTrack[ch]?gain[ch].load():partGain[ch])*(((overrideTrack[ch]&&mute[ch])||(anySolo&&!solo[ch]))?0:1);smoothGain[ch]+=(target-smoothGain[ch])*.15f;tsf_channel_set_volume(backing,ch,smoothGain[ch]);tsf_channel_set_pan(backing,ch,std::clamp(.5f+(overrideTrack[ch]?pan[ch].load():partPan[ch])*.5f,0.f,1.f));}tsf_channel_midi_control(live,0,11,int(expression*127));tsf_channel_set_pitchwheel(live,0,std::clamp(8192+int(cents/200*8192),0,16383));}
             tsf_render_float(backing,accompaniment+i*2,1,0);tsf_render_float(live,instrument+i*2,1,0);
             if(playing)position+=tempo/(60.*rate);sample++;
         }beat=position;

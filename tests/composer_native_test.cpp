@@ -48,4 +48,27 @@ static void synth(const char* path,int sr){
     double tail=0;for(float f:music)tail+=std::abs(f);assert(tail<.0001);for(float f:voice)assert(f==0);
     std::cout<<"PASS: "<<sr<<"Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\n";
 }
-int main(int argc,char**argv){assert(argc==2);tracker();synth(argv[1],44100);synth(argv[1],48000);}
+static void clearSoloPreservesMix(const char* path){
+    auto reference=std::make_unique<lv::ComposerEngine>();auto actual=std::make_unique<lv::ComposerEngine>();
+    assert(reference->load(path));assert(actual->load(path));
+    std::vector<lv::Event> events={{0,3,0,0,1,0,0,0,0},{0,2,0,0,0,24,0,0,.7},{0,2,1,0,0,24,0,0,.7},{0,1,0,60,.8,0,0,0,0},{0,1,1,64,.8,0,0,0,0}};
+    for(auto* e:{reference.get(),actual.get()}){e->sampleRate(44100);assert(e->publish(events,4,4,120,0,0));e->transport(1);}
+    std::array<float,512> left{},right{},v1{},v2{};std::array<float,256> c1{},c2{};double energy=0;
+    reference->render(left.data(),v1.data(),c1.data(),256);actual->render(right.data(),v2.data(),c2.data(),256);
+    for(auto* e:{reference.get(),actual.get()}){e->track(0,.25f,-.8f,false,false);e->track(1,.8f,.6f,true,false);}
+    actual->track(0,.25f,-.8f,false,true);actual->clearSolo();
+    for(int block=0;block<32;block++){reference->render(left.data(),v1.data(),c1.data(),256);actual->render(right.data(),v2.data(),c2.data(),256);for(size_t i=0;i<left.size();i++){assert(std::abs(left[i]-right[i])<1e-7);energy+=left[i]*left[i];}}
+    assert(energy>0);std::cout<<"PASS: clearing solo preserves volume, pan and mute\n";
+}
+static void muteEndsAtPartBoundary(const char* path,int sr){
+    auto e=std::make_unique<lv::ComposerEngine>();assert(e->load(path));e->sampleRate(sr);
+    std::vector<lv::Event> events={{0,3,0,0,1,0,0,0,0},{0,2,0,0,0,24,0,0,.8},{0,1,0,60,.8,0,0,0,0},{.5,0,0,60,0,0,0,0,0},{1,3,0,1,1,0,0,0,0},{1,2,0,0,0,24,0,0,.8},{1,1,0,64,.8,0,0,0,0}};
+    assert(e->publish(events,4,1,120,0,0));e->transport(1);
+    std::array<float,512> music{},voice{};std::array<float,256> count{};
+    e->render(music.data(),voice.data(),count.data(),256);e->track(0,.8f,0,true,false);
+    double muted=0,restored=0;int blocks=sr/256;
+    for(int b=0;b<blocks;b++){e->render(music.data(),voice.data(),count.data(),256);for(float f:music){if(b>blocks/4&&b<blocks*2/5)muted+=f*f;if(b>blocks*3/4)restored+=f*f;}}
+    assert(muted<1e-8);assert(restored>1e-5);
+    std::cout<<"PASS: "<<sr<<"Hz immediate mute ends at next part\n";
+}
+int main(int argc,char**argv){assert(argc==2);tracker();clearSoloPreservesMix(argv[1]);muteEndsAtPartBoundary(argv[1],44100);muteEndsAtPartBoundary(argv[1],48000);synth(argv[1],44100);synth(argv[1],48000);}

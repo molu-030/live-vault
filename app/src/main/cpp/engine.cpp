@@ -269,6 +269,7 @@ JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeComposer_publish(JN
     return engine.composer.publish(events,length,bar,bpm,key,scale);
 }
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeComposer_transport(JNIEnv*,jclass,jint c){if(c>=0&&c<=3)engine.composer.transport(c);}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeComposer_clearSolo(JNIEnv*,jclass){engine.composer.clearSolo();}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeComposer_track(JNIEnv*,jclass,jint ch,jfloat v,jfloat p,jboolean mute,jboolean solo){engine.composer.track(ch,std::clamp(v,0.f,1.f),std::clamp(p,-1.f,1.f),mute,solo);}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeComposer_voice(JNIEnv*,jclass,jboolean enabled,jint program,jint mode,jint octave,jboolean range,jboolean snap,jint response,jint quality,jboolean rhythm,jboolean mix,jfloat confidence,jfloat gate){engine.composer.settings(enabled,std::clamp(int(program),0,127),mode==1?1:0,std::clamp(int(octave),-3,3),range,snap,response==1?1:0,std::clamp(int(quality),-1,10),rhythm,mix,std::clamp(confidence,.5f,.99f),std::clamp(gate,.001f,.1f));}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeComposer_monitor(JNIEnv*,jclass,jboolean enabled){engine.composer.monitor(enabled);}

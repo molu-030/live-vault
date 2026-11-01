@@ -1,6 +1,6 @@
-# Live Vault 3.4 — Android native preview
+# Live Vault 3.5 — Android native preview
 
-**3.4.0-preview / versionCode 14**는 라이브 화면을 실제 상태 표시와 효과 노브가 있는 콘솔로 재구성한 개인용 개발 체크포인트입니다. [3.4 명세](docs/LIVE_VAULT_V3_4_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_4_VALIDATION.md). 공개 standard APK는 이전 3.2.1 버전입니다. [3.3 명세](docs/LIVE_VAULT_V3_3_SPEC.md) · [3.2.1 녹음 변경](docs/LIVE_VAULT_V3_2_1_RECORDING.md).
+**3.5.0-preview / versionCode 15**는 공용 다이얼 라이브 콘솔과 반주 안정성 개선을 담은 개인용 개발 체크포인트입니다. [3.5 명세](docs/LIVE_VAULT_V3_5_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_5_VALIDATION.md). 공개 standard APK는 3.2.1을 유지합니다.
 
 파트별 연주 강도·타이밍·필인, 악기군별 반주와 코드 연결, 성부 이름 및 녹음 진행 표시를 추가했습니다. 실제 목소리 품질, 마이크·Bluetooth·지연은 실기기 검증이 남아 있습니다. 개인용 오버레이/APK는 공개 저장소에 포함하지 않습니다.
 

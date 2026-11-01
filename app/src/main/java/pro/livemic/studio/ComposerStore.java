@@ -17,5 +17,5 @@ final class ComposerStore {
     synchronized List<ComposerProject> list(){List<ComposerProject> out=new ArrayList<>();File[] files=directory.listFiles((d,n)->n.endsWith(".json")&&!n.equals("draft.json"));if(files!=null){Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));for(File f:files)try{out.add(read(f));}catch(Exception ignored){}}return out;}
     synchronized void delete(String id){new AtomicFile(file(id)).delete();}
     void checkpoint(ComposerProject p)throws JSONException{undo.addLast(p.json().toString());while(undo.size()>20)undo.removeFirst();redo.clear();}
-    ComposerProject history(ComposerProject p,boolean forward)throws JSONException{ArrayDeque<String> from=forward?redo:undo,to=forward?undo:redo;if(from.isEmpty())return p;to.addLast(p.json().toString());return ComposerProject.read(new JSONObject(from.removeLast()));}
+    ComposerProject history(ComposerProject p,boolean forward)throws JSONException{ArrayDeque<String> from=forward?redo:undo,to=forward?undo:redo;if(from.isEmpty())return p;ComposerProject restored=ComposerProject.read(new JSONObject(from.peekLast()));String current=p.json().toString();from.removeLast();to.addLast(current);return restored;}
 }

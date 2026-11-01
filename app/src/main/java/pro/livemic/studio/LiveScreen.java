@@ -1,49 +1,62 @@
 package pro.livemic.studio;
 
-import android.graphics.Typeface;
+import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.*;
 import java.util.Locale;
 
-/** The live console presents real input and transport state; audio remains owned by the service. */
+/** Live controls share one dial; status values come from the audio service. */
 final class LiveScreen {
+    static final int IVORY=0xffe5e0d4,INK=0xff141713, PANEL=0xff191c16,SCREEN=0xff10140f;
     final MainActivity a;
-    TextView mic,route,clock,backing,pitch,level;
-    ProgressBar meter;
-    final int[] ids={2,3,4,5,6,0};final StudioKnob[] knobs=new StudioKnob[6];
+    final int[] ids={2,3,0,4,5,6};
+    final float[] mins={0,.3f,0,0,70,0},maxs={1,6,2,.8f,700,.7f};
+    final Button[] selectors=new Button[6];
+    final MainActivity.Formatter[] format={v->Math.round(v*100)+"%",v->String.format(Locale.US,"%.1f s",v),v->Math.round(v*100)+"%",v->Math.round(v*100)+"%",v->Math.round(v)+" ms",v->Math.round(v*100)+"%"};
+    SharedEffectDial dial;
+    TextView mic,route,clock,backing,pitch,level,effectName,effectValue;
+    ProgressBar meter;Button video;
     LiveScreen(MainActivity activity){a=activity;}
     String tr(String ko,String en){return a.tr(ko,en);}
-    TextView label(String text,int size,int color){return a.text(text,size,color);}
+    String name(int n){return new String[]{tr("리버브","Reverb"),tr("잔향 길이","Decay"),tr("목소리 크기","Voice level"),tr("에코 양","Echo"),tr("에코 간격","Delay"),tr("에코 반복","Repeat")}[n];}
+    Button button(String text,Runnable action){Button b=new Button(a);b.setAllCaps(false);b.setStateListAnimator(null);b.setElevation(0);b.setTypeface(StudioTheme.bold(a));b.setTextSize(12);b.setGravity(Gravity.CENTER);b.setIncludeFontPadding(false);b.setPadding(a.dp(4),a.dp(2),a.dp(4),a.dp(2));b.setMinWidth(0);b.setMinimumWidth(0);b.setMinHeight(a.dp(48));b.setMinimumHeight(a.dp(48));b.setMaxLines(2);b.setText(text);b.setOnClickListener(v->action.run());paint(b,false);return b;}
+    void paint(Button b,boolean selected){b.setBackgroundTintList(null);b.setBackground(StudioTheme.background(a,selected?MainActivity.LIME:IVORY,7));b.setTextColor(INK);b.setSelected(selected);}
+    TextView text(String t,int size,int color){return a.text(t,size,color);}
     void draw(){
-        LinearLayout heading=a.row();TextView title=a.text(tr("라이브 콘솔","LIVE CONSOLE"),20,MainActivity.TEXT);title.setTypeface(StudioTheme.bold(a));heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        StudioButton presets=StudioTheme.styled(a,a.presetName()+" ▾",StudioButton.CHIP,a::presetPicker);presets.setTextSize(12);presets.setMaxLines(1);presets.setEllipsize(android.text.TextUtils.TruncateAt.END);a.presetChip=presets;heading.addView(presets,new LinearLayout.LayoutParams(-2,a.dp(48)));a.add(heading);
-        LinearLayout screen=a.column();screen.setPadding(a.dp(16),a.dp(12),a.dp(16),a.dp(12));screen.setBackground(StudioTheme.background(a,0xff182819,16));
-        LinearLayout top=a.row();mic=label("",12,MainActivity.LIME);mic.setTypeface(StudioTheme.bold(a));top.addView(mic,new LinearLayout.LayoutParams(0,-2,1));clock=label("",13,MainActivity.TEXT);clock.setTypeface(StudioTheme.mono(a));clock.setGravity(Gravity.END);top.addView(clock);screen.addView(top);
-        route=label("",12,0xffb9cbb7);route.setPadding(0,a.dp(5),0,a.dp(5));screen.addView(route);
-        backing=label("",12,0xffb9cbb7);screen.addView(backing);
-        LinearLayout input=a.row();input.setPadding(0,a.dp(8),0,0);pitch=label("",19,MainActivity.LIME);pitch.setTypeface(StudioTheme.mono(a));input.addView(pitch,new LinearLayout.LayoutParams(0,-2,1));level=label("",12,MainActivity.TEXT);level.setTypeface(StudioTheme.mono(a));input.addView(level);screen.addView(input);
-        meter=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);meter.setMax(1000);meter.setContentDescription(tr("입력 레벨","Input level"));meter.setProgressTintList(android.content.res.ColorStateList.valueOf(MainActivity.LIME));meter.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(0xff3c4c3b));LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,a.dp(6));mp.topMargin=a.dp(6);screen.addView(meter,mp);a.add(screen);
-        LinearLayout controls=a.row();a.micButton=StudioTheme.styled(a,tr("마이크 켜기","Turn mic on"),StudioButton.STANDARD,a::requestMicToggle);a.weighted(controls,a.micButton,48);a.outputButton=StudioTheme.styled(a,tr("출력 ▾","Output ▾"),StudioButton.STANDARD,a::monitoringOptions);a.weighted(controls,a.outputButton,48);a.add(controls);
-        a.monitorButton=StudioTheme.styled(a,tr("내 목소리 듣기 · 꺼짐","Voice monitoring · off"),StudioButton.STANDARD,()->{if(NativeAudio.stats()[17]>.5){a.monitoringOptions();return;}if(AudioService.active&&AudioService.canMonitor(a))a.set(11,a.values[11]>.5?0:1);else a.toast(tr("마이크와 출력 장치를 먼저 켜주세요.","Turn on the microphone and output first."));});a.add(a.monitorButton);
-        LinearLayout effects=a.column();effects.setPadding(a.dp(10),a.dp(12),a.dp(10),a.dp(12));effects.setBackground(StudioTheme.background(a,MainActivity.PANEL,18));
-        LinearLayout section=a.row();TextView effectTitle=label(tr("보컬 효과","VOCAL EFFECTS"),15,MainActivity.TEXT);effectTitle.setTypeface(StudioTheme.bold(a));section.addView(effectTitle,new LinearLayout.LayoutParams(0,-2,1));Button reset=StudioTheme.styled(a,tr("초기화","Reset"),StudioButton.QUIET,this::reset);reset.setTextSize(12);section.addView(reset,new LinearLayout.LayoutParams(a.dp(72),a.dp(48)));effects.addView(section);
-        TextView hint=label(tr("노브를 위아래로 움직여 조절하세요","Drag knobs up or down to adjust"),11,MainActivity.MUTED);hint.setPadding(a.dp(4),0,a.dp(4),a.dp(4));effects.addView(hint);
-        addKnobs(effects);a.add(effects);
-
-        LinearLayout links=a.row();a.weighted(links,a.button(tr("화음 ›","Harmony ›"),()->a.chooseTab(9)),48);a.weighted(links,a.button(tr("반주 ›","Backing ›"),()->a.chooseTab(1)),48);a.add(links);
-        a.status=a.text("",12,MainActivity.MUTED);a.status.setOnClickListener(v->a.monitoringOptions());a.add(a.status);
-        a.content=a.actionDock;a.addModeSelector(false);LinearLayout captionRow=a.row();a.recordCaption=a.text(tr("오디오 녹음","Audio recording"),12,MainActivity.MUTED);captionRow.addView(a.recordCaption,new LinearLayout.LayoutParams(0,-2,1));a.timer=a.text("",13,MainActivity.RED);a.timer.setTypeface(StudioTheme.mono(a));captionRow.addView(a.timer);a.actionDock.addView(captionRow,new LinearLayout.LayoutParams(-1,a.dp(24)));
-        LinearLayout recordRow=a.row();a.recButton=StudioTheme.styled(a,tr("● 녹음 시작","● Start recording"),StudioButton.STANDARD,a::toggleRecord);a.recButton.setTextColor(MainActivity.BG);a.recButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(MainActivity.LIME));a.recButton.setMinHeight(a.dp(56));recordRow.addView(a.recButton,new LinearLayout.LayoutParams(0,-2,1));a.recordOptions=a.button("⋯",a::recordingOptions);a.recordOptions.setTextSize(22);a.recordOptions.setContentDescription(tr("녹음 설정 · 시작 시간 및 다른 앱 소리","Recording settings · start time and other app audio"));LinearLayout.LayoutParams options=new LinearLayout.LayoutParams(a.dp(52),a.dp(56));options.leftMargin=a.dp(8);recordRow.addView(a.recordOptions,options);a.actionDock.addView(recordRow);a.content=a.page;
+        LinearLayout lcd=a.column();lcd.setPadding(a.dp(12),a.dp(9),a.dp(12),a.dp(9));lcd.setBackground(StudioTheme.background(a,SCREEN,8));
+        LinearLayout first=a.row();mic=text("",12,MainActivity.LIME);mic.setTypeface(StudioTheme.bold(a));first.addView(mic,new LinearLayout.LayoutParams(0,-2,1));clock=text("",18,IVORY);clock.setTypeface(StudioTheme.mono(a));first.addView(clock);lcd.addView(first);
+        route=text("",11,0xffbdc0b2);route.setMaxLines(1);route.setEllipsize(android.text.TextUtils.TruncateAt.END);lcd.addView(route);backing=text("",11,0xffbdc0b2);backing.setMaxLines(1);backing.setEllipsize(android.text.TextUtils.TruncateAt.END);lcd.addView(backing);
+        View divider=new View(a);divider.setBackgroundColor(0xff394135);LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,a.dp(1));line.topMargin=a.dp(5);line.bottomMargin=a.dp(5);lcd.addView(divider,line);
+        LinearLayout selected=a.row();effectName=text("",14,IVORY);effectName.setTypeface(StudioTheme.bold(a));selected.addView(effectName,new LinearLayout.LayoutParams(0,-2,1));effectValue=text("",22,MainActivity.LIME);effectValue.setTypeface(StudioTheme.bold(a));selected.addView(effectValue);lcd.addView(selected);
+        LinearLayout input=a.row();pitch=text("",11,0xffbdc0b2);input.addView(pitch,new LinearLayout.LayoutParams(0,-2,1));level=text("",11,0xffbdc0b2);input.addView(level);lcd.addView(input);
+        meter=new ProgressBar(a,null,android.R.attr.progressBarStyleHorizontal);meter.setMax(1000);meter.setContentDescription(tr("입력 레벨","Input level"));meter.setProgressTintList(ColorStateList.valueOf(MainActivity.LIME));meter.setProgressBackgroundTintList(ColorStateList.valueOf(0xff384235));LinearLayout.LayoutParams m=new LinearLayout.LayoutParams(-1,a.dp(5));m.topMargin=a.dp(4);lcd.addView(meter,m);a.add(lcd);
+        LinearLayout controls=a.row();a.micButton=button(tr("마이크 켜기","Turn mic on"),a::requestMicToggle);controls.addView(a.micButton,new LinearLayout.LayoutParams(0,a.dp(48),1));a.outputButton=button(tr("출력 ▾","Output ▾"),a::monitoringOptions);LinearLayout.LayoutParams op=new LinearLayout.LayoutParams(0,a.dp(48),1);op.leftMargin=a.dp(8);controls.addView(a.outputButton,op);a.add(controls);
+        LinearLayout effects=a.column();effects.setPadding(a.dp(7),a.dp(5),a.dp(7),a.dp(5));effects.setBackground(StudioTheme.background(a,PANEL,8));
+        LinearLayout section=a.row();Button reset=button(tr("초기화","Reset"),this::reset);section.addView(reset,new LinearLayout.LayoutParams(a.dp(70),a.dp(48)));TextView heading=text(tr("보컬 효과","VOCAL FX"),13,IVORY);heading.setTypeface(StudioTheme.bold(a));heading.setGravity(Gravity.CENTER);section.addView(heading,new LinearLayout.LayoutParams(0,a.dp(48),1));a.presetChip=button(a.presetName()+" ▾",()->{dial.cancelGesture();a.presetPicker();});a.presetChip.setTextSize(11);section.addView(a.presetChip,new LinearLayout.LayoutParams(a.dp(112),a.dp(48)));effects.addView(section);
+        LinearLayout row=a.row();row.setGravity(Gravity.CENTER);LinearLayout left=new SelectorColumn(),right=new SelectorColumn();for(int i=0;i<3;i++)addSelector(left,i);for(int i=3;i<6;i++)addSelector(right,i);
+        row.addView(left,new LinearLayout.LayoutParams(0,-1,1));dial=createDial();LinearLayout.LayoutParams center=new LinearLayout.LayoutParams(0,-1,1.7f);center.leftMargin=a.dp(3);center.rightMargin=a.dp(3);row.addView(dial,center);row.addView(right,new LinearLayout.LayoutParams(0,-1,1));effects.addView(row,new LinearLayout.LayoutParams(-1,0,1));
+        TextView hint=text(tr("값 선택 → 노브 조절","Select a value → turn the dial"),10,0xffa5aa9d);hint.setGravity(Gravity.CENTER);effects.addView(hint,new LinearLayout.LayoutParams(-1,-2));a.page.addView(effects,new LinearLayout.LayoutParams(-1,a.dp(220)));a.page.flexible(effects,0,1000);
+        a.content=a.actionDock;LinearLayout actions=a.row();a.recButton=button(tr("● 녹음 시작","● Record"),a::toggleRecord);actions.addView(a.recButton,new LinearLayout.LayoutParams(0,a.dp(52),1));video=button(tr("영상","Video"),()->a.chooseTab(3));LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(0,a.dp(52),1);vp.leftMargin=a.dp(6);actions.addView(video,vp);a.recordOptions=button("⋯",a::recordingOptions);a.recordOptions.setTextSize(21);a.recordOptions.setContentDescription(tr("녹음 설정 · 시작 시간 및 다른 앱 소리","Recording settings · start time and other app audio"));LinearLayout.LayoutParams more=new LinearLayout.LayoutParams(a.dp(48),a.dp(52));more.leftMargin=a.dp(6);actions.addView(a.recordOptions,more);a.actionDock.addView(actions);a.content=a.page;
+        select(a.selectedLiveEffect);poll(NativeAudio.stats(),AudioService.active);
     }
-    void reset(){int[] ids={0,2,3,4,5,6};float[] defaults={1,.27f,2.2f,.14f,280,.25f};for(int i=0;i<ids.length;i++)a.set(ids[i],defaults[i]);syncKnobs();}
-    void addKnobs(LinearLayout effects){
-        String[] labels={tr("리버브","Reverb"),tr("잔향 길이","Decay"),tr("에코 양","Echo"),tr("에코 간격","Delay"),tr("에코 반복","Repeat"),tr("목소리 크기","Voice level")};
-        float[] mins={0,.3f,0,70,0,0},maxs={1,6,.8f,700,.7f,2};
-        MainActivity.Formatter[] formats={v->Math.round(v*100)+"%",v->String.format(Locale.US,"%.1f s",v),v->Math.round(v*100)+"%",v->Math.round(v)+" ms",v->Math.round(v*100)+"%",v->Math.round(v*100)+"%"};
-        int widthDp=(int)(a.getResources().getDisplayMetrics().widthPixels/a.getResources().getDisplayMetrics().density);int columns=widthDp>=390?3:2;
-        for(int i=0;i<knobs.length;){LinearLayout row=a.row();for(int c=0;c<columns&&i<knobs.length;c++,i++){final int index=i;StudioKnob knob=new StudioKnob(a,labels[i],mins[i],maxs[i],a.values[ids[i]],formats[i],v->a.set(ids[index],v));knobs[i]=knob;row.addView(knob,new LinearLayout.LayoutParams(0,-2,1));}effects.addView(row,new LinearLayout.LayoutParams(-1,-2));}
+    final class SelectorColumn extends LinearLayout {
+        SelectorColumn(){super(a);setOrientation(VERTICAL);setGravity(Gravity.CENTER_VERTICAL);}
+        @Override protected void onMeasure(int widthSpec,int heightSpec){
+            int available=MeasureSpec.getSize(heightSpec)-a.dp(8);
+            int height=Math.max(a.dp(48),Math.min(a.dp(72),available/3));
+            for(int i=0;i<getChildCount();i++){android.view.ViewGroup.LayoutParams lp=getChildAt(i).getLayoutParams();if(lp.height!=height)lp.height=height;}
+            super.onMeasure(widthSpec,heightSpec);
+        }
     }
-    void syncKnobs(){for(int i=0;i<knobs.length;i++)if(knobs[i]!=null)knobs[i].sync(a.values[ids[i]]);}
-    void poll(float[] s,boolean running){if(mic==null)return;mic.setText(running?tr("● 마이크 켜짐","● MIC ON"):tr("● 마이크 대기","● MIC READY"));route.setText(tr("출력: ","Output: ")+(AudioRouting.selected(a)==0&&!a.headphones?tr("이어폰 미연결","Headphones disconnected"):a.outputName())+" · "+(s[17]>.5?tr("보호 음소거","safety mute"):running&&s[21]>.5?tr("내 목소리 듣기 켜짐","monitor on"):tr("내 목소리 듣기 꺼짐","monitor off")));clock.setText(RecordingManager.active?(RecordingManager.paused?"Ⅱ ":"● ")+a.formatTime(s[8]):AudioService.waiting()?tr("예약 ","START IN ")+AudioService.remaining()+tr("초","s"):"00:00");double[] cs=a.composer.state();if(a.composer.playing())backing.setText(tr("작곡기 · ","Composer · ")+tr("마디 ","bar ")+(1+(int)(Math.max(0,cs[0])/MusicTheory.barBeats(a.composer.project.meter))));else if(s[16]>.5){double[] local=NativeAudio.localPlaybackInfo();backing.setText(tr("반주 · ","Backing · ")+a.formatTime(local[0])+" / "+a.formatTime(local[1]));}else backing.setText(tr("반주 대기","Backing idle"));pitch.setText(tr("입력 음 ","INPUT ")+(s[0]>0?a.noteName((int)s[2]):"—"));float rms=Math.max(0,s[3]);level.setText(rms>.00001?String.format(Locale.US,"%.0f dB",20*Math.log10(rms)):"— dB");meter.setProgress((int)(1000*Math.max(0,Math.min(1,(20*Math.log10(Math.max(.00001,rms))+60)/60))));syncKnobs();}
+    void addSelector(LinearLayout parent,int index){Button b=button("",()->select(index));selectors[index]=b;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,a.dp(72));if(index%3>0)lp.topMargin=a.dp(4);parent.addView(b,lp);}
+    void select(int index){if(dial.isTracking())return;a.selectedLiveEffect=Math.max(0,Math.min(5,index));bindDial();sync();}
+    void reset(){dial.cancelGesture();int[] keys={0,2,3,4,5,6};float[] defaults={1,.27f,2.2f,.14f,280,.25f};for(int i=0;i<keys.length;i++)a.set(keys[i],defaults[i]);sync();}
+    SharedEffectDial createDial(){return new SharedEffectDial(a,value->{int selected=a.selectedLiveEffect;a.set(ids[selected],value);sync();});}
+    void bindDial(){int selected=a.selectedLiveEffect;dial.cancelGesture();dial.bind(name(selected),mins[selected],maxs[selected],a.values[ids[selected]],format[selected]);}
+    void syncDial(){dial.sync(a.values[ids[a.selectedLiveEffect]]);}
+    void sync(){int selected=a.selectedLiveEffect;for(int i=0;i<6;i++){String value=(i==2?tr("목소리 크기","Voice"):name(i))+"\n"+format[i].value(a.values[ids[i]]);if(!value.contentEquals(selectors[i].getText()))selectors[i].setText(value);if(selectors[i].isSelected()!=(i==selected))paint(selectors[i],i==selected);}effectName.setText(name(selected));effectValue.setText(format[selected].value(a.values[ids[selected]]));syncDial();}
+    void poll(float[] s,boolean running){if(mic==null)return;mic.setText(running?tr("● 마이크 켜짐","● MIC ON"):tr("● 마이크 대기","● MIC READY"));if(a.micButton.isSelected()!=running)paint(a.micButton,running);route.setText((AudioRouting.selected(a)==0&&!a.headphones?tr("이어폰 미연결","Headphones disconnected"):a.outputName())+" · "+(s[17]>.5?tr("보호 음소거","Safety mute"):running&&s[21]>.5?tr("모니터 켜짐","Monitor on"):tr("모니터 꺼짐","Monitor off")));clock.setText(RecordingManager.active?(RecordingManager.paused?"Ⅱ ":"● ")+a.formatTime(s[8]):AudioService.waiting()?tr("예약 ","IN ")+AudioService.remaining()+tr("초","s"):"00:00");double[] cs=a.composer.state();if(a.composer.playing())backing.setText(tr("작곡기 · ","Composer · ")+tr("마디 ","bar ")+(1+(int)(Math.max(0,cs[0])/MusicTheory.barBeats(a.composer.project.meter))));else if(s[16]>.5){double[] local=NativeAudio.localPlaybackInfo();backing.setText(tr("반주 · ","Backing · ")+a.formatTime(local[0])+" / "+a.formatTime(local[1]));}else backing.setText(tr("반주 대기","Backing idle"));pitch.setText(tr("입력 음 ","INPUT ")+(s[0]>0?a.noteName((int)s[2]):"—"));float rms=Math.max(0,s[3]);level.setText(rms>.00001?String.format(Locale.US,"%.0f dB",20*Math.log10(rms)):"— dB");meter.setProgress((int)(1000*Math.max(0,Math.min(1,(20*Math.log10(Math.max(.00001,rms))+60)/60))));sync();}
+    void transport(boolean busy,boolean waiting,boolean recording){if(a.recButton.isSelected()!=!busy)paint(a.recButton,!busy);video.setEnabled(!busy&&!waiting&&!recording&&!a.recordPermissionPending&&!a.starting);}
 }
