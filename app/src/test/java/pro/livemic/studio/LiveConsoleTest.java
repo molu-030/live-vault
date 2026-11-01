@@ -34,7 +34,7 @@ public class LiveConsoleTest {
   AudioService.active=true;RecordingManager.active=true;a.values[11]=1;a.values[13]=1;a.values[7]=5;StudioScreenshotTest.Audio.changes.clear();a.liveScreen.reset();assertTrue(AudioService.active);assertTrue(RecordingManager.active);assertEquals(1,a.values[11],0);assertEquals(1,a.values[13],0);assertEquals(5,a.values[7],0);Set<Integer> keys=new HashSet<>();for(float[] v:StudioScreenshotTest.Audio.changes)keys.add((int)v[0]);assertEquals(new HashSet<>(Arrays.asList(0,2,3,4,5,6)),keys);
  }
  @Test public void lcdShowsRealInputBackingAndSafetyState(){
-  float[] stats=new float[22];stats[0]=440;stats[2]=69;stats[3]=.1f;stats[8]=12;stats[16]=1;stats[17]=1;stats[21]=0;RecordingManager.active=true;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.mic.getText().toString().contains("MIC ON"));assertTrue(a.liveScreen.route.getText().toString().contains("Safety mute"));assertTrue(a.liveScreen.pitch.getText().toString().contains("A"));assertTrue(a.liveScreen.backing.getText().toString().contains("Backing"));assertTrue(a.liveScreen.meter.getProgress()>0);assertTrue(a.liveScreen.clock.getText().toString().contains("00:12"));
+  float[] stats=new float[22];stats[0]=440;stats[2]=69;stats[3]=.1f;stats[8]=12;stats[16]=1;stats[17]=1;stats[21]=0;RecordingManager.active=true;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.mic.getText().toString().contains("MIC ON"));assertTrue(a.liveScreen.route.getText().toString().contains("safety mute"));assertTrue(a.liveScreen.pitch.getText().toString().contains("A"));assertTrue(a.liveScreen.backing.getText().toString().contains("Backing"));assertTrue(a.liveScreen.meter.getProgress()>0);assertTrue(a.liveScreen.clock.getText().toString().contains("00:12"));
   stats[0]=0;stats[3]=0;stats[16]=0;stats[17]=0;RecordingManager.active=false;a.liveScreen.poll(stats,false);assertTrue(a.liveScreen.mic.getText().toString().contains("READY"));assertEquals(0,a.liveScreen.meter.getProgress());assertTrue(a.liveScreen.backing.getText().toString().contains("idle"));
  }
  @Test public void presetAndSafetyMuteKeepRecordingAndMicrophoneActive(){
@@ -46,7 +46,29 @@ public class LiveConsoleTest {
   a.liveScreen.video.performClick();assertEquals(3,a.tab);assertFalse(RecordingManager.active);a.chooseTab(0);a.liveScreen.transport(true,false,false);assertFalse(a.liveScreen.video.isEnabled());a.liveScreen.transport(false,true,false);assertFalse(a.liveScreen.video.isEnabled());a.liveScreen.transport(false,false,false);assertTrue(a.liveScreen.video.isEnabled());
  }
  @Test public void pausedAndMonitorStatusComeFromStats(){
-  float[] stats=new float[22];stats[8]=12;stats[21]=1;RecordingManager.active=true;RecordingManager.paused=true;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.clock.getText().toString().contains("00:12"));assertTrue(a.liveScreen.clock.getText().toString().contains("Ⅱ"));assertTrue(a.liveScreen.route.getText().toString().contains("Monitor on"));RecordingManager.paused=false;
+  float[] stats=new float[22];stats[8]=12;stats[21]=1;RecordingManager.active=true;RecordingManager.paused=true;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.clock.getText().toString().contains("00:12"));assertTrue(a.liveScreen.clock.getText().toString().contains("Ⅱ"));assertTrue(a.liveScreen.route.getText().toString().contains("monitoring · on"));RecordingManager.paused=false;
+ }
+
+ static Switch findSwitch(View v,String label){if(v instanceof Switch&&((Switch)v).getText().toString().contains(label))return (Switch)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){Switch found=findSwitch(g.getChildAt(i),label);if(found!=null)return found;}}return null;}
+ @Test public void liveBackingVolumePersistsAndWritesOnlyBackingGain(){
+  AudioService.active=true;boolean composerPlaying=a.composer.playing();a.liveScreen.backingVolume.setProgress(40);StudioScreenshotTest.Audio.changes.clear();assertTrue(a.liveScreen.backingVolume.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT)));assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());for(float[] change:StudioScreenshotTest.Audio.changes)assertEquals(1,(int)change[0]);float value=a.values[1];assertTrue(value>0);assertEquals(value,a.getPreferences(0).getFloat("p1",-1),.001);assertTrue(AudioService.active);assertEquals(composerPlaying,a.composer.playing());a.chooseTab(4);a.chooseTab(0);assertEquals(Math.round(value*100),a.liveScreen.backingVolume.getProgress());
+ }
+ @Test public void sourceButtonsAndTopNavigationLeadToRequestedPages(){
+  a.liveScreen.filesButton.performClick();assertEquals(1,a.tab);assertEquals(1,a.sourceTab);a.nav.getChildAt(1).performClick();assertEquals(7,a.tab);a.nav.getChildAt(2).performClick();assertEquals(4,a.tab);a.nav.getChildAt(0).performClick();assertEquals(0,a.tab);a.liveScreen.onlineButton.performClick();assertEquals(1,a.tab);assertEquals(2,a.sourceTab);a.nav.getChildAt(1).performClick();assertEquals(7,a.tab);a.nav.getChildAt(0).performClick();assertEquals(0,a.tab);
+ }
+ @Test public void monitorStatusUsesStatsEvenWhenCachedSettingDisagrees(){
+  float[] stats=new float[22];a.values[11]=1;stats[21]=0;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.route.getText().toString().contains("monitoring · off"));a.values[11]=0;stats[21]=1;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.route.getText().toString().contains("monitoring · on"));stats[17]=1;a.liveScreen.poll(stats,true);assertTrue(a.liveScreen.route.getText().toString().contains("safety mute"));
+ }
+ @Test public void noiseReductionInDetailedEffectsUpdatesParameter(){
+  a.chooseTab(6);Switch noise=findSwitch(a.page,"Noise reduction");assertNotNull(noise);boolean next=!noise.isChecked();StudioScreenshotTest.Audio.changes.clear();noise.performClick();assertEquals(next?1:0,a.values[19],0);assertEquals(a.values[19],a.getPreferences(0).getFloat("p19",-1),0);assertEquals(19,(int)StudioScreenshotTest.Audio.changes.get(0)[0]);a.chooseTab(0);assertEquals(next?1:0,a.values[19],0);
+ }
+
+ @Test public void captureLocksDeviceSettings(){
+  a.composer.capturing=true;assertTrue(a.settingsLocked());a.composer.capturing=false;a.harmony.state[4]=0;assertTrue(a.settingsLocked());a.harmony.state[4]=-1;a.harmony.state[5]=0;assertTrue(a.settingsLocked());a.harmony.state[5]=-1;assertFalse(a.settingsLocked());
+ }
+
+ @Test public void monitorOffAndOnUpdatesComposerWithoutStoppingRecordingOrBacking(){
+  AudioService.active=true;AudioService.playbackActive=true;RecordingManager.active=true;StudioScreenshotTest.Composer.monitorCalls.clear();StudioScreenshotTest.Composer.transportCalls.clear();StudioScreenshotTest.Audio.changes.clear();a.set(11,0);a.set(11,1);assertEquals(Arrays.asList(false,true),StudioScreenshotTest.Composer.monitorCalls);assertTrue(AudioService.active);assertTrue(AudioService.playbackActive);assertTrue(RecordingManager.active);assertTrue(StudioScreenshotTest.Composer.transportCalls.isEmpty());assertEquals(2,StudioScreenshotTest.Audio.changes.size());for(float[] change:StudioScreenshotTest.Audio.changes)assertEquals(11,(int)change[0]);
  }
 
 }

@@ -1,6 +1,10 @@
 # Checkpoint status
 
-## 현재: 3.5.0-preview / versionCode 15 개인용 구현 체크포인트
+## 현재: 3.6.0-preview / versionCode 16 개인용 구현 체크포인트
+
+상단 탐색과 라이브 반주 음량·독립 입출력 선택을 추가했다. 개인용 Java/Robolectric 검사 87개 및 네이티브 호스트 검사를 통과했다. [명세](LIVE_VAULT_V3_6_SPEC.md) · [검증](LIVE_VAULT_V3_6_VALIDATION.md). 실기기 검증은 남아 있으며 공개 standard는 3.2.1을 유지한다.
+
+## 3.5.0-preview 이력 / versionCode 15
 
 공용 다이얼 라이브 콘솔과 반주 편집·재생 안정성을 개선했다. 개인용 전체 71개 검사와 44.1/48 kHz 네이티브 호스트 검사를 통과했다. [명세](LIVE_VAULT_V3_5_SPEC.md) · [검증](LIVE_VAULT_V3_5_VALIDATION.md). 실제 기기 검증은 남아 있으며 공개 standard는 3.2.1을 유지한다.
 

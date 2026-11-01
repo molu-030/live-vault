@@ -26,6 +26,21 @@ int main(){
     DSP dsp;dsp.init(48000);float params[]={1,.55,.4,2.2,.2,280,.25,0,0,1,1,0,0,0,0,78,0,0,0,1};dsp.configure(params);double tail=0;
     for(int i=0;i<48000*3;i++){float l,r;dsp.tick(i==0?.7f:0,params,l,r);assert(std::isfinite(l)&&std::isfinite(r));assert(std::abs(l)<2&&std::abs(r)<2);if(i>4800&&i<24000)tail+=l*l+r*r;}
     assert(tail>.00001);std::cout<<"PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail\n";
+    // Compare identical DSP paths with only the noise-reduction switch changed.
+    float cleanParams[]={1,0,0,2.2,0,280,0,0,0,0,0,0,0,0,0,78,0,0,0,0};
+    float reducedParams[20];std::copy(cleanParams,cleanParams+20,reducedParams);reducedParams[19]=1;
+    DSP cleanNoise,reducedNoise,cleanVoice,reducedVoice;
+    for(DSP* path:{&cleanNoise,&reducedNoise,&cleanVoice,&reducedVoice})path->init(48000);
+    cleanNoise.configure(cleanParams);reducedNoise.configure(reducedParams);cleanVoice.configure(cleanParams);reducedVoice.configure(reducedParams);
+    double cleanEnergy=0,reducedEnergy=0,cleanVoiceEnergy=0,reducedVoiceEnergy=0;
+    for(int i=0;i<48000;i++){
+        float noise=.002f*std::sin(2*PI*900*i/48000),voice=.08f*std::sin(2*PI*220*i/48000),a,b,c,d,e,f,g,h;
+        cleanNoise.tick(noise,cleanParams,a,b);reducedNoise.tick(noise,reducedParams,c,d);
+        cleanVoice.tick(voice,cleanParams,e,f);reducedVoice.tick(voice,reducedParams,g,h);
+        if(i>12000){cleanEnergy+=a*a;reducedEnergy+=c*c;cleanVoiceEnergy+=e*e;reducedVoiceEnergy+=g*g;}
+    }
+    assert(cleanEnergy>.001);assert(reducedEnergy<cleanEnergy*.1);assert(reducedVoiceEnergy>cleanVoiceEnergy*.95);
+    std::cout<<"PASS: noise reduction suppresses quiet signal while preserving voiced signal\n";
     FeedbackGuard guard;guard.init(48000,true);float wave[2048];
     for(int k=0;k<8;k++)guard.analyze(silence,2048,48000,k*.1);
     assert(!guard.muted()&&guard.count()==0);

@@ -28,6 +28,7 @@ public class StudioScreenshotTest {
  @Implements(value=NativeAudio.class,isInAndroidSdk=false)
  public static class Audio {
   static double lastSeek=-1;static float[] supplied;static final java.util.List<float[]> changes=new java.util.ArrayList<>();
+  static final java.util.List<Boolean> rerouteMic=new java.util.ArrayList<>();static final java.util.ArrayDeque<Boolean> rerouteResults=new java.util.ArrayDeque<>();static int microphoneStarts,playbackStarts,inputSessions;static final java.util.List<Integer> burstCalls=new java.util.ArrayList<>();
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static void set(int k,float v){changes.add(new float[]{k,v});}
   @Implementation protected static float[] stats(){if(supplied!=null)return supplied.clone();float[] f=new float[22];f[2]=-1;f[6]=48000;return f;}
@@ -37,7 +38,12 @@ public class StudioScreenshotTest {
   @Implementation protected static boolean loadLocalFile(String p,int r,int c){return true;}
   @Implementation protected static void guideTone(float f){}
   @Implementation protected static void stop(){}
-  @Implementation protected static boolean startPlayback(int out,int mode){return true;}
+  @Implementation protected static boolean startPlayback(int out,int mode){playbackStarts++;return true;}
+  @Implementation protected static boolean start(int input,int output,int mode){microphoneStarts++;return true;}
+  @Implementation protected static boolean reroute(int input,int output,int mode,boolean microphone){rerouteMic.add(microphone);return rerouteResults.isEmpty()||rerouteResults.removeFirst();}
+  @Implementation protected static boolean bufferBursts(int n){burstCalls.add(n);return true;}
+  @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
+  @Implementation protected static int inputSession(){inputSessions++;return 0;}
   @Implementation protected static void microphoneOff(){}
  }
  @org.robolectric.annotation.internal.DoNotInstrument
@@ -46,12 +52,13 @@ public class StudioScreenshotTest {
   static double[] current={0,0,0,0,32,-1,-1,0,0,0},performance=new double[0];
   static final java.util.List<Integer> trackCalls=new java.util.ArrayList<>();
   static int clearSoloCalls;
+  static final java.util.List<Boolean> monitorCalls=new java.util.ArrayList<>();
   static final java.util.List<Integer> transportCalls=new java.util.ArrayList<>();
   static final java.util.List<Boolean> recordCalls=new java.util.ArrayList<>();
   static volatile int publishCalls;
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static boolean loadSoundFont(String path){return true;}
-  @Implementation protected static void monitor(boolean enabled){}
+  @Implementation protected static void monitor(boolean enabled){monitorCalls.add(enabled);}
   @Implementation protected static boolean publish(double[] e,double length,double bar,double bpm,int key,int scale){publishCalls++;return true;}
   @Implementation protected static void transport(int command){transportCalls.add(command);}
   @Implementation protected static void track(int c,float v,float p,boolean m,boolean s){trackCalls.add(c);}
@@ -87,7 +94,7 @@ public class StudioScreenshotTest {
    MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.composer.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);a.composer.ready=true;
    a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,36,0,24)).build());
    while(a.composer.project.parts.get(0).tracks.size()<8)a.composer.project.addTrack(new TrackConfig("추가 악기",40,false));
-   for(int tab:new int[]{7,8}){a.tab=tab;a.showTab();capture(a,412,893,new File(out,"v3-"+(scale==1?"default":"large")+"-"+(tab==7?"composer":"voice")+".png"),false);assertEquals(3,a.nav.getChildCount());Rect play=bounds(a,a.composerScreen.play);assertTrue(play.top>=a.pageScroll.getBottom());assertTrue(play.bottom<=a.nav.getTop());a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(play,bounds(a,a.composerScreen.play));if(tab==7)capture(a,412,893,new File(out,"v3-"+(scale==1?"default":"large")+"-tracks.png"),false);if(tab==8){assertNotNull(a.composerScreen.phrase);assertTrue(bounds(a,a.composerScreen.phrase).bottom<=a.nav.getTop());}}
+   for(int tab:new int[]{7,8}){a.tab=tab;a.showTab();capture(a,412,893,new File(out,"v3-"+(scale==1?"default":"large")+"-"+(tab==7?"composer":"voice")+".png"),false);assertEquals(3,a.nav.getChildCount());Rect play=bounds(a,a.composerScreen.play);assertTrue(play.top>=a.pageScroll.getBottom());assertTrue(play.bottom<=a.root.getHeight()-a.root.getPaddingBottom());a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(play,bounds(a,a.composerScreen.play));if(tab==7)capture(a,412,893,new File(out,"v3-"+(scale==1?"default":"large")+"-tracks.png"),false);if(tab==8){assertNotNull(a.composerScreen.phrase);assertTrue(bounds(a,a.composerScreen.phrase).bottom<=a.root.getHeight()-a.root.getPaddingBottom());}}
    a.composerScreen.instrument(-1,true);Dialog dialog=ShadowDialog.getLatestDialog();assertNotNull(dialog);assertTrue(dialog.isShowing());ViewGroup panel=(ViewGroup)dialog.getWindow().getDecorView().findViewById(android.R.id.content);EditText query=findInput(panel,"악기 · 카테고리 검색");assertNotNull(query);query.setText("bass");assertTrue(countButtonsContaining(panel,"Bass")>=8);Button category=findButtonContaining(panel,"카테고리:");assertNotNull(category);category.performClick();Dialog choices=ShadowDialog.getLatestDialog();assertNotNull(findButton(choices.getWindow().getDecorView(),"전체 GM 128"));choices.dismiss();panel.measure(View.MeasureSpec.makeMeasureSpec(412,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(700,View.MeasureSpec.EXACTLY));panel.layout(0,0,412,700);Bitmap bitmap=Bitmap.createBitmap(412,700,Bitmap.Config.ARGB_8888);panel.draw(new Canvas(bitmap));try(FileOutputStream file=new FileOutputStream(new File(out,"v3.1-"+(scale==1?"default":"large")+"-search.png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,file);}bitmap.recycle();dialog.dismiss();a.io.shutdown();
   }RuntimeEnvironment.setFontScale(1f);
  }
@@ -99,7 +106,7 @@ public class StudioScreenshotTest {
    assertTrue(a.harmony.error,a.harmony.ready);a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,36,0,24)).build());a.chooseTab(9);
    capture(a,412,893,new File(out,"v3.1-"+(scale==1?"default":"large")+"-harmony.png"),false);
    for(int i=1;i<=4;i++)assertNotNull(findButtonContaining(a.page,i+"성부 ·"));a.pageScroll.scrollTo(0,a.page.getHeight());capture(a,412,893,new File(out,"v3.1-"+(scale==1?"default":"large")+"-harmony-layers.png"),false);a.harmony.state[4]=0;a.showTab();capture(a,412,893,new File(out,"v3.1-"+(scale==1?"default":"large")+"-harmony-cancel.png"),false);assertNotNull(findButtonContaining(a.actionDock,"녹음 취소"));a.harmony.state[4]=-1;a.showTab();
-   Rect play=bounds(a,a.harmonyScreen.play),record=bounds(a,a.harmonyScreen.record);assertTrue(play.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.nav.getTop());a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(play,bounds(a,a.harmonyScreen.play));assertEquals(record,bounds(a,a.harmonyScreen.record));a.harmonyScreen.loop();Dialog form=ShadowDialog.getLatestDialog();View formView=form.getWindow().getDecorView().findViewById(android.R.id.content);captureView(formView,412,700,new File(out,"v3.1-"+(scale==1?"default":"large")+"-tempo.png"));form.dismiss();a.io.shutdown();
+   Rect play=bounds(a,a.harmonyScreen.play),record=bounds(a,a.harmonyScreen.record);assertTrue(play.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.root.getHeight()-a.root.getPaddingBottom());a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(play,bounds(a,a.harmonyScreen.play));assertEquals(record,bounds(a,a.harmonyScreen.record));a.harmonyScreen.loop();Dialog form=ShadowDialog.getLatestDialog();View formView=form.getWindow().getDecorView().findViewById(android.R.id.content);captureView(formView,412,700,new File(out,"v3.1-"+(scale==1?"default":"large")+"-tempo.png"));form.dismiss();a.io.shutdown();
   }RuntimeEnvironment.setFontScale(1f);
  }
  @Test @Config(sdk=35) public void performanceAndHarmonyReviewCaptures() throws Exception {
@@ -132,7 +139,7 @@ public class StudioScreenshotTest {
    int physicalHeight=width==360?800:915,height=physicalHeight-72;
    RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");
    MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.activityVisible=false;
-   assertEquals("Bottom navigation stays within three items",3,a.nav.getChildCount());
+   assertEquals("Top navigation has three items",3,a.nav.getChildCount());
    seed(a);a.selectedFile="보컬 연습 01.wav";a.preset(1);a.set(0,.8f);a.handler.removeCallbacks(a.tick);
    a.getResources().getDisplayMetrics().density=1;a.getResources().getDisplayMetrics().scaledDensity=1;a.getResources().getDisplayMetrics().widthPixels=width;a.getResources().getDisplayMetrics().heightPixels=height;
    for(int page:new int[]{0,1,4,5}){
@@ -155,7 +162,7 @@ public class StudioScreenshotTest {
   int[] chosen={-1};StudioDialogs.choose(a,"보컬 프리셋",new String[]{"노래방","발라드"},1,i->chosen[0]=i);
   Dialog dialog=ShadowDialog.getLatestDialog();assertNotNull(dialog);Button selected=findButton(dialog.getWindow().getDecorView(),"✓  발라드");assertNotNull(selected);assertTrue(selected.isSelected());assertTrue(selected.getContentDescription().toString().contains("선택됨"));
   Button first=findButton(dialog.getWindow().getDecorView(),"노래방");assertNotNull(first);first.performClick();assertEquals(0,chosen[0]);assertFalse(dialog.isShowing());
-  a.drawer();View practice=findDescription(a.drawerPopup.getContentView(),"보컬 연습,");assertNotNull(practice);practice.performClick();assertEquals(5,a.tab);assertNull(a.drawerPopup);assertEquals(3,a.nav.getChildCount());assertTrue(a.nav.getChildAt(0).isSelected());a.io.shutdown();
+  a.drawer();View practice=findDescription(a.drawerPopup.getContentView(),"보컬 연습,");assertNotNull(practice);practice.performClick();assertEquals(5,a.tab);assertNull(a.drawerPopup);assertEquals(3,a.nav.getChildCount());assertFalse(a.nav.getChildAt(0).isSelected());a.io.shutdown();
  }
  @Test @Config(sdk=35) public void galaxyWindowKeepsPrimaryActionsAboveSystemBars()throws Exception {
   File out=new File(System.getProperty("user.dir"),"build/studio-screenshots");out.mkdirs();
@@ -167,12 +174,12 @@ public class StudioScreenshotTest {
    String prefix="s26u-"+(fontScale==1?"default":"large")+(navigationBottom==48?"-buttons":"");
    capture(a,412,893,new File(out,prefix+"-live.png"),false);
    LinearLayout header=(LinearLayout)a.root.getChildAt(0);assertTrue("Preset must retain a tappable width",a.presetChip.getWidth()>=48);assertTrue("Emergency output control must retain a tappable width",header.getChildAt(header.getChildCount()-1).getWidth()>=48);
-   Rect record=bounds(a,a.recButton);assertTrue(record.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.nav.getTop());assertTrue(a.nav.getBottom()<=893-navigationBottom);assertTrue(a.root.getPaddingTop()>=36);assertEquals(3,a.nav.getChildCount());
+   Rect record=bounds(a,a.recButton);assertTrue(record.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.root.getHeight()-a.root.getPaddingBottom());assertTrue(bounds(a,a.nav).bottom<=bounds(a,a.pageScroll).top);assertTrue(a.root.getPaddingTop()>=36);assertEquals(3,a.nav.getChildCount());
    a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(record,bounds(a,a.recButton));a.pageScroll.scrollTo(0,0);a.drawer();assertTrue(a.drawerTop+a.drawerPopup.getHeight()<=893-navigationBottom);capture(a,412,893,new File(out,prefix+"-drawer.png"),true);a.drawerPopup.dismiss();
    try{RecordingManager.active=true;a.tick.run();a.handler.removeCallbacks(a.tick);capture(a,412,893,new File(out,prefix+"-recording.png"),false);assertEquals(record,bounds(a,a.recButton));}
    finally{RecordingManager.active=false;a.tick.run();a.handler.removeCallbacks(a.tick);}
-   a.chooseTab(5);capture(a,412,893,new File(out,prefix+"-practice.png"),false);Rect stop=bounds(a,a.practiceButton);a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(stop,bounds(a,a.practiceButton));assertTrue(stop.top>=a.pageScroll.getBottom());assertTrue(stop.bottom<=a.nav.getTop());
-   a.chooseTab(0);android.view.WindowInsets keyboard=new android.view.WindowInsets.Builder(insets).setInsets(android.view.WindowInsets.Type.ime(),android.graphics.Insets.of(0,0,0,300)).build();a.root.dispatchApplyWindowInsets(keyboard);capture(a,412,893,new File(out,prefix+"-keyboard.png"),false);assertTrue(a.nav.getBottom()<=893-300);assertTrue(bounds(a,a.recButton).bottom<=a.nav.getTop());
+   a.chooseTab(5);capture(a,412,893,new File(out,prefix+"-practice.png"),false);Rect stop=bounds(a,a.practiceButton);a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(stop,bounds(a,a.practiceButton));assertTrue(stop.top>=a.pageScroll.getBottom());assertTrue(stop.bottom<=a.root.getHeight()-a.root.getPaddingBottom());
+   a.chooseTab(0);android.view.WindowInsets keyboard=new android.view.WindowInsets.Builder(insets).setInsets(android.view.WindowInsets.Type.ime(),android.graphics.Insets.of(0,0,0,300)).build();a.root.dispatchApplyWindowInsets(keyboard);capture(a,412,893,new File(out,prefix+"-keyboard.png"),false);assertTrue(bounds(a,a.nav).bottom<=bounds(a,a.pageScroll).top);assertTrue(bounds(a,a.recButton).bottom<=a.root.getHeight()-a.root.getPaddingBottom());
    a.io.shutdown();
   }
   RuntimeEnvironment.setFontScale(1f);
@@ -185,7 +192,7 @@ public class StudioScreenshotTest {
   a.chooseTab(3);
   try{
    assertNotNull(a.videoButton);File out=new File(System.getProperty("user.dir"),"build/studio-screenshots");capture(a,412,893,new File(out,"s26u-camera-layout.png"),false);
-   Rect record=bounds(a,a.videoButton);a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(record,bounds(a,a.videoButton));assertTrue(record.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.nav.getTop());
+   Rect record=bounds(a,a.videoButton);a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(record,bounds(a,a.videoButton));assertTrue(record.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.root.getHeight()-a.root.getPaddingBottom());
   }finally{a.chooseTab(0);a.io.shutdown();RuntimeEnvironment.setFontScale(1f);}
  }
  static EditText findInput(View v,String hint){if(v instanceof EditText&&hint.contentEquals(((EditText)v).getHint()))return (EditText)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){EditText x=findInput(g.getChildAt(i),hint);if(x!=null)return x;}}return null;}
@@ -196,7 +203,7 @@ public class StudioScreenshotTest {
  static Button findButton(View view,String label){if(view instanceof Button&&label.contentEquals(((Button)view).getText()))return (Button)view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){Button found=findButton(group.getChildAt(i),label);if(found!=null)return found;}}return null;}
  static void capture(MainActivity a,int w,int h,File output,boolean drawer)throws Exception {
   redraw(a.root);a.root.measure(View.MeasureSpec.makeMeasureSpec(w,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(h,View.MeasureSpec.EXACTLY));a.root.layout(0,0,w,h);
-  if(a.tab==0){Rect bounds=new Rect(0,0,a.recButton.getWidth(),a.recButton.getHeight());a.root.offsetDescendantRectToMyCoords(a.recButton,bounds);System.out.println("LAYOUT "+output.getName()+" record="+bounds.bottom+" nav="+a.nav.getTop());assertTrue("Recording button must remain above navigation",bounds.bottom<=a.nav.getTop());}
+  if(a.tab==0){Rect bounds=new Rect(0,0,a.recButton.getWidth(),a.recButton.getHeight());a.root.offsetDescendantRectToMyCoords(a.recButton,bounds);System.out.println("LAYOUT "+output.getName()+" record="+bounds.bottom+" safeBottom="+(a.root.getHeight()-a.root.getPaddingBottom()));assertTrue("Recording button must remain inside safe bottom",bounds.bottom<=a.root.getHeight()-a.root.getPaddingBottom());}
   Bitmap bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);a.root.draw(canvas);
   if(drawer){View panel=a.drawerPopup.getContentView();panel.measure(View.MeasureSpec.makeMeasureSpec(a.drawerPopup.getWidth(),View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(a.drawerPopup.getHeight(),View.MeasureSpec.EXACTLY));panel.layout(0,0,panel.getMeasuredWidth(),panel.getMeasuredHeight());canvas.save();canvas.translate(a.drawerLeft,a.drawerTop);panel.draw(canvas);canvas.restore();}
   try(FileOutputStream file=new FileOutputStream(output)){bitmap.compress(Bitmap.CompressFormat.PNG,100,file);}bitmap.recycle();
