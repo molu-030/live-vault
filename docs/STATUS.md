@@ -1,6 +1,10 @@
 # Checkpoint status
 
-## 현재: 3.4.0-preview / versionCode 14 개인용 구현 체크포인트
+## 현재: 3.5.0-preview / versionCode 15 개인용 구현 체크포인트
+
+공용 다이얼 라이브 콘솔과 반주 편집·재생 안정성을 개선했다. 개인용 전체 71개 검사와 44.1/48 kHz 네이티브 호스트 검사를 통과했다. [명세](LIVE_VAULT_V3_5_SPEC.md) · [검증](LIVE_VAULT_V3_5_VALIDATION.md). 실제 기기 검증은 남아 있으며 공개 standard는 3.2.1을 유지한다.
+
+## 3.4.0-preview 이력 / versionCode 14
 
 라이브 화면에 실제 마이크·모니터·녹음·반주 상태와 기존 효과를 조절하는 노브 여섯 개를 배치했다. [명세](LIVE_VAULT_V3_4_SPEC.md) · [검증 기록](LIVE_VAULT_V3_4_VALIDATION.md). 개인용 3 ABI APK 빌드, 전체 단위 검사 58개와 최종 라이브·기존 화면 8개 재검사가 통과했고 독립 기능·디자인 리뷰도 승인했다. 실기기 검증은 남아 있다. 공개 standard APK는 3.2.1을 유지한다.
 

@@ -44,16 +44,22 @@ public class StudioScreenshotTest {
  @Implements(value=NativeComposer.class,isInAndroidSdk=false)
  public static class Composer {
   static double[] current={0,0,0,0,32,-1,-1,0,0,0},performance=new double[0];
+  static final java.util.List<Integer> trackCalls=new java.util.ArrayList<>();
+  static int clearSoloCalls;
+  static final java.util.List<Integer> transportCalls=new java.util.ArrayList<>();
+  static final java.util.List<Boolean> recordCalls=new java.util.ArrayList<>();
+  static volatile int publishCalls;
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static boolean loadSoundFont(String path){return true;}
   @Implementation protected static void monitor(boolean enabled){}
-  @Implementation protected static boolean publish(double[] e,double length,double bar,double bpm,int key,int scale){return true;}
-  @Implementation protected static void transport(int command){}
-  @Implementation protected static void track(int c,float v,float p,boolean m,boolean s){}
+  @Implementation protected static boolean publish(double[] e,double length,double bar,double bpm,int key,int scale){publishCalls++;return true;}
+  @Implementation protected static void transport(int command){transportCalls.add(command);}
+  @Implementation protected static void track(int c,float v,float p,boolean m,boolean s){trackCalls.add(c);}
+  @Implementation protected static void clearSolo(){clearSoloCalls++;}
   @Implementation protected static void voice(boolean enabled,int program,int mode,int octave,boolean range,boolean snap,int response,int quality,boolean rhythm,boolean mix,float conf,float gate){}
   @Implementation protected static double[] state(){return current.clone();}
   @Implementation protected static double[] drain(){double[] p=performance;performance=new double[0];return p;}
-  @Implementation protected static void record(boolean arm){}
+  @Implementation protected static void record(boolean arm){recordCalls.add(arm);}
   @Implementation protected static String[] drumKits(){return new String[]{"0 · Standard","8 · Room"};}
  }
  @org.robolectric.annotation.internal.DoNotInstrument
@@ -133,12 +139,12 @@ public class StudioScreenshotTest {
     a.tab=page;a.showTab();a.transport.setVisibility(View.GONE);a.tick.run();a.handler.removeCallbacks(a.tick);a.io.submit(()->{}).get();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
     capture(a,width,height,new File(out,width+"-"+page+"-idle.png"),false);
     if(page==0){
-     try{RecordingManager.active=true;a.tick.run();a.handler.removeCallbacks(a.tick);capture(a,width,height,new File(out,width+"-0-recording-fixture.png"),false);assertTrue(a.recButton.getText().toString().contains("저장"));assertFalse(a.recordOptions.isEnabled());}
+     try{RecordingManager.active=true;a.tick.run();a.handler.removeCallbacks(a.tick);capture(a,width,height,new File(out,width+"-0-recording-fixture.png"),false);assertTrue(a.recButton.getText().toString().contains("종료"));assertFalse(a.recordOptions.isEnabled());}
      finally{RecordingManager.active=false;a.tick.run();a.handler.removeCallbacks(a.tick);}
      float[] fixture=new float[22];fixture[0]=440;fixture[2]=69;fixture[3]=.05f;fixture[10]=1;a.liveScreen.poll(fixture,true);capture(a,width,height,new File(out,width+"-0-fixture.png"),false);a.drawer();capture(a,width,height,new File(out,width+"-drawer.png"),true);a.drawerPopup.dismiss();}
    }
   // Verify the live voice-level knob exposes a real accessible adjustment action.
-  a.tab=0;a.showTab();StudioKnob f=a.liveScreen.knobs[5];assertNotNull(f);Bundle args=new Bundle();args.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.65f);assertTrue(f.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args));assertEquals(.65f,a.values[0],.001f);
+  a.tab=0;a.showTab();a.liveScreen.select(2);SharedEffectDial f=a.liveScreen.dial;assertNotNull(f);Bundle args=new Bundle();args.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.65f);assertTrue(f.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args));assertEquals(.65f,a.values[0],.001f);
   assertEquals(18,StudioMidiPreview.read(a.store.file("render_fixture_1",".mid")).length);
   a.tab=1;a.showTab();assertNotNull(a.playerLine);Bundle seekArgs=new Bundle();seekArgs.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.3f);assertTrue(a.playerLine.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),seekArgs));assertEquals(1.8,Audio.lastSeek,.001);a.playerLine.setEnabled(false);seekArgs.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.8f);assertFalse(a.playerLine.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),seekArgs));assertEquals(1.8,Audio.lastSeek,.001);
   a.io.shutdown();

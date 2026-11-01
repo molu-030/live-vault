@@ -11,7 +11,7 @@ final class ComposerTransport {
     private final Map<String,int[]> previousVoicings=new HashMap<>();
     private final double[][][] offEvent=new double[8][128][];
     private void event(double beat,int type,int track,int note,double velocity,int program,int bank,double pan,double volume){events.add(new double[]{beat,type,track,note,velocity,program,bank,pan,volume});}
-    private void note(double beat,double length,int ch,int pitch,double velocity,boolean human){double offset=human?random.nextDouble()*.018:0;event(beat+offset,1,ch,Math.max(0,Math.min(127,pitch)),Math.max(.05,Math.min(1,velocity+(human?(random.nextDouble()-.5)*.09:0))),0,0,0,0);event(beat+offset+Math.max(.03,length),0,ch,pitch,0,0,0,0,0);}
+    private void note(double beat,double length,int ch,int pitch,double velocity,boolean human){double offset=human?random.nextDouble()*.018:0;pitch=Math.max(0,Math.min(127,pitch));event(beat+offset,1,ch,pitch,Math.max(.05,Math.min(1,velocity+(human?(random.nextDouble()-.5)*.09:0))),0,0,0,0);event(beat+offset+Math.max(.03,length),0,ch,pitch,0,0,0,0,0);}
     Plan compile(ComposerProject p,int selected){project=p;p.validate();events.clear();random=new Random(p.seed);for(int ch=0;ch<8;ch++)Arrays.fill(offEvent[ch],null);previousVoicings.clear();bar=MusicTheory.barBeats(p.meter);double beat=0;
         List<Integer> sequence=new ArrayList<>();
         if(selected>=0)sequence.add(selected);
