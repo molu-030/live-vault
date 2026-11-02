@@ -1143,7 +1143,7 @@ public class MainActivity extends Activity {
                 return;
             }
             if (AudioService.active) {
-                boolean nextOn = !(NativeAudio.stats()[21] > .5 || values[11] > .5);
+                boolean nextOn = !(NativeAudio.stats()[21] > .5);
                 if (nextOn && !AudioService.canMonitor(this)) {
                     NativeAudio.monitorLevel(.22f);
                 }
@@ -2135,6 +2135,7 @@ public class MainActivity extends Activity {
         if (busy || videoPreparing) return;
         if (action == 4) {
             composer.pause();
+            AudioService.composerRequested = false;
             NativeAudio.playLocal(true);
             startForegroundService(new Intent(this, AudioService.class).setAction(AudioService.PLAYBACK).putExtra("playLocal", true));
             set(13, 0);
@@ -2374,7 +2375,9 @@ public class MainActivity extends Activity {
             wasRunning = running;
 
             if (micButton != null) {
-                micButton.setText(running ? tr("마이크 끄기", "Turn mic off") : starting ? tr("연결 중…", "Connecting…") : tr("마이크 켜기", "Turn mic on"));
+                micButton.setText(liveScreen != null
+                        ? (starting ? tr("연결 중…", "Connecting…") : running ? tr("마이크 켜짐", "Mic on") : tr("마이크 꺼짐", "Mic off"))
+                        : running ? tr("마이크 끄기", "Turn mic off") : starting ? tr("연결 중…", "Connecting…") : tr("마이크 켜기", "Turn mic on"));
                 if (liveScreen == null) StudioTheme.selected(micButton, running);
             }
             if (monitorButton != null) {

@@ -24,6 +24,8 @@ public class LiveConsoleTest {
         AudioService.active = false;
         AudioService.playbackActive = false;
         RecordingManager.active = false;
+        RecordingManager.paused = false;
+        AudioService.composerRequested = false;
         StudioScreenshotTest.Audio.supplied = null;
         StudioScreenshotTest.Audio.changes.clear();
         a = Robolectric.buildActivity(MainActivity.class).setup().get();
@@ -38,6 +40,7 @@ public class LiveConsoleTest {
     public void cleanup() {
         a.handler.removeCallbacks(a.tick);
         a.io.shutdown();
+        AudioService.composerRequested = false;
         AudioService.active = false;
         RecordingManager.active = false;
         RecordingManager.paused = false;
@@ -45,76 +48,36 @@ public class LiveConsoleTest {
         AppLanguage.set(RuntimeEnvironment.getApplication(), false);
     }
 
-    static void progress(SharedEffectDial k, float value) {
-        Bundle args = new Bundle();
-        args.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, value);
-        assertTrue(k.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(), args));
+    static void adjust(SeekBar slider, int value) {
+        slider.setProgress(value);
+        assertTrue(slider.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT,
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)));
     }
 
     @Test
-    public void selectorsBindOneDialWithoutWritingAndExposeActualRanges() {
-        int[] ids = {2, 3, 0, 4, 5, 6};
-        float[] min = {0, .3f, 0, 0, 70, 0}, max = {1, 6, 2, .8f, 700, .7f}, target = {.4f, 3f, 1.2f, .3f, 350, .4f};
-        StudioScreenshotTest.Audio.changes.clear();
-        for (int i = 0; i < ids.length; i++) {
-            int count = StudioScreenshotTest.Audio.changes.size();
-            a.liveScreen.selectors[i].performClick();
-            assertEquals(count, StudioScreenshotTest.Audio.changes.size());
-            AccessibilityNodeInfo.RangeInfo range = a.liveScreen.dial.createAccessibilityNodeInfo().getRangeInfo();
-            assertEquals(min[i], range.getMin(), .001);
-            assertEquals(max[i], range.getMax(), .001);
-            progress(a.liveScreen.dial, target[i]);
-            assertEquals(target[i], a.values[ids[i]], .001);
-            assertEquals(target[i], a.getPreferences(0).getFloat("p" + ids[i], -1), .001);
-            float[] change = StudioScreenshotTest.Audio.changes.get(StudioScreenshotTest.Audio.changes.size() - 1);
-            assertEquals(ids[i], (int) change[0]);
-            assertEquals(target[i], change[1], .001);
+    public void mainEffectSlidersPersistAndWriteOnlyReverbAndEcho() {
+        SeekBar[] sliders = {a.liveScreen.reverbVolume, a.liveScreen.echoVolume};
+        int[] ids = {2, 4};
+        for (int i = 0; i < sliders.length; i++) {
+            StudioScreenshotTest.Audio.changes.clear();
+            adjust(sliders[i], 35);
+            assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
+            for (float[] change : StudioScreenshotTest.Audio.changes) assertEquals(ids[i], (int) change[0]);
+            assertEquals(a.values[ids[i]], a.getPreferences(0).getFloat("p" + ids[i], -1), .001);
         }
-        int count = StudioScreenshotTest.Audio.changes.size();
-        a.liveScreen.syncDial();
+        float reverb = a.values[2], echo = a.values[4];
+        a.chooseTab(4);
+        a.chooseTab(0);
+        assertEquals(Math.round(reverb * 100), a.liveScreen.reverbVolume.getProgress());
+        assertEquals(Math.round(echo * 100), a.liveScreen.echoVolume.getProgress());
+    }
+
+    @Test
+    public void synchronizationAndPollingNeverWriteAudioParameters() {
+        StudioScreenshotTest.Audio.changes.clear();
+        a.liveScreen.sync();
         a.liveScreen.poll(new float[22], false);
-        assertEquals(count, StudioScreenshotTest.Audio.changes.size());
-    }
-
-    @Test
-    public void dialTouchAndSelectionDuringGestureDoNotLeak() {
-        a.liveScreen.select(0);
-        SharedEffectDial dial = a.liveScreen.dial;
-        dial.measure(View.MeasureSpec.makeMeasureSpec(160, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(180, View.MeasureSpec.EXACTLY));
-        dial.layout(0, 0, 160, 180);
-        StudioScreenshotTest.Audio.changes.clear();
-        dial.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 80, 102, 0));
-        assertTrue(dial.isTracking());
         assertTrue(StudioScreenshotTest.Audio.changes.isEmpty());
-        dial.sync(.9f);
-        assertTrue(StudioScreenshotTest.Audio.changes.isEmpty());
-        a.liveScreen.select(4);
-        dial.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_MOVE, 80, 50, 0));
-        for (float[] change : StudioScreenshotTest.Audio.changes) assertEquals(2, (int) change[0]);
-        dial.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_UP, 80, 50, 0));
-        assertFalse(dial.isTracking());
-        a.liveScreen.select(4);
-        progress(dial, 900);
-        assertEquals(700, a.values[5], 0);
-        int n = StudioScreenshotTest.Audio.changes.size();
-        progress(dial, Float.NaN);
-        assertEquals(n, StudioScreenshotTest.Audio.changes.size());
-        dial.onKeyDown(KeyEvent.KEYCODE_DPAD_DOWN, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN));
-        assertTrue(a.values[5] < 700);
-    }
-
-    @Test
-    public void rotaryGestureChangesBoundValue() {
-        a.liveScreen.select(0);
-        SharedEffectDial dial = a.liveScreen.dial;
-        dial.measure(View.MeasureSpec.makeMeasureSpec(160, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(180, View.MeasureSpec.EXACTLY));
-        dial.layout(0, 0, 160, 180);
-        StudioScreenshotTest.Audio.changes.clear();
-        dial.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 130, 102, 0));
-        dial.onTouchEvent(MotionEvent.obtain(0, 10, MotionEvent.ACTION_MOVE, 80, 152, 0));
-        dial.onTouchEvent(MotionEvent.obtain(0, 20, MotionEvent.ACTION_UP, 80, 152, 0));
-        assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
-        assertEquals(2, (int) StudioScreenshotTest.Audio.changes.get(0)[0]);
     }
 
     @Test
@@ -123,46 +86,71 @@ public class LiveConsoleTest {
         RecordingManager.active = true;
         a.values[11] = 1;
         a.values[13] = 1;
-        a.values[7] = 5;
+        a.values[0] = 1.4f;
+        a.values[1] = .6f;
         StudioScreenshotTest.Audio.changes.clear();
         a.liveScreen.reset();
         assertTrue(AudioService.active);
         assertTrue(RecordingManager.active);
         assertEquals(1, a.values[11], 0);
         assertEquals(1, a.values[13], 0);
-        assertEquals(5, a.values[7], 0);
+        assertEquals(1.4f, a.values[0], 0);
+        assertEquals(.6f, a.values[1], 0);
         Set<Integer> keys = new HashSet<>();
         for (float[] v : StudioScreenshotTest.Audio.changes) keys.add((int) v[0]);
-        assertEquals(new HashSet<>(Arrays.asList(0, 2, 3, 4, 5, 6)), keys);
+        assertTrue(keys.containsAll(Arrays.asList(2, 3, 4, 5, 6)));
+        for (int key : new int[]{0, 1, 11, 13}) assertFalse(keys.contains(key));
     }
 
     @Test
-    public void lcdShowsRealInputBackingAndSafetyState() {
+    public void displayShowsIndependentActualLevelsPitchAndRecordingTime() {
         float[] stats = new float[22];
         stats[0] = 440;
+        stats[1] = 17.5f;
         stats[2] = 69;
         stats[3] = .1f;
+        stats[4] = .01f;
         stats[8] = 12;
-        stats[16] = 1;
-        stats[17] = 1;
-        stats[21] = 0;
         RecordingManager.active = true;
         a.liveScreen.poll(stats, true);
-        assertTrue(a.liveScreen.mic.getText().toString().contains("MIC ON"));
-        assertTrue(a.liveScreen.route.getText().toString().contains("safety mute"));
-        assertTrue(a.liveScreen.pitch.getText().toString().contains("A"));
-        assertTrue(a.liveScreen.backing.getText().toString().contains("Backing"));
-        assertTrue(a.liveScreen.meter.getProgress() > 0);
-        assertTrue(a.liveScreen.clock.getText().toString().contains("00:12"));
+        assertTrue(a.liveScreen.display.note.contains("A4"));
+        assertEquals(440, a.liveScreen.display.frequency, .01);
+        assertEquals(17.5f, a.liveScreen.display.cents, .001);
+        assertEquals(-20, a.liveScreen.display.inputDb, .01);
+        assertEquals(-40, a.liveScreen.display.outputDb, .01);
+        assertTrue(a.liveScreen.display.recordClock.contains("00:12"));
         stats[0] = 0;
         stats[3] = 0;
-        stats[16] = 0;
-        stats[17] = 0;
-        RecordingManager.active = false;
+        stats[4] = Float.NaN;
+        a.liveScreen.poll(stats, true);
+        assertFalse(a.liveScreen.display.note.contains("A4"));
+        assertEquals(0, a.liveScreen.display.frequency, 0);
+        assertEquals(0, a.liveScreen.display.cents, 0);
+        assertFalse(Float.isNaN(a.liveScreen.display.inputDb));
+        assertFalse(Float.isNaN(a.liveScreen.display.outputDb));
+        stats[3] = Float.POSITIVE_INFINITY;
+        stats[4] = -.1f;
         a.liveScreen.poll(stats, false);
-        assertTrue(a.liveScreen.mic.getText().toString().contains("READY"));
-        assertEquals(0, a.liveScreen.meter.getProgress());
-        assertTrue(a.liveScreen.backing.getText().toString().contains("idle"));
+        assertFalse(Float.isNaN(a.liveScreen.display.inputDb));
+        assertFalse(Float.isNaN(a.liveScreen.display.outputDb));
+    }
+
+    @Test
+    public void idleAndBusyStatesDoNotDisplayStaleRecordingDuration() {
+        float[] stats = new float[22];
+        stats[8] = 999;
+        stats[0] = Float.NaN;
+        stats[2] = 69;
+        a.liveScreen.poll(stats, false);
+        assertEquals("00:00", a.liveScreen.display.recordClock);
+        assertEquals("READY", a.liveScreen.display.recordStatus);
+        assertEquals("—", a.liveScreen.display.note);
+        assertEquals(0, a.liveScreen.display.cents, 0);
+        a.busy = true;
+        a.liveScreen.poll(stats, false);
+        assertEquals("PREPARING / SAVING", a.liveScreen.display.recordStatus);
+        assertEquals("00:00", a.liveScreen.display.recordClock);
+        a.busy = false;
     }
 
     @Test
@@ -182,7 +170,7 @@ public class LiveConsoleTest {
         assertTrue(AudioService.active);
         assertTrue(RecordingManager.active);
         assertEquals(.3, a.values[2], .001);
-        assertTrue(a.liveScreen.selectors[0].getText().toString().contains("30%"));
+        assertTrue(a.liveScreen.reverbLabel.getText().toString().contains("30%"));
     }
 
     @Test
@@ -207,9 +195,9 @@ public class LiveConsoleTest {
         RecordingManager.active = true;
         RecordingManager.paused = true;
         a.liveScreen.poll(stats, true);
-        assertTrue(a.liveScreen.clock.getText().toString().contains("00:12"));
-        assertTrue(a.liveScreen.clock.getText().toString().contains("Ⅱ"));
-        assertTrue(a.liveScreen.route.getText().toString().contains("monitoring · on"));
+        assertTrue(a.liveScreen.display.recordClock.contains("00:12"));
+        assertEquals("PAUSED", a.liveScreen.display.recordStatus);
+        assertTrue(a.liveScreen.display.routeStatus.toLowerCase(java.util.Locale.US).contains("monitoring on"));
         RecordingManager.paused = false;
     }
 
@@ -245,8 +233,24 @@ public class LiveConsoleTest {
     }
 
     @Test
-    public void sourceButtonsAndTopNavigationLeadToRequestedPages() {
-        a.liveScreen.filesButton.performClick();
+    public void sourceChooserRetainsBackingSourcesAndDeviceAccess() {
+        a.liveScreen.sourceButton.performClick();
+        android.app.Dialog dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        View content = dialog.getWindow().getDecorView();
+        for (String label : new String[]{"Input", "Output", "files", "Online", "Composer"})
+            assertNotNull("Source chooser entry: " + label, StudioScreenshotTest.findButtonContaining(content, label));
+        dialog.dismiss();
+        for (String device : new String[]{"Input", "Output"}) {
+            a.liveScreen.sourceButton.performClick();
+            android.app.Dialog chooser = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            StudioScreenshotTest.findButtonContaining(chooser.getWindow().getDecorView(), device).performClick();
+            android.app.Dialog routes = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            assertNotSame("Device selector opens from unified source chooser", chooser, routes);
+            assertTrue(routes.isShowing());
+            routes.dismiss();
+        }
+        a.liveScreen.openSource(1);
         assertEquals(1, a.tab);
         assertEquals(1, a.sourceTab);
         a.nav.getChildAt(1).performClick();
@@ -255,13 +259,8 @@ public class LiveConsoleTest {
         assertEquals(4, a.tab);
         a.nav.getChildAt(0).performClick();
         assertEquals(0, a.tab);
-        a.liveScreen.onlineButton.performClick();
-        assertEquals(1, a.tab);
+        a.liveScreen.openSource(2);
         assertEquals(2, a.sourceTab);
-        a.nav.getChildAt(1).performClick();
-        assertEquals(7, a.tab);
-        a.nav.getChildAt(0).performClick();
-        assertEquals(0, a.tab);
     }
 
     @Test
@@ -270,14 +269,14 @@ public class LiveConsoleTest {
         a.values[11] = 1;
         stats[21] = 0;
         a.liveScreen.poll(stats, true);
-        assertTrue(a.liveScreen.route.getText().toString().contains("monitoring · off"));
+        assertTrue(a.liveScreen.display.routeStatus.toLowerCase(java.util.Locale.US).contains("monitoring off"));
         a.values[11] = 0;
         stats[21] = 1;
         a.liveScreen.poll(stats, true);
-        assertTrue(a.liveScreen.route.getText().toString().contains("monitoring · on"));
+        assertTrue(a.liveScreen.display.routeStatus.toLowerCase(java.util.Locale.US).contains("monitoring on"));
         stats[17] = 1;
         a.liveScreen.poll(stats, true);
-        assertTrue(a.liveScreen.route.getText().toString().contains("safety mute"));
+        assertTrue(a.liveScreen.display.routeStatus.toLowerCase(java.util.Locale.US).contains("safety mute"));
     }
 
     @Test
@@ -293,6 +292,70 @@ public class LiveConsoleTest {
         assertEquals(19, (int) StudioScreenshotTest.Audio.changes.get(0)[0]);
         a.chooseTab(0);
         assertEquals(next ? 1 : 0, a.values[19], 0);
+    }
+
+    static int countSliders(View view) {
+        int count = view.createAccessibilityNodeInfo().getRangeInfo() != null ? 1 : 0;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup)view;
+            for (int i = 0; i < group.getChildCount(); i++) count += countSliders(group.getChildAt(i));
+        }
+        return count;
+    }
+
+    @Test
+    public void detailsKeepAdvancedEffectsAndPresetResetActions() {
+        assertEquals("Only mic, backing, reverb and echo gains on main", 4, countSliders(a.page));
+        a.liveScreen.detailsButton.performClick();
+        android.app.Dialog dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        View content = dialog.getWindow().getDecorView();
+        assertTrue("Advanced effect controls remain available", countSliders(content) >= 5);
+        View decay = StudioScreenshotTest.findDescription(content, "Reverb decay");
+        assertNotNull(decay);
+        Bundle value = new Bundle();
+        value.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 3.4f);
+        StudioScreenshotTest.Audio.changes.clear();
+        assertTrue(decay.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(), value));
+        assertEquals(3.4f, a.values[3], .001);
+        assertEquals(3.4f, a.getPreferences(0).getFloat("p3", -1), .001);
+        assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
+        for (float[] change : StudioScreenshotTest.Audio.changes) {
+            assertEquals(3, (int) change[0]);
+            assertEquals(3.4f, change[1], .001);
+        }
+        assertNotNull(StudioScreenshotTest.findButtonContaining(content, "Preset"));
+        assertNotNull(StudioScreenshotTest.findButtonContaining(content, "Reset"));
+        dialog.dismiss();
+    }
+
+    @Test
+    public void playingSelectedFileDoesNotRequestMicrophonePermission() {
+        org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(android.Manifest.permission.RECORD_AUDIO);
+        a.sourceTab = 1;
+        a.selectedFile = "local-backing.wav";
+        a.awaitingMicPermission = false;
+        StudioScreenshotTest.Audio.localPlayCalls.clear();
+        StudioScreenshotTest.Audio.microphoneStarts = 0;
+        a.liveScreen.backingPlayButton.performClick();
+        assertFalse(a.awaitingMicPermission);
+        assertFalse(AudioService.active);
+        assertEquals(0, StudioScreenshotTest.Audio.microphoneStarts);
+        assertTrue(StudioScreenshotTest.Audio.localPlayCalls.contains(true));
+    }
+
+    @Test
+    public void pausedCurrentProjectResumesComposerInsteadOfStaleFile() throws Exception {
+        a.selectedFile = "stale-file.wav";
+        AudioService.composerRequested = true;
+        StudioScreenshotTest.Audio.localPlayCalls.clear();
+        StudioScreenshotTest.Composer.transportCalls.clear();
+        a.liveScreen.backingPlayButton.performClick();
+        a.composer.worker.submit(() -> {}).get();
+        ShadowLooper.idleMainLooper();
+        assertTrue(StudioScreenshotTest.Composer.transportCalls.contains(1));
+        assertFalse(StudioScreenshotTest.Audio.localPlayCalls.contains(true));
+        assertTrue(AudioService.composerRequested);
     }
 
     @Test
@@ -365,11 +428,65 @@ public class LiveConsoleTest {
         assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
         assertEquals(0, (int) StudioScreenshotTest.Audio.changes.get(0)[0]);
         assertTrue(a.values[0] > 1.4f);
-        assertTrue(a.liveScreen.selectors[2].getText().toString().contains(Math.round(a.values[0] * 100) + "%"));
+        assertTrue(a.liveScreen.micVolumeLabel.getText().toString().contains(Math.round(a.values[0] * 100) + "%"));
+        assertEquals(a.values[0], a.getPreferences(0).getFloat("p0", -1), .001);
 
+        useHeadphones();
+        AudioService.active = true;
         float prevMonitor = a.values[11];
+        float[] stats = new float[22];
+        stats[21] = prevMonitor;
+        StudioScreenshotTest.Audio.supplied = stats;
         a.liveScreen.monitorToggle.performClick();
         assertNotEquals(prevMonitor, a.values[11], .001f);
+        stats[21] = a.values[11]; // Native set updates the engine state before the next click.
+        a.liveScreen.monitorToggle.performClick();
+        assertEquals(prevMonitor, a.values[11], .001f);
+    }
+
+    void useHeadphones() {
+        android.media.AudioManager manager = (android.media.AudioManager)a.getSystemService(android.content.Context.AUDIO_SERVICE);
+        android.media.AudioDeviceInfo headphones = org.robolectric.shadows.AudioDeviceInfoBuilder.newBuilder()
+                .setType(android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES).build();
+        org.robolectric.Shadows.shadowOf(manager).setOutputDevices(Collections.singletonList(headphones));
+    }
+
+    @Test
+    public void activeMonitorClicksFollowActualStateWhenCachedSettingDisagrees() {
+        useHeadphones();
+        AudioService.active = true;
+        AudioService.playbackActive = true;
+        RecordingManager.active = true;
+        float[] stats = new float[22];
+        stats[16] = 1;
+        StudioScreenshotTest.Audio.supplied = stats;
+        for (boolean settingsDialog : new boolean[]{false, true}) {
+            android.app.Dialog dialog = null;
+            View control = a.liveScreen.monitorToggle;
+            if (settingsDialog) {
+                a.monitoringOptions();
+                dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+                control = StudioScreenshotTest.findButtonContaining(dialog.getWindow().getDecorView(), "Voice monitoring");
+                assertNotNull(control);
+            }
+            for (int actual : new int[]{0, 1}) {
+                a.values[11] = 1 - actual;
+                stats[21] = actual;
+                StudioScreenshotTest.Audio.changes.clear();
+                control.performClick();
+                assertEquals(1 - actual, a.values[11], 0);
+                assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
+                for (float[] change : StudioScreenshotTest.Audio.changes) {
+                    assertEquals(11, (int)change[0]);
+                    assertEquals(1 - actual, change[1], 0);
+                }
+                assertTrue(AudioService.active);
+                assertTrue(AudioService.playbackActive);
+                assertTrue(RecordingManager.active);
+                assertEquals(1, stats[16], 0);
+            }
+            if (dialog != null) dialog.dismiss();
+        }
     }
 
     @Test

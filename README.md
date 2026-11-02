@@ -1,8 +1,10 @@
-# Live Vault 3.6 — Android native preview
+# Live Vault 3.7 — Android native preview
 
-**3.6.0-preview / versionCode 16**은 상단 탐색과 라이브 반주·입출력 조작을 개선한 개인용 개발 체크포인트입니다. [3.6 명세](docs/LIVE_VAULT_V3_6_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_6_VALIDATION.md). 공개 standard APK는 3.2.1을 유지합니다.
+**3.7.0-preview / versionCode 17**은 실제 상태 중심의 라이브 대시보드를 적용한 개인용 체크포인트입니다. [3.7 명세](docs/LIVE_VAULT_V3_7_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_7_VALIDATION.md). 기준 소스는 main `7ecfd97`이며 이번 산출물은 **personal 전용**입니다. 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
 
-파트별 연주 강도·타이밍·필인, 악기군별 반주와 코드 연결, 성부 이름 및 녹음 진행 표시를 추가했습니다. 실제 목소리 품질, 마이크·Bluetooth·지연은 실기기 검증이 남아 있습니다. 개인용 오버레이/APK는 공개 저장소에 포함하지 않습니다.
+LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 소스/마이크/모니터 세 버튼, 마이크/반주/리버브/에코 네 슬라이더, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 입출력 장치와 반주 선택은 **소스 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
+
+개인용 테스트 95개(실패·오류·생략 0)와 최종 서명 빌드가 통과했습니다. KO/EN·360/412·기본/130% 글씨의 [네이티브 Skia 렌더 72장](docs/screenshots/v3.7/)을 보관합니다. 실제 오디오·장치·터치 접근성·지연 검증은 남아 있습니다. 개인용 오버레이/APK와 비공개 전달 URL은 공개 저장소에 포함하지 않습니다.
 
 ## 화면과 기능
 
@@ -12,7 +14,7 @@
 
 ## 미리보기 APK
 
-개발용 standard APK와 검증 범위는 [산출물 안내](artifacts/README.md)와 [3.2.1 검증 기록](docs/LIVE_VAULT_V3_2_1_RECORDING.md)을 확인하세요. 이전 3.1의 [명세](docs/LIVE_VAULT_V3_1_SPEC.md)와 [검증 기록](docs/LIVE_VAULT_V3_1_VALIDATION.md)은 이력으로 유지합니다.
+기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.7 검증 기록](docs/LIVE_VAULT_V3_7_VALIDATION.md)을 확인하세요. 이전 3.1의 [명세](docs/LIVE_VAULT_V3_1_SPEC.md)와 [검증 기록](docs/LIVE_VAULT_V3_1_VALIDATION.md)은 이력으로 유지합니다.
 
 ## AI로 반주 수정하기
 
@@ -41,7 +43,7 @@
 
 ## 이름·로고 및 UI 기준
 
-사용자가 지정한 화면 코드 `MainActivity.java`와 공통 코드 `StudioTheme.java`를 기준으로 유지합니다. 추가된 스피커 설정은 팝업으로 옮기고, 녹음 예약 설정은 **전체 메뉴 → 녹음 설정** 또는 라이브의 **⋯**에서 바꿉니다. 녹음 중 다른 탭에 나타나는 녹음 바에도 **⋯**를 둡니다. 명세의 Noto Sans KR·Roboto Mono를 앱에 포함했습니다. [브랜드 적용과 확인 범위](docs/BRANDING.md).
+사용자가 지정한 화면 코드 `MainActivity.java`와 공통 코드 `StudioTheme.java`를 기준으로 유지합니다. 추가된 스피커 설정은 팝업으로 옮기고, 녹음 예약 설정은 **전체 메뉴 → 녹음 설정**에서 바꿉니다. 라이브 메인에는 **⋯** 버튼을 두지 않습니다. 녹음 중 다른 탭에 나타나는 녹음 바에도 **⋯**를 둡니다. 명세의 Noto Sans KR·Roboto Mono를 앱에 포함했습니다. [브랜드 적용과 확인 범위](docs/BRANDING.md).
 
 ## 디자인 v2 통합
 
@@ -97,9 +99,9 @@ ABI: `arm64-v8a`, `armeabi-v7a`, `x86_64`.
 
 ## 사용 흐름
 
-1. 유선 / USB 이어폰을 연결하거나 라이브 상단 **이어폰 ▾**에서 휴대폰·블루투스 스피커를 선택합니다.
+1. 유선 / USB 이어폰을 연결하거나 라이브 **소스 ▾ → 출력 장치**에서 휴대폰·블루투스 스피커를 선택합니다.
 2. 마이크를 켜고 Android 녹음 권한을 허용합니다.
-3. 보컬 프리셋과 반주를 선택합니다.
+3. **상세 ▾**에서 보컬 프리셋을, **소스 ▾** 또는 반주 이름 행에서 반주를 선택합니다.
 4. 오디오 녹음 또는 카메라 화면의 영상 녹화를 시작합니다.
 5. 보관함에서 WAV·MID·MP4를 재생, 저장, 공유합니다.
 

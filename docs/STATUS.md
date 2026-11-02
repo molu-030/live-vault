@@ -1,6 +1,14 @@
 # Checkpoint status
 
-## 현재: 3.6.0-preview / versionCode 16 개인용 구현 체크포인트
+## 현재: 3.7.0-preview / versionCode 17 개인용 라이브 대시보드
+
+main `7ecfd97` 기준으로 실제 IN/OUT RMS dB·피치·Hz·cents·녹음 상태 LCD, 소스/마이크/모니터 세 버튼, 네 개 게인 슬라이더, 상세 효과와 소스 선택 창, 고정 녹음/영상 하단을 적용했다. Sol (`gpt-6.1-sol`, medium) 구현 및 루트 직접 검토이며 Astra 검토는 사용하지 않았다. [명세](LIVE_VAULT_V3_7_SPEC.md) · [검증](LIVE_VAULT_V3_7_VALIDATION.md).
+
+최종 개인용 테스트 95개가 실패·오류·생략 없이 통과했고 서명 APK 빌드도 통과했다. 활성 마이크의 모니터 전환은 캐시 대신 실제 엔진 상태를 사용하도록 수정했다. KO/EN·360/412·기본/130%의 8개 조합 × 9개 상태 = [72장](screenshots/v3.7/)을 생성·보관했다. 루트가 최종 한국어 412 녹음 및 영어 360 130% 라이브 화면을 직접 확인했으며 작은 LCD의 선택적 cents 눈금을 숨겨 시계와 겹치지 않게 했다. 이는 native Skia fixture 렌더이며 실제 휴대폰 캡처가 아니다. 실제 오디오·장치·터치 접근성·지연은 미검증이다. 네이티브 DSP·AAudio·라우팅은 기준 커밋에서 변경하지 않았다.
+
+이번 3.7 산출물은 personal 전용이다. 공개 standard는 기준 커밋에 있던 3.6.0-preview / code16 APK를 교체하지 않고 유지한다. 실제 SHA-256은 `3ef89e3193c8235bc23080850b6eb06fc04ecba62ca35da20bfb89ac3b9e5732`다. 아래 이전 버전의 APK 버전·검사 수·해시는 해당 시점의 이력이다.
+
+## 3.6.0-preview 이력 / versionCode 16
 
 상단 탐색과 라이브 반주 음량·독립 입출력 선택을 추가했다. 개인용 Java/Robolectric 검사 87개 및 네이티브 호스트 검사를 통과했다. [명세](LIVE_VAULT_V3_6_SPEC.md) · [검증](LIVE_VAULT_V3_6_VALIDATION.md). 실기기 검증은 남아 있으며 공개 standard는 3.2.1을 유지한다.
 
