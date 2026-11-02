@@ -1,6 +1,12 @@
 # Checkpoint status
 
-## 현재: 3.7.0-preview / versionCode 17 개인용 라이브 대시보드
+## 현재: 3.8.0-preview / versionCode 18 개인용 YouTube 연습 재생
+
+공식 IFrame 플레이어를 화면에 표시하고 공용 반주 음량을 연결했다. 시스템 스트림 음량과 마이크 게인을 건드리지 않으며, YouTube 선택 시에는 외부 캡처를 막고 처리된 마이크만 녹음한다. 예약 요청에 녹음 모드를 보관하고 네이티브 버스에서도 반주·악기·캡처를 제외한다. 창 포커스·탭·가시성·백그라운드 변경 시 재생을 멈추고 자동 재개하지 않는다. 작은 LCD의 독립 배치, 동의 및 오류·재시도 안내를 포함한다. Sol medium 구현 및 루트 직접 검토다. [명세](LIVE_VAULT_V3_8_SPEC.md) · [검증](LIVE_VAULT_V3_8_VALIDATION.md).
+
+개인용 APK만 제공하고 기존 공개 standard APK는 교체하지 않는다. 화면의 플레이어는 OFFLINE fixture이며 실제 기기에서 동영상 재생·독립 음량·광고·오디오 경로를 확인해야 한다. YouTube 정책 심사·승인을 받은 앱이라는 주장을 하지 않으며, Made For Kids 상태 조회 등 공개 배포 전 정책 검토가 남아 있다.
+
+## 3.7.0-preview 이력 / versionCode 17 개인용 라이브 대시보드
 
 main `7ecfd97` 기준으로 실제 IN/OUT RMS dB·피치·Hz·cents·녹음 상태 LCD, 소스/마이크/모니터 세 버튼, 네 개 게인 슬라이더, 상세 효과와 소스 선택 창, 고정 녹음/영상 하단을 적용했다. Sol (`gpt-6.1-sol`, medium) 구현 및 루트 직접 검토이며 Astra 검토는 사용하지 않았다. [명세](LIVE_VAULT_V3_7_SPEC.md) · [검증](LIVE_VAULT_V3_7_VALIDATION.md).
 
@@ -145,7 +151,7 @@ Galaxy S26 Ultra 비율을 기준으로 실제 창과 system/cutout/IME inset을
 
 - 2.1 화면의 실기기 시각/접근성 및 확대 글꼴 검증
 - 내장 밴드의 재생 위치 및 반주 반복 UI (로컬 파일 진행 표시는 2.1에 추가)
-- YouTube 앱 내 임베드 및 차단 시 대체 UI (현재 외부 열기만 구현)
+- YouTube 앱 내 임베드의 실기기 재생·차단/오류·광고·독립 음량 및 배포 전 정책 검토 (3.8에 플레이어와 오류 안내 구현)
 - 공개 배포용 소유자 서명키와 정식 release 빌드
 
 ## 변경된 PRD 항목

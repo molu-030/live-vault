@@ -22,9 +22,32 @@ public class AudioServiceRoutingTest {
  @Before public void setup()throws Exception{
   Context context=RuntimeEnvironment.getApplication();AudioRouting.prefs(context).edit().clear().commit();context.getSharedPreferences("MainActivity",0).edit().clear().commit();AudioService.active=false;AudioService.playbackActive=false;AudioService.composerRequested=false;AudioService.harmonyRequested=false;RecordingManager.active=false;AudioService.error="";StudioScreenshotTest.Audio.supplied=new float[22];StudioScreenshotTest.Audio.changes.clear();StudioScreenshotTest.Audio.rerouteMic.clear();StudioScreenshotTest.Audio.rerouteResults.clear();StudioScreenshotTest.Audio.microphoneStarts=StudioScreenshotTest.Audio.playbackStarts=StudioScreenshotTest.Audio.inputSessions=0;StudioScreenshotTest.Audio.burstCalls.clear();StudioScreenshotTest.Composer.monitorCalls.clear();Field f=AudioService.class.getDeclaredField("countdown");f.setAccessible(true);countdown=(RecordingCountdown)f.get(null);countdown.cancel();controller=Robolectric.buildService(AudioService.class).create();service=controller.get();StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};HarmonySession.get(service).ready=true;HarmonySession.get(service).state=StudioScreenshotTest.Harmony.current.clone();ComposerSession.get(service).capturing=false;
  }
- @After public void cleanup(){ComposerSession.get(service).capturing=false;StudioScreenshotTest.Harmony.current[4]=StudioScreenshotTest.Harmony.current[5]=-1;countdown.cancel();RecordingManager.active=false;if(AudioService.practice!=null)AudioService.practice.active=false;controller.destroy();StudioScreenshotTest.Audio.supplied=null;StudioScreenshotTest.Audio.rerouteResults.clear();AudioService.active=false;AudioService.playbackActive=false;}
+ @After public void cleanup(){ComposerSession.get(service).capturing=false;StudioScreenshotTest.Harmony.current[4]=StudioScreenshotTest.Harmony.current[5]=-1;countdown.cancel();RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.pendingMicOnly=false;AudioService.youtubeSelected=false;if(AudioService.practice!=null)AudioService.practice.active=false;controller.destroy();StudioScreenshotTest.Audio.supplied=null;StudioScreenshotTest.Audio.rerouteResults.clear();AudioService.active=false;AudioService.playbackActive=false;}
  void wired(){AudioManager manager=(AudioManager)service.getSystemService(Context.AUDIO_SERVICE);AudioDeviceInfo headset=AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_WIRED_HEADPHONES).build();Shadows.shadowOf(manager).setOutputDevices(Collections.singletonList(headset));}
  void clearSpies(){StudioScreenshotTest.Audio.changes.clear();StudioScreenshotTest.Audio.rerouteMic.clear();StudioScreenshotTest.Composer.monitorCalls.clear();}
+ @Test public void delayedYouTubeRecordingKeepsFrozenMicOnlyModeAfterPlayerDeselection()throws Exception{
+  StudioScreenshotTest.Audio.supplied[10]=1;StudioScreenshotTest.Audio.micOnlyCalls.clear();StudioScreenshotTest.Audio.syncCalls.clear();
+  AudioService.youtubeSelected=true;RecordingManager.syncMs=85;
+  Intent request=new Intent(service,AudioService.class).setAction(AudioService.RECORD).putExtra("micOnly",true).putExtra("delay",3);
+  service.onStartCommand(request,0,1);assertTrue(AudioService.waiting());assertTrue(AudioService.pendingMicOnly);assertFalse(RecordingManager.active);
+  AudioService.youtubeSelected=false;org.robolectric.shadows.ShadowSystemClock.advanceBy(java.time.Duration.ofSeconds(3));
+  java.lang.reflect.Method start=AudioService.class.getDeclaredMethod("checkStart");start.setAccessible(true);start.invoke(service);
+  assertFalse(AudioService.waiting());assertTrue(RecordingManager.active);assertTrue(RecordingManager.micOnly);
+  assertEquals(Collections.singletonList(true),StudioScreenshotTest.Audio.micOnlyCalls);assertEquals(Collections.singletonList(0),StudioScreenshotTest.Audio.syncCalls);
+  RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.pendingMicOnly=false;AudioService.youtubeSelected=false;
+ }
+ @Test public void stalePlaybackRequestCannotOpenNativeBackingDuringYouTubeOrFrozenMicOnlyRecording(){
+  for(int state=0;state<3;state++){
+   AudioService.youtubeSelected=state==0;RecordingManager.active=state==1;RecordingManager.micOnly=state==1;
+   if(state==2){countdown.arm(3,SystemClock.elapsedRealtime());AudioService.pendingMicOnly=true;}
+   int playbackStarts=StudioScreenshotTest.Audio.playbackStarts,micStarts=StudioScreenshotTest.Audio.microphoneStarts;
+   action(AudioService.PLAYBACK);
+   assertEquals(playbackStarts,StudioScreenshotTest.Audio.playbackStarts);assertEquals(micStarts,StudioScreenshotTest.Audio.microphoneStarts);assertFalse(AudioService.playbackActive);
+   assertNotNull("Foreground-service deadline is satisfied",Shadows.shadowOf(service).getLastForegroundNotification());
+   if(state==1)assertTrue(RecordingManager.active);if(state==2)assertTrue(AudioService.waiting());
+   countdown.cancel();RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.pendingMicOnly=false;AudioService.youtubeSelected=false;
+  }
+ }
  @Test public void playbackRouteNeverStartsMicrophone(){action(AudioService.PLAYBACK);assertTrue(AudioService.playbackActive);assertEquals(1,StudioScreenshotTest.Audio.playbackStarts);assertEquals(0,StudioScreenshotTest.Audio.microphoneStarts);clearSpies();action(AudioService.ROUTE);assertEquals(Collections.singletonList(false),StudioScreenshotTest.Audio.rerouteMic);assertEquals(0,StudioScreenshotTest.Audio.microphoneStarts);assertFalse(AudioService.active);assertTrue(AudioService.playbackActive);}
  @Test public void activeRouteRestoresOnlyActualSafeMonitoring(){
   wired();action("start mic");assertTrue(AudioService.active);float[] stats=StudioScreenshotTest.Audio.supplied;stats[21]=1;stats[17]=0;clearSpies();action(AudioService.ROUTE);assertEquals(Collections.singletonList(true),StudioScreenshotTest.Audio.rerouteMic);assertEquals(Arrays.asList(false,true),StudioScreenshotTest.Composer.monitorCalls);assertEquals(1,StudioScreenshotTest.Audio.changes.get(StudioScreenshotTest.Audio.changes.size()-1)[1],0);

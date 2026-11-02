@@ -1,10 +1,10 @@
-# Live Vault 3.7 — Android native preview
+# Live Vault 3.8 — Android native preview
 
-**3.7.0-preview / versionCode 17**은 실제 상태 중심의 라이브 대시보드를 적용한 개인용 체크포인트입니다. [3.7 명세](docs/LIVE_VAULT_V3_7_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_7_VALIDATION.md). 기준 소스는 main `7ecfd97`이며 이번 산출물은 **personal 전용**입니다. 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
+**3.8.0-preview / versionCode 18**은 라이브 대시보드에 화면 안의 YouTube 연습 재생과 공용 반주 음량을 추가한 개인용 체크포인트입니다. [3.8 명세](docs/LIVE_VAULT_V3_8_SPEC.md) · [검증 기록](docs/LIVE_VAULT_V3_8_VALIDATION.md). 기준 소스는 main `7ecfd97` 및 3.7 체크포인트이며 이번 산출물은 **personal 전용**입니다. 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
 
 LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 소스/마이크/모니터 세 버튼, 마이크/반주/리버브/에코 네 슬라이더, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 입출력 장치와 반주 선택은 **소스 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
 
-개인용 테스트 95개(실패·오류·생략 0)와 최종 서명 빌드가 통과했습니다. KO/EN·360/412·기본/130% 글씨의 [네이티브 Skia 렌더 72장](docs/screenshots/v3.7/)을 보관합니다. 실제 오디오·장치·터치 접근성·지연 검증은 남아 있습니다. 개인용 오버레이/APK와 비공개 전달 URL은 공개 저장소에 포함하지 않습니다.
+반주 → 온라인에서 YouTube 주소/동영상 ID를 선택하고 공식 플레이어에서 직접 재생합니다. 같은 반주 음량 조절기로 플레이어 음량을 바꾸며 시스템 전체 음량과 마이크 게인은 유지합니다. YouTube 선택 시에는 마이크만 녹음하고, 화면을 벗어나면 동영상을 일시정지합니다. 플레이어 화면은 OFFLINE fixture로 구분하며 실제 기기의 YouTube·오디오·장치·터치 접근성·지연 검증과 배포 전 정책 검토는 남아 있습니다. 개인용 오버레이/APK와 비공개 전달 URL은 공개 저장소에 포함하지 않습니다. 이전 [3.7 검증](docs/LIVE_VAULT_V3_7_VALIDATION.md)과 [렌더 72장](docs/screenshots/v3.7/)은 이력으로 유지합니다.
 
 ## 화면과 기능
 
@@ -14,7 +14,7 @@ LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 �
 
 ## 미리보기 APK
 
-기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.7 검증 기록](docs/LIVE_VAULT_V3_7_VALIDATION.md)을 확인하세요. 이전 3.1의 [명세](docs/LIVE_VAULT_V3_1_SPEC.md)와 [검증 기록](docs/LIVE_VAULT_V3_1_VALIDATION.md)은 이력으로 유지합니다.
+기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.8 검증 기록](docs/LIVE_VAULT_V3_8_VALIDATION.md)을 확인하세요. 이전 3.1의 [명세](docs/LIVE_VAULT_V3_1_SPEC.md)와 [검증 기록](docs/LIVE_VAULT_V3_1_VALIDATION.md)은 이력으로 유지합니다.
 
 ## AI로 반주 수정하기
 

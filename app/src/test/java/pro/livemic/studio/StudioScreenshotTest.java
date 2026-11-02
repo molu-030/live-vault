@@ -46,6 +46,12 @@ public class StudioScreenshotTest {
   @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
   @Implementation protected static int inputSession(){inputSessions++;return 0;}
   @Implementation protected static void microphoneOff(){}
+  static final java.util.List<Boolean> micOnlyCalls=new java.util.ArrayList<>();
+  static final java.util.List<Integer> syncCalls=new java.util.ArrayList<>();
+  @Implementation protected static void enablePlaybackCapture(boolean enabled,float gain){}
+  @Implementation protected static void recordMicOnly(boolean enabled){micOnlyCalls.add(enabled);}
+  @Implementation protected static void recordSync(int milliseconds){syncCalls.add(milliseconds);}
+  @Implementation protected static boolean beginRecord(String path){return true;}
  }
  @org.robolectric.annotation.internal.DoNotInstrument
  @Implements(value=NativeComposer.class,isInAndroidSdk=false)

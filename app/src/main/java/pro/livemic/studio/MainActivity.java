@@ -86,6 +86,7 @@ public class MainActivity extends Activity {
     PitchMeter pitchMeter;
 
     LiveScreen liveScreen;
+    YouTubePlayer youtube;
     ComposerSession composer;
     ComposerScreen composerScreen;
     ComposerExchange exchange;
@@ -136,6 +137,7 @@ public class MainActivity extends Activity {
         if (state != null) {
             selectedLiveEffect = Math.max(0, Math.min(5, state.getInt("selectedLiveEffect", 0)));
         }
+        youtube = new YouTubePlayer(this);
         exchange = new ComposerExchange(this);
         exchange.restoreState(state);
         composer = ComposerSession.get(this);
@@ -415,6 +417,7 @@ public class MainActivity extends Activity {
     void showTab() {
         setVolumeControlStream(AudioRouting.selected(this) == 1 ? AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC);
         if (camera != null && camera.recording) return;
+        youtube.detach();
         if (camera != null) {
             camera.release();
             camera = null;
@@ -482,6 +485,7 @@ public class MainActivity extends Activity {
         }
         values[k] = v;
         NativeAudio.set(k, v);
+        if (k == 1 && youtube != null) youtube.volume(v);
         if (k == 11) {
             NativeComposer.monitor(v > 0);
             harmony.monitor(v > 0);
@@ -1303,12 +1307,15 @@ public class MainActivity extends Activity {
         Switch source = new Switch(this);
         source.setText(tr("이번 녹음에 다른 앱 소리 포함", "Include other app audio for this recording"));
         source.setTextColor(TEXT);
-        source.setChecked(captureOtherApps);
+        source.setChecked(captureOtherApps && !youtube.selected);
+        source.setEnabled(!youtube.selected);
         source.setPadding(0, dp(12), 0, dp(8));
         if (CaptureSupport.available()) panel.addView(source);
 
         TextView details = text(
-                CaptureSupport.available()
+                youtube.selected
+                        ? tr("YouTube 선택 시 마이크만 녹음합니다. YouTube 소리와 앱 내 악기·반주는 저장하지 않습니다. 스피커 소리는 마이크에 들어갈 수 있으므로 이어폰을 사용하세요.", "With YouTube selected, recordings contain only the microphone; YouTube audio and in-app instruments/backing are excluded. Use headphones to avoid speaker audio entering the microphone.")
+                        : CaptureSupport.available()
                         ? tr("기본 녹음은 마이크와 앱 내 반주가 있으면 함께 담으며 Android 공유 권한이 필요하지 않습니다. 다른 앱 소리는 이번 녹음에만 선택하며 시작할 때 공유 권한을 요청합니다.", "Normal recording includes the microphone and any in-app backing without Android sharing permission. Select other app audio for this recording only; permission is requested when recording starts.")
                         : tr("마이크와 앱 내 반주가 있으면 함께 녹음하며 Android 공유 권한이 필요하지 않습니다.", "Records the microphone and any in-app backing without Android sharing permission."),
                 12,
@@ -1347,7 +1354,7 @@ public class MainActivity extends Activity {
                 .setView(StudioDialogs.scrollable(this, panel))
                 .setPositiveButton(tr("설정 저장", "Save settings"), (d, w) -> {
                     recordDelay = choice[0];
-                    captureOtherApps = CaptureSupport.available() && source.isChecked();
+                    captureOtherApps = !youtube.selected && CaptureSupport.available() && source.isChecked();
                     captureGain = slider.getProgress() / 100f;
                     getPreferences(0)
                             .edit()
@@ -1361,7 +1368,7 @@ public class MainActivity extends Activity {
     }
 
     void requestRecording() {
-        pendingCapture = captureOtherApps && CaptureSupport.available();
+        pendingCapture = !youtube.selected && captureOtherApps && CaptureSupport.available();
         captureOtherApps = false;
         continueRecording();
     }
@@ -1373,6 +1380,7 @@ public class MainActivity extends Activity {
     }
 
     void continueRecording() {
+        if (youtube.selected) pendingCapture = false;
         try {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 recordPermissionPending = true;
@@ -1399,12 +1407,14 @@ public class MainActivity extends Activity {
     }
 
     void scheduleRecording(Intent projection) {
+        if (youtube.selected) projection = null;
         clearRecordingRequest();
         pendingMonitor = AudioService.canMonitor(this) || values[11] > .5f;
         Intent intent = new Intent(this, AudioService.class)
                 .setAction(AudioService.RECORD)
                 .putExtra("device", inputDevice)
                 .putExtra("delay", recordDelay)
+                .putExtra("micOnly", youtube.selected)
                 .putExtra("bpm", Math.round(values[15]))
                 .putExtra("monitor", pendingMonitor)
                 .putExtra("capture", projection != null && BuildConfig.PLAYBACK_CAPTURE)
@@ -1451,6 +1461,8 @@ public class MainActivity extends Activity {
         for (int i = 0; i < 3; i++) {
             final int src = targets[i];
             StudioButton b = StudioTheme.styled(this, labels[i], StudioButton.CHIP, () -> {
+                if (settingsLocked()) { toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.", "Finish recording or the countdown before changing sources.")); return; }
+                if (src != 2) leaveYouTube();
                 sourceTab = src;
                 getPreferences(0).edit().putInt("backingSource", src).apply();
                 showTab();
@@ -1672,8 +1684,11 @@ public class MainActivity extends Activity {
         link.setHintTextColor(MUTED);
         link.setPadding(dp(14), dp(12), dp(14), dp(12));
         link.setBackground(bg(RAISED, 10));
-        link.setHint(tr("YouTube 주소 또는 검색어", "YouTube URL or search"));
+        link.setHint(tr("YouTube 주소 / 동영상 ID / 검색어", "YouTube URL / video ID / search"));
+        if (!youtube.id.isEmpty()) link.setText(youtube.id);
         add(link);
+        add(button(tr("앱에서 동영상 선택", "Select video in app"), () -> selectYouTube(link.getText().toString())));
+        youtube.attach(content);
         add(button(tr("YouTube에서 열기 ↗", "Open in YouTube ↗"), () -> {
             String value = link.getText().toString().trim();
             if (value.isEmpty()) value = tr("노래방 MR", "Karaoke backing");
@@ -1683,10 +1698,42 @@ public class MainActivity extends Activity {
             open(uri, "text/html");
         }));
         add(button(tr("SoundCloud에서 열기 ↗", "Open in SoundCloud ↗"), () -> open(Uri.parse("https://soundcloud.com/"), "text/html")));
-        note(BuildConfig.PLAYBACK_CAPTURE
-                ? tr("개인용 시작 설정에서 허용된 다른 앱 소리를 함께 녹음할 수 있습니다.", "The personal edition can record permitted audio from other apps when selected.")
-                : tr("배포용은 외부 앱 소리를 녹음하지 않습니다.", "The standard edition does not record external app audio."));
+        note(tr("YouTube는 화면에 표시될 때만 재생합니다. 탭 이동·백그라운드·플레이어가 가려지면 일시정지합니다. 녹음은 마이크만 저장하며 YouTube 소리는 포함하지 않습니다. 이어폰을 권장합니다.", "YouTube plays only while its video is visible. Changing tabs, backgrounding, or scrolling it out of view pauses playback. Recordings save the microphone only, excluding YouTube audio. Headphones recommended."));
+        add(button("YouTube Terms of Service ↗", () -> open(Uri.parse("https://www.youtube.com/t/terms"), "text/html")));
+        add(button("Google Privacy Policy ↗", () -> open(Uri.parse("https://policies.google.com/privacy"), "text/html")));
     }
+
+    void selectYouTube(String value) {
+        String id = YouTubePlayer.videoId(value);
+        if (id == null) { toast(tr("올바른 HTTPS YouTube 주소 또는 11자리 동영상 ID를 입력하세요.", "Enter a valid HTTPS YouTube URL or 11-character video ID.")); return; }
+        if (settingsLocked() || recordPermissionPending || pendingAction != 0 || AudioService.captureActive || composer.capturing || testActive || starting || busy || awaitingMicPermission || (camera != null && camera.recording)) {
+            toast(tr("녹음·예약·다른 앱 소리 캡처를 마친 뒤 YouTube를 선택하세요.", "Finish recording, countdown, or other-app audio capture before selecting YouTube.")); return;
+        }
+        Runnable select = () -> {
+            if (settingsLocked() || recordPermissionPending || pendingAction != 0 || starting || busy || awaitingMicPermission || AudioService.captureActive || (camera != null && camera.recording)) return;
+            // Stop native owners before exposing a third-party player.
+            stopPlayer(); composer.stop(); composer.voice(false); harmony.stop(); harmony.live(false);
+            NativeAudio.playLocal(false); NativeAudio.set(13, 0); NativeAudio.set(12, 0);
+            captureOtherApps = pendingCapture = false;
+            NativeAudio.enablePlaybackCapture(false, 0);
+            youtube.pause(); youtube.id = id; youtube.selected = true; AudioService.youtubeSelected = true;
+            sourceTab = 2; tab = 0;
+            if (youtube.web != null) youtube.load();
+            showTab();
+        };
+        if (getPreferences(0).getBoolean("youtubeConsent", false)) { select.run(); return; }
+        new AlertDialog.Builder(this).setTitle(tr("YouTube 플레이어 사용", "Use the YouTube player"))
+                .setMessage(tr("YouTube 내장 플레이어를 불러오면 Google/YouTube에 IP·기기 정보가 전송되며 쿠키/저장소를 사용할 수 있습니다. 사용 시 YouTube 서비스 약관(https://www.youtube.com/t/terms)에 동의합니다. Google 개인정보처리방침: https://policies.google.com/privacy. 녹음은 마이크만 저장합니다. 이어폰을 사용하면 스피커 소리 유입을 줄일 수 있습니다.", "Loading the embedded player connects to Google/YouTube, shares your IP and device information, and may use cookies/storage. By using it you agree to YouTube Terms of Service (https://www.youtube.com/t/terms). Google Privacy Policy: https://policies.google.com/privacy. Recordings save only the microphone. Use headphones to reduce speaker audio entering the microphone."))
+                .setPositiveButton(tr("동의하고 불러오기", "Agree and load"), (d, w) -> {
+                    getPreferences(0).edit().putBoolean("youtubeConsent", true).apply(); select.run();
+                }).setNegativeButton(tr("취소", "Cancel"), null).show();
+    }
+
+    void leaveYouTube() {
+        if (youtube == null) return;
+        youtube.pause(); youtube.selected = false; AudioService.youtubeSelected = false;
+    }
+
 
     void midi() {
         add(title(tr("실시간 MIDI", "Live MIDI")));
@@ -2134,6 +2181,7 @@ public class MainActivity extends Activity {
     void ensureMic(int action) {
         if (busy || videoPreparing) return;
         if (action == 4) {
+            if (!YouTubePlayer.beforeNativePlayback()) return;
             composer.pause();
             AudioService.composerRequested = false;
             NativeAudio.playLocal(true);
@@ -2203,6 +2251,7 @@ public class MainActivity extends Activity {
             if (tab == 9) harmonyScreen.refresh();
             else showTab();
         } else if (action == 4) {
+            leaveYouTube();
             if (selectedFile.isEmpty()) {
                 toast(tr("반주 파일을 먼저 선택하세요.", "Choose a backing file first."));
                 return;
@@ -2263,6 +2312,7 @@ public class MainActivity extends Activity {
     }
 
     void startVideo() {
+        youtube.pause();
         if (camera == null || !requireMic()) return;
         stopPlayer();
         rawVideo = new File(store.directory, "pending_" + System.currentTimeMillis() + ".video.mp4");
@@ -2643,6 +2693,7 @@ public class MainActivity extends Activity {
             toast(tr("예약 또는 녹음을 마친 뒤 재생하세요.", "Finish recording or the countdown before playback."));
             return;
         }
+        if (!YouTubePlayer.beforeNativePlayback()) return;
         if (player != null && f.equals(playingFile)) {
             try {
                 if (player.isPlaying()) player.pause();
@@ -2755,7 +2806,7 @@ public class MainActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (exchange.onActivityResult(request, result, data)) return;
         if (request == 30) {
-            if (recordingRequestStage != 2) {
+            if (youtube.selected || recordingRequestStage != 2) {
                 clearRecordingRequest();
                 return;
             }
@@ -2896,7 +2947,18 @@ public class MainActivity extends Activity {
     };
 
     @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (youtube != null) {
+            if (!hasFocus) youtube.pause();
+            else youtube.checkVisibility();
+        }
+    }
+
+    @Override
     protected void onPause() {
+        youtube.pause();
+        if (youtube.web != null) youtube.web.onPause();
         if (testActive) finishSyncTest(false);
         if (AudioService.practice != null && AudioService.practice.active) {
             AudioService.practice.stop(false);
@@ -2917,6 +2979,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         activityVisible = true;
+        if (youtube.web != null) { youtube.web.onResume(); youtube.checkVisibility(); }
         handler.removeCallbacks(pendingSource);
         handler.removeCallbacks(tick);
         handler.post(tick);
@@ -2925,6 +2988,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        boolean ownsYouTube = YouTubePlayer.current == youtube;
+        youtube.destroy();
+        if (ownsYouTube) AudioService.youtubeSelected = false;
         if (drawerPopup != null) drawerPopup.dismiss();
         handler.removeCallbacks(tick);
         handler.removeCallbacks(pendingSource);

@@ -47,6 +47,7 @@ public:
     std::vector<RecordedSpan> recordedSpans;
     RecordAlignment alignment;
     int recordSyncMs = 0;
+    std::atomic<bool> recordMicOnly{false};
     std::atomic<int> requestedBursts{2};
     std::atomic<float> guideFrequency{0}, pitchConfidence{0}, pitchLevel{0};
     float guideEnvelope = 0, lastGuideFrequency = 440;
@@ -461,6 +462,7 @@ public:
             float vr = (mixVocal ? vocalR + synth : 0) + composerVoice[i * 2 + 1];
             float bl = ml + capturedBuffer[i * 2];
             float br = mr + capturedBuffer[i * 2 + 1];
+            if (recordMicOnly.load(std::memory_order_relaxed)) { vl = l; vr = r; bl = br = 0; }
             if (recording && !recordPaused) alignment.tick(vl, vr, bl, br);
             float recL = limit(vl + bl), recR = limit(vr + br);
             float liveGate = p[11] * float(vocalMonitor.load(std::memory_order_relaxed));
@@ -1054,4 +1056,8 @@ JNI(jdoubleArray) jdoubleArray JNICALL Java_pro_livemic_studio_NativeHarmony_sta
     auto a = e->NewDoubleArray(14);
     if (a) e->SetDoubleArrayRegion(a, 0, 14, values);
     return a;
+}
+
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_recordMicOnly(JNIEnv*, jclass, jboolean enabled) {
+    if (!engine.recording) engine.recordMicOnly = bool(enabled);
 }

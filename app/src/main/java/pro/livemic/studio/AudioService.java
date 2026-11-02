@@ -42,6 +42,7 @@ public class AudioService extends Service {
     private ComposerSession composer;
     private HarmonySession harmony;
     public static volatile boolean active = false, captureActive = false;
+    public static volatile boolean youtubeSelected = false, pendingMicOnly = false;
     public static volatile String error = "", message = "";
     public static float captureLevel = 0;
     public static String routeLabel = "이어폰";
@@ -261,6 +262,17 @@ public class AudioService extends Service {
             return START_NOT_STICKY;
         }
         if (PLAYBACK.equals(action)) {
+            if (youtubeSelected || (RecordingManager.active && RecordingManager.micOnly) || (waiting() && pendingMicOnly)) {
+                // A stale startForegroundService playback request must still satisfy Android's deadline.
+                micForeground = active;
+                foreground(captureActive);
+                if (!active && !waiting() && !RecordingManager.active && !playbackActive
+                        && !composerRequested && !harmonyRequested && !composer.capturing
+                        && (practice == null || !practice.active)) {
+                    stopSelf(id);
+                }
+                return START_NOT_STICKY;
+            }
             try {
                 syncEffects();
                 micForeground = active;
@@ -435,6 +447,7 @@ public class AudioService extends Service {
                 message = AppLanguage.text(AudioService.this, "이미 예약 또는 녹음 중입니다.", "A recording is already scheduled or in progress.");
                 return START_NOT_STICKY;
             }
+            if (external && (youtubeSelected || intent.getBooleanExtra("micOnly", false))) throw new IllegalStateException("YouTube selected: microphone-only recording.");
             if (external && (!BuildConfig.PLAYBACK_CAPTURE || !CaptureSupport.available())) {
                 throw new IllegalStateException(AppLanguage.text(AudioService.this, "이 버전은 마이크 녹음 전용입니다.", "This version supports microphone recording only."));
             }
@@ -471,6 +484,7 @@ public class AudioService extends Service {
             if (requested) {
                 message = "";
                 RecordingManager.syncMs = AudioRouting.prefs(this).getInt("sync" + AudioRouting.selected(this), 0);
+                pendingMicOnly = youtubeSelected || intent.getBooleanExtra("micOnly", false);
                 pendingTempo = Math.max(40, Math.min(240, intent.getIntExtra("bpm", 78)));
                 if (external) {
                     Intent consent = Build.VERSION.SDK_INT >= 33
@@ -541,7 +555,7 @@ public class AudioService extends Service {
 
     private void checkStart() {
         if (countdown.consumeIfDue(SystemClock.elapsedRealtime())) {
-            if (!RecordingManager.start(this, pendingTempo)) {
+            if (!RecordingManager.start(this, pendingTempo, pendingMicOnly)) {
                 message = error = AppLanguage.text(
                         AudioService.this,
                         "녹음을 시작하지 못했습니다. 저장 공간과 마이크 상태를 확인하세요.",
@@ -560,6 +574,7 @@ public class AudioService extends Service {
     private void cancelSchedule() {
         boolean had = waiting();
         countdown.cancel();
+        pendingMicOnly = false;
         closeCapture();
         if (!RecordingManager.active) releaseAwake();
         if (had) {

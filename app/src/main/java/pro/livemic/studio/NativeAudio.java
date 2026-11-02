@@ -9,6 +9,7 @@ public final class NativeAudio {
     public static native int[] latencyInfo();
     public static native boolean bufferBursts(int bursts);
     public static native void recordSync(int ms);
+    public static native void recordMicOnly(boolean enabled);
     public static native void guideTone(float frequency);
     public static native float[] pitchFrame();
     public static native int inputSession();

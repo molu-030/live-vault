@@ -217,6 +217,10 @@ public class LiveConsoleTest {
     public void liveBackingVolumePersistsAndWritesOnlyBackingGain() {
         AudioService.active = true;
         boolean composerPlaying = a.composer.playing();
+        android.media.AudioManager manager = (android.media.AudioManager)a.getSystemService(android.content.Context.AUDIO_SERVICE);
+        int musicVolume = manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC);
+        int voiceVolume = manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL);
+        float micGain = a.values[0];
         a.liveScreen.backingVolume.setProgress(40);
         StudioScreenshotTest.Audio.changes.clear();
         assertTrue(a.liveScreen.backingVolume.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT, new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)));
@@ -227,6 +231,9 @@ public class LiveConsoleTest {
         assertEquals(value, a.getPreferences(0).getFloat("p1", -1), .001);
         assertTrue(AudioService.active);
         assertEquals(composerPlaying, a.composer.playing());
+        assertEquals(micGain, a.values[0], 0);
+        assertEquals(musicVolume, manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC));
+        assertEquals(voiceVolume, manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL));
         a.chooseTab(4);
         a.chooseTab(0);
         assertEquals(Math.round(value * 100), a.liveScreen.backingVolume.getProgress());

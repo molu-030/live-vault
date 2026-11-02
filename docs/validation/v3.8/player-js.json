@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "checks": [
+    "official iframe options: privacy host, controls, no autoplay",
+    "HTML viewport >=200x200 at360CSSpx",
+    "actual application JavaScript volume and zero mute",
+    "hidden playback blocked; becoming visible does not auto-resume",
+    "document visibility loss pauses",
+    "top-frame channel reports iframe error153",
+    "network error before native channel buffered; ready timeout and late recovery"
+  ],
+  "boundary": "OFFLINE stub for YouTube API; actual app-generated HTML and JS in Chromium; no YouTube network or Android device playback verified"
+}

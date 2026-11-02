@@ -74,7 +74,8 @@ final class LiveScreen {
         LinearLayout session=panel();
         display=new LiveSessionDisplay(a);
         session.addView(display,new LinearLayout.LayoutParams(-1,a.dp(170)));
-        a.page.flexible(display,151,300);
+        if (!a.youtube.selected) a.page.flexible(display,151,300);
+        else display.setLayoutParams(new LinearLayout.LayoutParams(-1,a.dp(110)));
         LinearLayout controls=a.row();
         sourceButton=button(tr("소스 ▾","Source ▾"),this::sourceSheet); inputButton=sourceButton;
         controls.addView(sourceButton,new LinearLayout.LayoutParams(0,a.dp(48),1));
@@ -90,21 +91,23 @@ final class LiveScreen {
         a.page.addView(session,new LinearLayout.LayoutParams(-1,-2));
 
         LinearLayout accompaniment=panel();
-        accompaniment.addView(heading(tr("반주","ACCOMPANIMENT")),new LinearLayout.LayoutParams(-1,a.dp(24)));
+        accompaniment.addView(heading(a.youtube.selected?"YouTube":tr("반주","ACCOMPANIMENT")),new LinearLayout.LayoutParams(-1,a.dp(24)));
         LinearLayout player=a.row(); backingPlayButton=button("▶",this::toggleBackingPlay);
         backingPlayButton.setTextSize(18); player.addView(backingPlayButton,new LinearLayout.LayoutParams(a.dp(48),a.dp(48)));
         LinearLayout track=a.column();track.setGravity(Gravity.CENTER_VERTICAL);track.setPadding(a.dp(10),0,0,0);
         backing=text("",12,StudioTheme.TEXT);backing.setTypeface(StudioTheme.medium(a));backing.setMaxLines(1);backing.setEllipsize(TextUtils.TruncateAt.END);
         backingTime=text("00:00 / 00:00",10,StudioTheme.OLIVE);backingTime.setTypeface(StudioTheme.mono(a));track.addView(backing);track.addView(backingTime);
         track.setOnClickListener(v->playbackSources());track.setFocusable(true);track.setContentDescription(tr("반주 소스 선택","Choose accompaniment source"));
-        player.addView(track,new LinearLayout.LayoutParams(0,a.dp(48),1)); accompaniment.addView(player);
-        volumeLabel=text("",11,StudioTheme.MUTED);backingVolume=gain(accompaniment,tr("반주","Backing"),1,100,volumeLabel);addPanel(accompaniment);
+        player.addView(track,new LinearLayout.LayoutParams(0,a.dp(48),1)); if(!a.youtube.selected) accompaniment.addView(player);
+        volumeLabel=text("",11,StudioTheme.MUTED);backingVolume=gain(accompaniment,tr("반주","Backing"),1,100,volumeLabel);
+        if(a.youtube.selected) a.youtube.attach(accompaniment);
+        addPanel(accompaniment);
 
         LinearLayout fx=panel();LinearLayout fh=a.row();
         fh.addView(heading(tr("보컬 효과","VOCAL FX")),new LinearLayout.LayoutParams(0,a.dp(48),1));
         detailsButton=button(tr("상세 ▾","Details ▾"),this::effectsDetails);fh.addView(detailsButton,new LinearLayout.LayoutParams(a.dp(90),a.dp(48)));fx.addView(fh);
-        reverbLabel=text("",11,StudioTheme.MUTED);reverbVolume=gain(fx,tr("리버브","Reverb"),2,100,reverbLabel);
-        echoLabel=text("",11,StudioTheme.MUTED);echoVolume=gain(fx,tr("에코","Echo"),4,80,echoLabel);addPanel(fx);
+        reverbLabel=text("",11,StudioTheme.MUTED);if(!a.youtube.selected)reverbVolume=gain(fx,tr("리버브","Reverb"),2,100,reverbLabel);
+        echoLabel=text("",11,StudioTheme.MUTED);if(!a.youtube.selected)echoVolume=gain(fx,tr("에코","Echo"),4,80,echoLabel);addPanel(fx);
 
         LinearLayout dock=a.row();a.recButton=button(tr("● 녹음 시작","● Record"),a::toggleRecord);dock.addView(a.recButton,new LinearLayout.LayoutParams(0,a.dp(52),1));
         video=button(tr("영상","Video"),()->a.chooseTab(3));LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(a.dp(90),a.dp(52));vp.leftMargin=a.dp(8);dock.addView(video,vp);a.actionDock.addView(dock);
@@ -135,7 +138,7 @@ final class LiveScreen {
     }
     void openSource(int source) {
         if(a.settingsLocked()) {a.toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.","Finish recording or the countdown before changing sources."));return;}
-        a.sourceTab=source;a.getPreferences(0).edit().putInt("backingSource",source).apply();a.chooseTab(1);
+        if(source!=2)a.leaveYouTube();a.sourceTab=source;a.getPreferences(0).edit().putInt("backingSource",source).apply();a.chooseTab(1);
     }
     void effectsDetails() {
         LinearLayout p=panel();
@@ -168,6 +171,7 @@ final class LiveScreen {
         poll(NativeAudio.stats(),AudioService.active);
     }
     void toggleBackingPlay() {
+        if(a.youtube.selected){a.youtube.pause();a.toast(tr("동영상의 YouTube 재생 버튼을 사용하세요.","Use the YouTube player controls to play the video."));return;}
         if(a.settingsLocked()) {a.toast(tr("녹음 또는 예약 중에는 반주를 바꿀 수 없습니다.","Accompaniment is locked during recording or countdown."));return;}
         float[] s=NativeAudio.stats();
         if(a.composer.playing())a.composer.pause();
@@ -211,8 +215,10 @@ final class LiveScreen {
         boolean playing=a.composer.playing()||s[16]>.5f;
         if(composer) {double[] cs=a.composer.state();backing.setText(a.composer.project.name);backingTime.setText(tr("작곡기 · 마디 ","Composer · bar ")+(1+(int)(Math.max(0,cs[0])/MusicTheory.barBeats(a.composer.project.meter)))+(!playing?tr(" · 일시정지"," · paused"):""));}
         else {double[] local=NativeAudio.localPlaybackInfo();backing.setText(a.selectedFile.isEmpty()?tr("반주 선택 ▾","Choose backing ▾"):a.selectedFile);backingTime.setText(a.formatTime(local[0])+" / "+a.formatTime(local[1]));}
+        if(a.youtube.selected){backing.setText("YouTube · "+a.youtube.id);backingTime.setText(tr("마이크만 녹음 · 동영상 제어 사용","Mic-only recording · use video controls"));playing=false;}
         backing.setContentDescription(backing.getText());backingPlayButton.setText(playing?"Ⅱ":"▶");backingPlayButton.setContentDescription(playing?tr("반주 일시정지","Pause accompaniment"):tr("반주 재생","Play accompaniment"));paint(backingPlayButton,playing);
-        backingPlayButton.setEnabled(!a.settingsLocked());sync();
+        if(a.youtube.selected){backingPlayButton.setText("Ⅱ");backingPlayButton.setContentDescription(tr("YouTube 일시정지 · 재생은 동영상 제어 사용","Pause YouTube · use video controls to play"));}
+        backingPlayButton.setEnabled(a.youtube.selected||!a.settingsLocked());sync();
     }
     void transport(boolean busy,boolean waiting,boolean recording) {
         if(waiting||recording)paintDanger(a.recButton);else paint(a.recButton,!busy);

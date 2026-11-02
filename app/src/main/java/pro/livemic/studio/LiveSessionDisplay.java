@@ -68,7 +68,9 @@ final class LiveSessionDisplay extends View {
         text(c, recordStatus, left+(recording?10*d:0), bottom, 10*d, recording ? StudioTheme.ACCENT : StudioTheme.OLIVE, Paint.Align.LEFT, true,(right-left)*.48f-(recording?10*d:0));
         text(c, recordClock, right, bottom, 16*d, StudioTheme.ACCENT, Paint.Align.RIGHT, true,(right-left)*.48f);
         // The tall display spends extra space around the pitch, while meters retain readable spacing.
+        boolean compact = h < 151*d;
         float meterTop = 42*d, meterGap = 24*d;
+        float meterRight = compact ? left + (right-left)*.61f : right;
         boolean animating = false;
         for (int row=0; row<2; row++) {
             float target = Math.max(-60, row==0 ? inputDb : outputDb);
@@ -78,19 +80,32 @@ final class LiveSessionDisplay extends View {
             animating |= shown[row]>target+.1f || peaks[row]>target+.1f;
             float y = meterTop+row*meterGap;
             text(c,row==0?"IN":"OUT",left,y+7*d,9*d,StudioTheme.OLIVE,Paint.Align.LEFT,true,27*d);
-            float start=left+31*d, end=right-58*d, gap=2*d;
-            int segments=24; float sw=(end-start-gap*(segments-1))/segments;
+            float start=left+31*d, end=meterRight-(compact?44:58)*d, gap=(compact?1:2)*d;
+            int segments=compact?16:24; float sw=(end-start-gap*(segments-1))/segments;
             for(int i=0;i<segments;i++) {
                 float threshold=-60+(i+1)*60f/segments;
                 boolean lit=shown[row]>=threshold;
-                p.setColor(lit ? (i>=22?StudioTheme.DANGER:i>=19?0xffd3d96a:StudioTheme.ACCENT) : 0xff243022);
+                p.setColor(lit ? (threshold>=-5?StudioTheme.DANGER:threshold>=-12.5f?0xffd3d96a:StudioTheme.ACCENT) : 0xff243022);
                 c.drawRoundRect(start+i*(sw+gap),y,start+i*(sw+gap)+sw,y+9*d, d,d,p);
             }
             if(peaks[row]>-59.5f) {
                 float x=start+(end-start)*Math.max(0,Math.min(1,(peaks[row]+60)/60));
                 p.setColor(StudioTheme.TEXT); c.drawRect(Math.min(end-d,x),y-d,Math.min(end,x+d),y+10*d,p);
             }
-            text(c,dbLabel(row==0?inputDb:outputDb),right,y+8*d,10*d,StudioTheme.ACCENT,Paint.Align.RIGHT,true,54*d);
+            text(c,dbLabel(row==0?inputDb:outputDb),meterRight,y+8*d,(compact?8:10)*d,StudioTheme.ACCENT,Paint.Align.RIGHT,true,(compact?41:54)*d);
+        }
+        if(compact) {
+            // Two columns leave room for real meters, pitch and the footer at 110dp.
+            // Cap compact text's scaled height as well as width at large system font sizes.
+            float center=meterRight+(right-meterRight)*.57f;
+            float fontScale=getResources().getDisplayMetrics().scaledDensity/d;
+            float noteSize=Math.min(26*d,26*d/fontScale);
+            float hzSize=Math.min(9*d,11*d/fontScale);
+            text(c,note,center,54*d,noteSize,StudioTheme.ACCENT,Paint.Align.CENTER,true,(right-meterRight)*.85f);
+            text(c,frequency>0?String.format(Locale.US,"%.0f Hz",frequency):"— Hz",center,73*d,hzSize,StudioTheme.OLIVE,Paint.Align.CENTER,true,(right-meterRight)*.85f);
+            if(recording) { p.setColor(StudioTheme.DANGER); p.setAlpha((now/650)%2==0?255:90); c.drawCircle(left+3*d,bottom-4*d,3*d,p); p.setAlpha(255); }
+            if(animating || recording) postInvalidateDelayed(32);
+            return;
         }
         float pitchY = 83*d + Math.max(0,h-151*d)*.48f;
         float pitchSize=Math.max(26*d,Math.min(45*d,(h-94*d)*.48f));
