@@ -3,107 +3,1044 @@ package pro.livemic.studio;
 import android.app.*;
 import android.content.*;
 import android.graphics.Color;
+import android.text.*;
 import android.view.*;
 import android.widget.*;
-import android.text.*;
 import java.util.*;
 import java.util.function.*;
 
 /** Uses the existing native theme, scroll body and fixed action dock. */
 final class ComposerScreen {
-    final MainActivity a;final ComposerSession s;TextView readout,transportLabel,lcdStatus;Button play,phrase,voicePower;int solo=-1;String soloPart="";ComposerProject soloProject;final List<View> chordCards=new ArrayList<>();int highlightedBar=-2;
-    ComposerScreen(MainActivity a,ComposerSession s){this.a=a;this.s=s;}
-    void refresh(){int tab=a.tab,y=a.pageScroll.getScrollY();a.showTab();a.pageScroll.post(()->{if(a.tab==tab)a.pageScroll.scrollTo(0,y);});}
-    void edit(Consumer<ComposerProject> f,boolean structural){s.edit(f,structural);refresh();}
-    boolean current(ComposerProject project,int revision,String part){return s.project==project&&s.revision==revision&&s.part().id.equals(part);}
-    void stale(){a.toast(tr("편집 내용이 변경되었습니다. 다시 시도해 주세요.","The editing context changed. Please try again."));}
-    void choose(String title,String[] items,int selected,IntConsumer action){ComposerProject project=s.project;int revision=s.revision;String part=s.part().id;StudioDialogs.choose(a,title,items,selected,n->{if(!current(project,revision,part)){stale();return;}action.accept(n);});}
-    void form(String title,View panel,String positive,Runnable apply,Runnable cancel){ComposerProject project=s.project;int revision=s.revision;String part=s.part().id;StudioDialogs.form(a,title,panel,positive,()->{if(!current(project,revision,part)){stale();return;}apply.run();},cancel==null?null:()->{if(current(project,revision,part))cancel.run();});}
-    void heading(String t){a.add(a.text(t,18,MainActivity.TEXT));}
-    String tr(String ko,String en){return a.tr(ko,en);}
-    String[] scales(){return AppLanguage.english(a)?new String[]{"Major","Natural minor","Harmonic minor","Dorian","Mixolydian"}:MusicTheory.SCALES;}
-    String[] rhythms(){return AppLanguage.english(a)?new String[]{"Pop 8-beat","Pop 16-beat","Shuffle","R&B","Rock","Bossa nova","Waltz","6/8 ballad"}:MusicTheory.RHYTHMS;}
-    String[] presets(){return AppLanguage.english(a)?new String[]{"Pop I–V–vi–IV","Ballad I–vi–IV–V","Canon I–V–vi–iii–IV–I–IV–V","Jazz ii7–V7–Imaj7","Minor i–VI–III–VII","Minor cadence i–VI–iv–V7"}:MusicTheory.PRESETS;}
-    TextView caption(String text){TextView v=a.text(text,12,MainActivity.MUTED);v.setTypeface(StudioTheme.medium(a));return v;}
-    void section(String name,String detail){LinearLayout row=a.row();TextView title=a.text(name,19,MainActivity.TEXT);title.setTypeface(StudioTheme.bold(a));row.addView(title,new LinearLayout.LayoutParams(0,-2,1));if(detail!=null)row.addView(caption(detail));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=a.dp(15);lp.bottomMargin=a.dp(8);a.content.addView(row,lp);}
-    TextView action(String text,Runnable onClick){TextView v=a.text(text,13,MainActivity.LIME);v.setTypeface(StudioTheme.medium(a));v.setPadding(a.dp(4),a.dp(10),a.dp(4),a.dp(10));v.setOnClickListener(w->onClick.run());v.setFocusable(true);v.setMinHeight(a.dp(48));v.setMinWidth(a.dp(48));v.setGravity(Gravity.CENTER_VERTICAL);return v;}
-    void stat(LinearLayout row,String label,String value,Runnable click){LinearLayout tile=a.column();tile.setPadding(a.dp(12),a.dp(10),a.dp(10),a.dp(10));tile.setBackground(StudioTheme.background(a,StudioTheme.RAISED,12));tile.addView(caption(label));TextView text=a.text(value+"  ▾",15,MainActivity.TEXT);text.setTypeface(StudioTheme.bold(a));tile.addView(text);tile.setMinimumHeight(a.dp(65));tile.setOnClickListener(v->click.run());tile.setFocusable(true);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(row.getChildCount()>0)lp.leftMargin=a.dp(7);row.addView(tile,lp);}
-    String chordName(ComposerProject.Chord c){return MusicTheory.ROOTS[c.root]+MusicTheory.QUALITIES[c.quality]+(c.bass>=0?"/"+MusicTheory.ROOTS[c.bass]:"");}
-    String chordDegree(ComposerProject.Chord c,ComposerProject p){String label=c.label(p);int split=label.indexOf(" · ");return split<0?label:label.substring(split+3).replace(" 직접",tr(" 직접"," manual"));}
-    void draw(boolean voice){readout=transportLabel=lcdStatus=null;play=phrase=voicePower=null;chordCards.clear();highlightedBar=-2;if(voice){voice();return;}ComposerProject p=s.project;ComposerProject.Part part=s.part();if(soloProject!=p||!soloPart.equals(part.id)){clearSolo();soloProject=p;soloPart=part.id;}
-        LinearLayout hero=StudioTheme.card(a);hero.setBackground(StudioTheme.background(a,Color.rgb(16,20,15),7));hero.setPadding(a.dp(18),a.dp(17),a.dp(18),a.dp(16));LinearLayout top=a.row();LinearLayout name=a.column();name.addView(caption(tr("내 반주 프로젝트","BACKING PROJECT")));TextView projectName=a.text(p.name,23,MainActivity.TEXT);projectName.setTypeface(StudioTheme.bold(a));projectName.setSingleLine();projectName.setEllipsize(TextUtils.TruncateAt.END);name.addView(projectName);top.addView(name,new LinearLayout.LayoutParams(0,-2,1));top.addView(action(tr("관리 ⋯","Manage ⋯"),this::projectMenu));hero.addView(top);TextView summary=caption(tr("작곡 초안 · ","Composition draft · ")+p.parts.size()+tr("개 파트 · "," parts · ")+p.totalBars()+tr("마디"," bars")+" · "+new String[]{"4/4","3/4","6/8"}[p.meter]);summary.setPadding(0,a.dp(7),0,a.dp(15));hero.addView(summary);lcdStatus=a.text("",14,Color.rgb(225,228,196));lcdStatus.setTypeface(StudioTheme.bold(a));lcdStatus.setPadding(0,0,0,a.dp(10));hero.addView(lcdStatus);
-        LinearLayout stats=a.row();stat(stats,tr("키","KEY"),MusicTheory.ROOTS[p.key],()->choose(tr("키 · 모든 코드와 프레이즈 전조","Key · transpose chords and phrases"),MusicTheory.ROOTS,p.key,k->edit(x->x.transpose(k),false)));stat(stats,tr("템포","TEMPO"),p.bpm+" BPM",this::tempo);hero.addView(stats);LinearLayout scaleRow=a.row();LinearLayout.LayoutParams scaleSpacing=new LinearLayout.LayoutParams(-1,-2);scaleSpacing.topMargin=a.dp(7);stat(scaleRow,tr("스케일","SCALE"),scales()[p.scale],()->choose(tr("스케일","Scale"),scales(),p.scale,k->edit(x->x.scale(k),false)));hero.addView(scaleRow,scaleSpacing);a.add(hero);
-        StudioButton export=StudioTheme.styled(a,tr("AI용 내보내기","Export for AI"),StudioButton.STANDARD,this::exportProject);StudioTheme.selected(export,true);a.add(export);
-        a.add(caption(tr("프로젝트를 내보내 AI와 수정한 뒤 수정본을 불러오세요.","Export your project, revise it with an AI, then import the revision.")));
-        a.add(StudioTheme.styled(a,tr("AI 수정본 불러오기","Import AI revision"),StudioButton.OUTLINE,()->a.exchange.showImport()));
-        section(tr("파트","Parts"),p.parts.size()+" / 8");HorizontalScrollView scroll=new HorizontalScrollView(a);scroll.setHorizontalScrollBarEnabled(false);LinearLayout parts=a.row();for(int i=0;i<p.parts.size();i++){int n=i;ComposerProject.Part item=p.parts.get(i);StudioButton chip=StudioTheme.styled(a,item.label+"  ·  "+item.bars+tr("마디"," bars"),StudioButton.CHIP,()->{clearSolo();s.selectedPart=n;refresh();});StudioTheme.selected(chip,i==s.selectedPart);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,a.dp(48));lp.rightMargin=a.dp(8);parts.addView(chip,lp);}scroll.addView(parts);a.add(scroll);
-        LinearLayout partActions=a.row();partActions.addView(action(tr("파트 편집","Edit part"),this::partMenu),new LinearLayout.LayoutParams(0,-2,1));partActions.addView(action(tr("연주 느낌","Feel"),this::performance));a.add(partActions);
-        section(tr("코드 진행","Chord progression"),part.label+" · "+part.bars+tr("마디"," bars"));LinearLayout chordActions=a.row();chordActions.addView(caption(tr("카드를 눌러 코드를 편집하세요","Tap a card to edit its chords")),new LinearLayout.LayoutParams(0,-2,1));chordActions.addView(action(tr("프리셋 ▾","Presets ▾"),()->choose(tr("진행 · 파트 길이에 맞춰 반복","Progression · repeats to fit the part"),presets(),-1,k->edit(x->x.preset(s.part(),k),false))));a.add(chordActions);
-        for(int b=0;b<part.bars;b+=2){if(b%4==0&&part.bars>4)a.add(caption(tr("마디 ","Bars ")+(b+1)+"–"+Math.min(b+4,part.bars)));LinearLayout row=a.row();for(int c=0;c<2&&b+c<part.bars;c++){int bar=b+c;LinearLayout card=a.column();card.setPadding(a.dp(14),a.dp(12),a.dp(14),a.dp(12));card.setBackground(StudioTheme.background(a,StudioTheme.SURFACE,14));card.setMinimumHeight(a.dp(116));card.setOnClickListener(v->chord(bar,0));card.setFocusable(true);StringBuilder accessible=new StringBuilder(tr("마디 ","Bar ")+(bar+1));for(ComposerProject.Chord item:part.chords.get(bar))accessible.append(" · ").append(chordName(item)).append(" · ").append(chordDegree(item,p));card.setContentDescription(accessible.toString());card.addView(caption(String.format(Locale.US,"%02d",bar+1)));LinearLayout chordLine=a.column();for(int j=0;j<part.chords.get(bar).size();j++){ComposerProject.Chord ch=part.chords.get(bar).get(j);if(j>0){View divider=new View(a);divider.setBackgroundColor(StudioTheme.BORDER);LinearLayout.LayoutParams d=new LinearLayout.LayoutParams(-1,a.dp(1));d.topMargin=a.dp(6);d.bottomMargin=a.dp(6);chordLine.addView(divider,d);}LinearLayout ctext=a.column();TextView root=a.text(chordName(ch),part.chords.get(bar).size()>1?18:23,MainActivity.TEXT);root.setTypeface(StudioTheme.bold(a));ctext.addView(root);ctext.addView(caption(chordDegree(ch,p)));chordLine.addView(ctext,new LinearLayout.LayoutParams(-1,-2));}LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.topMargin=a.dp(9);card.addView(chordLine,cp);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-2,1);if(c>0)lp.leftMargin=a.dp(8);row.addView(card,lp);chordCards.add(card);}a.add(row);}
-        section(tr("악기 트랙","Tracks"),part.tracks.size()+" / 8");LinearLayout rhythmRow=a.row();rhythmRow.addView(caption(tr("리듬","RHYTHM")),new LinearLayout.LayoutParams(0,-2,1));rhythmRow.addView(action(rhythms()[part.rhythm]+" ▾",()->{List<Integer> ids=new ArrayList<>();List<String> labels=new ArrayList<>();for(int i=0;i<8;i++)if(MusicTheory.rhythmFits(i,p.meter)){ids.add(i);labels.add(rhythms()[i]);}choose(tr("리듬 · BPM 유지","Rhythm · keep tempo"),labels.toArray(new String[0]),ids.indexOf(part.rhythm),k->edit(x->s.part().rhythm=ids.get(k),false));}));a.add(rhythmRow);
-        for(int i=0;i<part.tracks.size();i++){int n=i;TrackConfig t=part.tracks.get(i);LinearLayout row=a.row();row.setPadding(a.dp(12),a.dp(9),a.dp(9),a.dp(9));row.setBackground(StudioTheme.background(a,StudioTheme.SURFACE,12));TextView icon=a.text(t.drums()?"◉":t.family()==4?"♩":t.family()==3?"♫":"♪",20,MainActivity.LIME);icon.setGravity(Gravity.CENTER);row.addView(icon,new LinearLayout.LayoutParams(a.dp(38),a.dp(44)));LinearLayout details=a.column();TextView nameText=a.text(t.name,15,t.muted?MainActivity.MUTED:MainActivity.TEXT);nameText.setTypeface(StudioTheme.bold(a));nameText.setSingleLine();nameText.setEllipsize(TextUtils.TruncateAt.END);details.addView(nameText);String[] patterns=InstrumentCatalog.patternLabels(a,t);details.addView(caption((t.drums()?tr("드럼 키트 ","Drum kit ")+t.program:InstrumentCatalog.GM[t.program])+" · "+patterns[Math.min(t.pattern,patterns.length-1)]));details.setOnClickListener(v->track(n));details.setFocusable(true);row.addView(details,new LinearLayout.LayoutParams(0,-2,1));TextView mute=action(t.muted?tr("뮤트됨","Muted"):tr("뮤트","Mute"),()->{edit(x->t.muted=!t.muted,false);liveTrack(n);});mute.setTextColor(t.muted?MainActivity.LIME:MainActivity.MUTED);row.addView(mute);TextView levels=action(tr(" 믹스 "," Mix "),()->trackLevels(n));levels.setContentDescription(tr("볼륨 · 팬","Volume & pan"));row.addView(levels);row.addView(action(" ⋯",()->track(n)));a.add(row);}
-        a.add(StudioTheme.styled(a,tr("＋ 악기 추가","＋ Add instrument"),StudioButton.OUTLINE,()->instrument(-1,false)));
-        section(tr("곡 순서","Song order"),p.totalBars()+" / 256 "+tr("마디","bars"));HorizontalScrollView orderScroll=new HorizontalScrollView(a);orderScroll.setHorizontalScrollBarEnabled(false);LinearLayout orderRow=a.row();for(int i=0;i<p.order.size();i++){int n=i;ComposerProject.Order o=p.order.get(i);StudioButton chip=StudioTheme.styled(a,(i+1)+"  "+p.part(o.part).label+" ×"+o.repeats+"  ⋯",StudioButton.CHIP,()->order(n));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-2,a.dp(48));lp.rightMargin=a.dp(8);orderRow.addView(chip,lp);}orderRow.addView(StudioTheme.styled(a,"＋",StudioButton.CHIP,()->{String[] labels=new String[p.parts.size()];for(int i=0;i<labels.length;i++)labels[i]=p.parts.get(i).label;choose(tr("추가할 파트","Add a part"),labels,-1,k->edit(x->x.order.add(new ComposerProject.Order(x.parts.get(k).id,1)),true));}),new LinearLayout.LayoutParams(a.dp(52),a.dp(48)));orderScroll.addView(orderRow);a.add(orderScroll);
-        LinearLayout links=a.row();links.addView(action(tr("저장된 프로젝트 ›","Saved projects ›"),()->{a.libraryFilter=1;a.chooseTab(4);}),new LinearLayout.LayoutParams(0,-2,1));links.addView(action(tr("목소리로 연주 ›","Play with voice ›"),()->a.chooseTab(8)));a.add(links);dock(false);if(!s.ready)a.note(tr("오프라인 샘플 음원을 준비하고 있습니다…","Preparing offline sounds…"));
+    final MainActivity a;
+    final ComposerSession s;
+    TextView readout;
+    TextView transportLabel;
+    TextView lcdStatus;
+    Button play;
+    Button phrase;
+    Button voicePower;
+    int solo = -1;
+    String soloPart = "";
+    ComposerProject soloProject;
+    final List<View> chordCards = new ArrayList<>();
+    int highlightedBar = -2;
+
+    ComposerScreen(MainActivity a, ComposerSession s) {
+        this.a = a;
+        this.s = s;
     }
-    ComposerProject newProject(){ComposerProject p=new ComposerProject();if(AppLanguage.english(a)){p.name="New backing";String[] names={"Guitar","Bass","Drums","Keyboard"};for(ComposerProject.Part part:p.parts)for(int i=0;i<Math.min(names.length,part.tracks.size());i++)part.tracks.get(i).name=names[i];}return p;}
-    void exportProject(){a.exchange.showExport(s.project);}
-    void projectMenu(){choose(tr("프로젝트","Project"),new String[]{tr("저장","Save"),tr("이름 변경","Rename"),tr("복제","Duplicate"),tr("새 반주","New backing"),tr("실행 취소","Undo"),tr("다시 실행","Redo"),tr("내 반주 열기","Open saved projects"),tr("AI 수정본 불러오기","Import AI revision")},-1,k->{if(k==0)s.save();else if(k==1)input(tr("프로젝트 이름","Project name"),s.project.name,name->edit(p->p.name=name,false));else if(k==2)s.duplicate();else if(k==3)s.open(newProject());else if(k==4)s.history(false);else if(k==5)s.history(true);else if(k==6){a.libraryFilter=1;a.chooseTab(4);}else{a.exchange.showImport();return;}refresh();});}
-    void tempo(){
-        final int[] bpm={s.project.bpm},meter={s.project.meter};
-        LinearLayout panel=a.column();
-        StudioFader fader=new StudioFader(a,tr("템포","Tempo"),40,240,bpm[0],v->Math.round(v)+" BPM",v->bpm[0]=Math.round(v));
-        panel.addView(fader,new LinearLayout.LayoutParams(-1,-2));
-        TextView caption=a.text(tr("박자","Meter"),14,MainActivity.MUTED);caption.setPadding(0,a.dp(18),0,a.dp(8));panel.addView(caption);
-        LinearLayout choices=a.row();String[] names={"4/4","3/4","6/8"};Button[] buttons=new Button[3];
-        for(int i=0;i<3;i++){final int n=i;buttons[i]=StudioTheme.styled(a,names[i],StudioButton.CHIP,()->{meter[0]=n;for(int j=0;j<3;j++)StudioTheme.selected(buttons[j],j==n);});StudioTheme.selected(buttons[i],i==meter[0]);a.weighted(choices,buttons[i],48);}panel.addView(choices);
-        form(tr("템포 · 박자","Tempo & meter"),panel,tr("적용","Apply"),()->edit(p->{p.bpm=bpm[0];p.meter(meter[0]);},false),null);
+
+    void refresh() {
+        int tab = a.tab, y = a.pageScroll.getScrollY();
+        a.showTab();
+        a.pageScroll.post(() -> {
+            if (a.tab == tab) a.pageScroll.scrollTo(0, y);
+        });
     }
-    void performance(){
-        ComposerProject.Part part=s.part();float[] values={part.energy,part.humanize};boolean[] fill={part.fill};LinearLayout panel=a.column();
-        TextView explanation=a.text(part.label+tr("파트에만 적용됩니다."," part only."),14,MainActivity.MUTED);panel.addView(explanation);
-        panel.addView(new StudioFader(a,tr("연주 강도","Energy"),0,1,values[0],v->Math.round(v*100)+"%",v->values[0]=v));
-        StudioFader timing=new StudioFader(a,tr("자연스러운 타이밍","Humanize timing"),0,1,values[1],v->Math.round(v*100)+"%",v->values[1]=v);LinearLayout.LayoutParams spacing=new LinearLayout.LayoutParams(-1,-2);spacing.topMargin=a.dp(16);panel.addView(timing,spacing);
-        Button toggle=StudioTheme.styled(a,tr("마무리 필인: ","Ending fill: ")+(fill[0]?tr("켜짐","On"):tr("꺼짐","Off")),StudioButton.CHIP,()->{});StudioTheme.selected(toggle,fill[0]);toggle.setOnClickListener(v->{fill[0]=!fill[0];toggle.setText(tr("마무리 필인: ","Ending fill: ")+(fill[0]?tr("켜짐","On"):tr("꺼짐","Off")));StudioTheme.selected(toggle,fill[0]);});LinearLayout.LayoutParams toggleSpacing=new LinearLayout.LayoutParams(-1,-2);toggleSpacing.topMargin=a.dp(16);panel.addView(toggle,toggleSpacing);
-        form(part.label+tr("파트 · 연주 느낌"," · Performance feel"),panel,tr("적용","Apply"),()->edit(p->{part.energy=values[0];part.humanize=values[1];part.fill=fill[0];},false),null);
+
+    void edit(Consumer<ComposerProject> f, boolean structural) {
+        s.edit(f, structural);
+        refresh();
     }
-    void partMenu(){String partId=s.part().id;choose(tr("파트 ","Part ")+s.part().label,new String[]{tr("4마디","4 bars"),tr("8마디","8 bars"),tr("16마디","16 bars"),tr("복제해 새 파트","Duplicate part"),tr("파트 삭제","Delete part")},-1,k->{int before=s.revision;edit(p->{ComposerProject.Part target=p.part(partId);if(k<3)p.resize(target,new int[]{4,8,16}[k]);else if(k==3){try{p.duplicate(target);}catch(org.json.JSONException e){throw new IllegalArgumentException(e);}}else{if(p.parts.size()==1)throw new IllegalArgumentException(tr("파트는 하나 이상 필요합니다.","At least one part is required."));p.parts.remove(target);p.order.removeIf(o->o.part.equals(partId));if(p.order.isEmpty())p.order.add(new ComposerProject.Order(p.parts.get(0).id,1));}},true);if(s.revision!=before){if(k==3)s.selectedPart=s.project.parts.size()-1;else if(k==4)s.selectedPart=0;refresh();}});}
-    void chord(int bar,int slot){ComposerProject.Chord ch=s.part().chords.get(bar).get(slot);choose(tr("마디 ","Bar ")+(bar+1)+" · "+chordName(ch)+" · "+chordDegree(ch,s.project),new String[]{tr("근음 변경","Change root"),tr("코드 종류","Chord quality"),tr("분수코드 베이스","Slash bass"),tr("스케일 자동 코드로 복원","Restore scale chord"),s.part().chords.get(bar).size()==1?tr("코드 2개로 분할","Split into two chords"):tr("첫 코드 편집","Edit first chord"),s.part().chords.get(bar).size()==1?tr("닫기","Close"):tr("두 번째 코드 편집","Edit second chord"),s.part().chords.get(bar).size()==1?tr("닫기","Close"):tr("코드 1개로 합치기","Merge into one chord")},-1,k->{if(k==0)choose(tr("근음","Root"),MusicTheory.ROOTS,ch.root,n->edit(p->{ch.root=n;ch.automatic=false;},false));else if(k==1){String[] q=MusicTheory.QUALITIES.clone();q[0]=tr("메이저","Major");choose(tr("코드 종류","Chord quality"),q,ch.quality,n->edit(p->{ch.quality=n;ch.automatic=false;},false));}else if(k==2){String[] bass=new String[13];bass[0]=tr("분수코드 해제","Remove slash bass");System.arraycopy(MusicTheory.ROOTS,0,bass,1,12);choose(tr("베이스음","Bass note"),bass,ch.bass+1,n->edit(p->{ch.bass=n-1;if(n>0)ch.automatic=false;},false));}else if(k==3)choose(tr("스케일 도수","Scale degree"),new String[]{"I / i","II / ii","III / iii","IV / iv","V / v","VI / vi","VII / vii"},ch.degree,n->edit(p->{ch.degree=n;ch.automatic=true;ch.dominant=false;ch.resolve(p);},false));else if(k==4){if(s.part().chords.get(bar).size()==2)chord(bar,0);else edit(p->{try{s.part().chords.get(bar).add(ComposerProject.Chord.read(ch.json()));}catch(Exception e){throw new IllegalArgumentException(e);}},false);}else if(k==5&&s.part().chords.get(bar).size()==2)chord(bar,1);else if(k==6&&s.part().chords.get(bar).size()==2)edit(p->s.part().chords.get(bar).remove(1),false);});}
-    void track(int index){TrackConfig t=s.part().tracks.get(index);choose(t.name,new String[]{tr("음색 선택","Choose instrument"),tr("패턴","Pattern"),t.muted?tr("뮤트 해제","Unmute"):tr("뮤트","Mute"),tr("볼륨 · 팬","Volume & pan"),solo==index?tr("솔로 종료","End solo"):tr("솔로 미리듣기","Solo preview"),tr("트랙 이름","Track name"),tr("트랙 삭제","Delete track")},-1,k->{if(k==0)instrument(index,false);else if(k==1)choose(tr("패턴","Pattern"),InstrumentCatalog.patternLabels(a,t),Math.min(t.pattern,InstrumentCatalog.patternLabels(a,t).length-1),n->edit(p->t.pattern=n,false));else if(k==2){edit(p->t.muted=!t.muted,false);liveTrack(index);}else if(k==3)trackLevels(index);else if(k==4){if(s.playing()&&liveChannel(t.id)<0){a.toast(tr("재생 중인 파트에서 솔로를 사용해 주세요.","Use solo on the currently playing part."));return;}solo=solo==index?-1:index;for(int ch=0;ch<s.part().tracks.size();ch++)liveTrack(ch);}else if(k==5)input(tr("트랙 이름","Track name"),t.name,name->edit(p->t.name=name,false));else {clearSolo();edit(p->{String id=t.id;for(ComposerProject.Part part:p.parts){part.tracks.removeIf(tr->tr.id.equals(id));part.phrases.removeIf(ph->ph.trackId.equals(id));}},true);}});}
-    int liveChannel(String trackId){ComposerProject.Part playing=s.part();double[] state=s.state();if(s.playing()){int part=(int)state[2];if(part<0||part>=s.project.parts.size())return -1;playing=s.project.parts.get(part);if(!playing.id.equals(s.part().id))return -1;}for(int i=0;i<playing.tracks.size();i++)if(playing.tracks.get(i).id.equals(trackId))return i;return -1;}
-    void liveTrack(int index){if(index<0||index>=s.part().tracks.size())return;TrackConfig t=s.part().tracks.get(index);int channel=liveChannel(t.id);if(channel>=0)NativeComposer.track(channel,t.volume,t.pan,t.muted,solo==index);}
-    void clearSolo(){solo=-1;NativeComposer.clearSolo();}
-    void trackLevels(int index){
-        TrackConfig t=s.part().tracks.get(index);float[] values={t.volume,t.pan};LinearLayout panel=a.column();ComposerProject context=s.project;int revision=s.revision;String partId=s.part().id;
-        Runnable preview=()->{if(current(context,revision,partId)){int channel=liveChannel(t.id);if(channel>=0)NativeComposer.track(channel,values[0],values[1],t.muted,solo==index);}};
-        StudioFader volume=new StudioFader(a,tr("볼륨","Volume"),0,1,values[0],v->Math.round(v*100)+"%",v->{values[0]=v;preview.run();});
-        StudioFader pan=new StudioFader(a,tr("팬","Pan"),-1,1,values[1],v->{int n=Math.round(v*100);return n==0?"CENTER":n<0?"L "+(-n):"R "+n;},v->{values[1]=v;preview.run();});
-        panel.addView(volume,new LinearLayout.LayoutParams(-1,-2));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.topMargin=a.dp(18);panel.addView(pan,lp);
-        form(t.name+tr(" · 볼륨과 팬"," · Volume & pan"),panel,tr("저장","Save"),()->edit(x->{t.volume=values[0];t.pan=values[1];},false),()->liveTrack(index));
+
+    boolean current(ComposerProject project, int revision, String part) {
+        return s.project == project && s.revision == revision && s.part().id.equals(part);
     }
-    void order(int index){choose(tr("곡 순서","Song order"),new String[]{tr("반복 횟수","Repeats"),tr("앞으로","Move earlier"),tr("뒤로","Move later"),tr("삭제","Delete")},-1,k->{if(k==0){String[] r=new String[16];for(int i=0;i<16;i++)r[i]="×"+(i+1);choose(tr("반복","Repeats"),r,s.project.order.get(index).repeats-1,n->edit(p->p.order.get(index).repeats=n+1,true));}else edit(p->{if(k==1&&index>0)Collections.swap(p.order,index,index-1);else if(k==2&&index<p.order.size()-1)Collections.swap(p.order,index,index+1);else if(k==3){if(p.order.size()==1)throw new IllegalArgumentException(tr("순서는 하나 이상 필요합니다.","At least one order entry is required."));p.order.remove(index);}},true);});}
-    void voice(){VoiceInstrumentSettings v=s.project.voice;a.add(a.title(tr("목소리로 연주","Play with voice")));LinearLayout old=a.beginCard();readout=a.text(tr("목소리 — → 악기 —","Voice — → Instrument —"),24,MainActivity.LIME);readout.setGravity(Gravity.CENTER);readout.setMinHeight(a.dp(100));a.add(readout);a.note(tr("입력 음 → 악기 출력 음","Input note → instrument note"));a.endCard(old);
-        a.add(a.button(tr("악기: ","Instrument: ")+InstrumentCatalog.GM[v.program]+" ▾",()->instrument(-1,true)));a.add(a.button(tr("연주 방식: ","Playing mode: ")+(v.mode==0?tr("멜로디","Melody"):tr("코드","Chord"))+" ▾",()->choose(tr("목소리 연주","Voice performance"),new String[]{tr("멜로디 · 한 음씩","Melody · one note at a time"),tr("코드 · 부른 근음으로 연주","Chord · sing the root")},v.mode,n->edit(p->p.voice.mode=n,false))));
-        a.add(a.button(tr("파트 ","Part ")+s.part().label+" · "+s.part().bars+tr("마디 ▾"," bars ▾"),()->{String[] labels=new String[s.project.parts.size()];for(int i=0;i<labels.length;i++)labels[i]=s.project.parts.get(i).label;choose(tr("기록할 파트","Part to record"),labels,s.selectedPart,n->{if(!s.capturing){clearSolo();s.selectedPart=n;refresh();}});}));
-        voicePower=a.button(s.voiceOn?tr("목소리 악기 끄기","Turn voice instrument off"):tr("마이크로 연주 켜기","Play with microphone"),()->{if(s.voiceOn){s.voice(false);refresh();}else if(s.ready){a.ensureMic(7);}else a.toast(tr("음원을 준비하고 있습니다.","Preparing sounds."));});((StudioButton)voicePower).glyph("mic");StudioTheme.selected(voicePower,s.voiceOn);a.add(voicePower);
-        a.add(a.button(tr("보컬 화음 쌓기 ›","Build vocal harmonies ›"),()->a.chooseTab(9)));a.add(a.button(tr("연주 세부 설정 ▾","Performance settings ▾"),this::voiceSettings));a.add(a.button(tr("작곡기로 돌아가기 ›","Back to composer ›"),()->a.chooseTab(7)));a.note(tr("단선율 입력을 사용합니다. 스케일 맞춤과 원래 목소리 섞기는 기본 꺼짐입니다.","Uses monophonic input. Scale snap and mixing the original voice are off by default."));dock(true);poll();}
-    void voiceSettings(){VoiceInstrumentSettings v=s.project.voice;String[] opts={tr("반응: ","Response: ")+(v.response==0?tr("빠른 반응","Fast"):tr("안정 우선","Stable")),tr("자동 음역: ","Auto range: ")+(v.autoRange?tr("켜짐","On"):tr("꺼짐","Off")),tr("옥타브: ","Octave: ")+v.octave,tr("스케일 맞춤: ","Scale snap: ")+(v.snap?tr("켜짐","On"):tr("꺼짐","Off")),tr("코드 종류: ","Chord quality: ")+(v.quality<0?tr("스케일 자동","Auto from scale"):MusicTheory.QUALITIES[v.quality]),tr("코드 발음: ","Chord articulation: ")+(v.rhythm?tr("현재 리듬","Current rhythm"):tr("한 번 연주","Play once")),tr("원래 목소리 섞기: ","Mix original voice: ")+(v.mixVoice?tr("켜짐","On"):tr("꺼짐","Off")),tr("양자화: ","Quantize: ")+(v.quantize==0?"OFF":"1/"+v.quantize),tr("입력 게이트 · 신뢰도","Input gate & confidence")};choose(tr("연주 설정","Performance settings"),opts,-1,k->{if(k==0)edit(p->v.response=1-v.response,false);else if(k==1)edit(p->v.autoRange=!v.autoRange,false);else if(k==2)choose(tr("수동 옥타브","Manual octave"),new String[]{"−3","−2","−1","0","+1","+2","+3"},v.octave+3,n->edit(p->v.octave=n-3,false));else if(k==3)edit(p->v.snap=!v.snap,false);else if(k==4){String[] q=new String[12];q[0]=tr("스케일 자동","Auto from scale");System.arraycopy(MusicTheory.QUALITIES,0,q,1,11);q[1]=tr("메이저","Major");choose(tr("코드 종류","Chord quality"),q,v.quality+1,n->edit(p->v.quality=n-1,false));}else if(k==5)edit(p->v.rhythm=!v.rhythm,false);else if(k==6)edit(p->v.mixVoice=!v.mixVoice,false);else if(k==7)choose(tr("기록 양자화","Recording quantization"),new String[]{"OFF","1/8","1/16"},v.quantize==0?0:v.quantize==8?1:2,n->edit(p->v.quantize=new int[]{0,8,16}[n],false));else choose(tr("입력 검출","Input detection"),new String[]{tr("기본 · 신뢰도 0.85 / 게이트 0.007","Default · confidence 0.85 / gate 0.007"),tr("작은 목소리 · 0.85 / 0.004","Quiet voice · 0.85 / 0.004"),tr("잡음 억제 · 0.90 / 0.012","Noise reduction · 0.90 / 0.012")},-1,n->edit(p->{v.confidence=n==2?.9f:.85f;v.gate=n==0?.007f:n==1?.004f:.012f;},false));});}
-    void dock(boolean voice){a.actionDock.setVisibility(View.VISIBLE);transportLabel=a.text("",12,MainActivity.MUTED);a.actionDock.addView(transportLabel);LinearLayout row=a.row();play=a.button(s.playing()?tr("일시정지","Pause"):tr("재생","Play"),()->{if(s.playing())s.pause();else s.play();});((StudioButton)play).glyph(s.playing()?"pause":"play");StudioTheme.selected(play,true);a.weighted(row,play,48);a.weighted(row,a.button(tr("■ 정지","■ Stop"),s::stop),48);a.actionDock.addView(row);if(voice){phrase=a.button(s.capturing?tr("취소 · 이전 프레이즈 유지","Cancel · keep previous phrase"):tr("프레이즈 기록","Record phrase"),()->{s.recordPhrase();refresh();});((StudioButton)phrase).role(StudioButton.RECORD).glyph("record");a.actionDock.addView(phrase,new LinearLayout.LayoutParams(-1,-2));}poll();}
-    void poll(){
-        double[] st=s.state();int active=s.playing()&&st[0]>=st[3]&&(int)st[2]==s.selectedPart?(int)((st[0]-st[3])/MusicTheory.barBeats(s.project.meter)):-1;
-        if(active<0||active>=chordCards.size())active=-1;
-        if(active!=highlightedBar){for(int i=0;i<chordCards.size();i++){android.graphics.drawable.GradientDrawable bg=StudioTheme.background(a,StudioTheme.SURFACE,14);if(i==active)bg.setStroke(a.dp(2),MainActivity.LIME);chordCards.get(i).setBackground(bg);}highlightedBar=active;}
-        if(lcdStatus!=null){ComposerProject.Part displayed=s.part();int bar=0,slot=0;int playingPart=(int)st[2];if(s.playing()&&playingPart>=0&&playingPart<s.project.parts.size()){displayed=s.project.parts.get(playingPart);double elapsed=Math.max(0,st[0]-st[3]);double beats=MusicTheory.barBeats(s.project.meter);bar=Math.min(displayed.bars-1,(int)(elapsed/beats));if(elapsed%beats>=MusicTheory.split(s.project.meter))slot=1;}String chord="—";if(bar>=0&&bar<displayed.chords.size()&&!displayed.chords.get(bar).isEmpty()){List<ComposerProject.Chord> chords=displayed.chords.get(bar);chord=chordName(chords.get(Math.min(slot,chords.size()-1)));}lcdStatus.setText(displayed.label+" · "+tr("마디 ","Bar ")+(bar+1)+" · "+chord+(s.playing()?tr(" · 재생 중"," · Playing"):tr(" · 정지"," · Stopped")));}
-        if(transportLabel!=null){String status=s.capturing?(st[8]==1?tr("카운트인 / 다음 마디 대기","Count-in / waiting for next bar"):tr("프레이즈 기록 중 · 파트 끝에서 저장","Recording phrase · saves at end of part")):st[0]<0?tr("1마디 카운트인","One-bar count-in"):tr("마디 ","Bar ")+(1+(int)(Math.max(0,st[0])/MusicTheory.barBeats(s.project.meter)))+" · "+s.project.bpm+" BPM"+(s.playing()?tr(" · 재생 중"," · Playing"):"");transportLabel.setText(status);}
-        if(play!=null){play.setText(s.playing()?tr("일시정지","Pause"):tr("재생","Play"));((StudioButton)play).glyph(s.playing()?"pause":"play");}
-        if(readout!=null)readout.setText(tr("목소리 ","Voice ")+(st[5]>=0?MusicTheory.note((int)st[5]):"—")+"\n→ "+InstrumentCatalog.GM[s.project.voice.program]+" "+(st[6]>=0?MusicTheory.note((int)st[6]):"—")+String.format(Locale.US,tr("\n입력 %.0f dB","\nInput %.0f dB"),20*Math.log10(Math.max(.00001,st[7]))));
+
+    void stale() {
+        a.toast(tr("편집 내용이 변경되었습니다. 다시 시도해 주세요.", "The editing context changed. Please try again."));
     }
-    void instrument(int track,boolean voice){ComposerProject context=s.project;int revision=s.revision;String partId=s.part().id;Dialog dialog=new Dialog(a);LinearLayout panel=a.column();panel.setPadding(a.dp(16),a.dp(12),a.dp(16),a.dp(12));panel.setBackground(StudioTheme.background(a,MainActivity.PANEL,20));EditText search=new EditText(a);search.setTextColor(MainActivity.TEXT);search.setHintTextColor(MainActivity.MUTED);search.setHint(tr("악기 · 카테고리 검색","Search instruments or categories"));search.setSingleLine();search.setTypeface(StudioTheme.body(a));search.setPadding(a.dp(14),a.dp(12),a.dp(14),a.dp(12));search.setBackground(StudioTheme.background(a,StudioTheme.RAISED,12));panel.addView(search);final int[] category={0};List<String> cats=new ArrayList<>(Arrays.asList(tr("대표 24음색","Featured 24"),tr("전체 GM 128","All GM 128"),tr("즐겨찾기","Favorites")));cats.addAll(Arrays.asList(InstrumentCatalog.categories(a)));if(!voice)cats.add(tr("드럼 키트","Drum kits"));Button categoryButton=a.button(tr("카테고리: ","Category: ")+cats.get(0)+" ▾",()->choose(tr("악기 카테고리","Instrument category"),cats.toArray(new String[0]),category[0],n->{category[0]=n;}));panel.addView(categoryButton);ScrollView scroll=new ScrollView(a);LinearLayout list=a.column();scroll.addView(list);panel.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));panel.addView(a.button(tr("닫기","Close"),dialog::dismiss));Set<String> favorites=new HashSet<>(a.getPreferences(0).getStringSet("gmFavorites",Collections.emptySet()));Runnable fill=()->{list.removeAllViews();String query=search.getText().toString().toLowerCase(Locale.ROOT);int cat=category[0];if(!voice&&cat==cats.size()-1){String[] kits=NativeComposer.drumKits();for(String kit:kits){int program=Integer.parseInt(kit.split(" · ")[0]);list.addView(a.button(kit,()->{if(current(context,revision,partId))selectInstrument(track,false,program,128);else stale();dialog.dismiss();}));}return;}for(int n=0;n<128;n++){int program=n;if(voice&&n>=112)continue;boolean featured=false;for(int f:InstrumentCatalog.FEATURED)if(f==n)featured=true;if(query.isEmpty()&&((cat==0&&!featured)||(cat==2&&!favorites.contains(""+n))||(cat>=3&&cat-3!=n/8)))continue;String label=InstrumentCatalog.GM[n],family=InstrumentCatalog.categories(a)[n/8];if(!query.isEmpty()&&!(label+" "+family).toLowerCase(Locale.ROOT).contains(query))continue;Button item=a.button((favorites.contains(""+n)?"★ ":"")+label+" · "+family,()->{if(current(context,revision,partId))selectInstrument(track,voice,program,0);else stale();dialog.dismiss();});item.setOnLongClickListener(view->{String id=""+program;if(!favorites.add(id))favorites.remove(id);a.getPreferences(0).edit().putStringSet("gmFavorites",favorites).apply();item.setText((favorites.contains(id)?"★ ":"")+label+" · "+family);return true;});list.addView(item,new LinearLayout.LayoutParams(-1,-2));}};categoryButton.setOnClickListener(v->choose(tr("악기 카테고리","Instrument category"),cats.toArray(new String[0]),category[0],n->{category[0]=n;categoryButton.setText(tr("카테고리: ","Category: ")+cats.get(n)+" ▾");fill.run();}));search.addTextChangedListener(new TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){fill.run();}public void afterTextChanged(Editable e){}});fill.run();dialog.setContentView(panel);dialog.show();dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);dialog.getWindow().setLayout(Math.min(a.root.getWidth(),a.dp(520)),Math.max(a.dp(250),(int)(a.root.getHeight()*.82f)));}
-    void selectInstrument(int index,boolean voice,int program,int bank){edit(p->{if(voice){p.voice.program=program;p.voice.autoRange=program/8==4;}else if(index<0){TrackConfig t=new TrackConfig(bank==128?tr("드럼","Drums"):InstrumentCatalog.GM[program],program,false);t.bank=bank;p.addTrack(t);}else{TrackConfig t=s.part().tracks.get(index);t.program=program;t.bank=bank;t.pattern=0;}},index<0&&!voice);}
-    void input(String title,String value,Consumer<String> action){
-        EditText field=new EditText(a);field.setText(value);field.setSingleLine();field.setTextColor(MainActivity.TEXT);field.setHintTextColor(MainActivity.MUTED);field.setTypeface(StudioTheme.body(a));field.setPadding(a.dp(14),a.dp(12),a.dp(14),a.dp(12));field.setBackground(StudioTheme.background(a,StudioTheme.RAISED,12));field.setSelectAllOnFocus(true);
-        form(title,field,tr("저장","Save"),()->{String name=field.getText().toString().trim();if(!name.isEmpty())action.accept(name);},null);
+
+    void choose(String title, String[] items, int selected, IntConsumer action) {
+        ComposerProject project = s.project;
+        int revision = s.revision;
+        String part = s.part().id;
+        StudioDialogs.choose(a, title, items, selected, n -> {
+            if (!current(project, revision, part)) {
+                stale();
+                return;
+            }
+            action.accept(n);
+        });
     }
-    void projects(){a.add(a.title(tr("내 반주","Saved projects")));a.add(a.button(tr("＋ 새 프로젝트","＋ New project"),()->{s.open(newProject());a.chooseTab(7);}));for(ComposerProject p:s.store.list()){a.add(a.button(p.name+"\n"+MusicTheory.ROOTS[p.key]+" · "+p.bpm+" BPM · "+p.totalBars()+tr("마디"," bars"),()->{s.open(p);a.chooseTab(7);}));a.add(a.button(tr("프로젝트 ⋯","Project ⋯"),()->choose(p.name,new String[]{tr("이름 변경","Rename"),tr("복제","Duplicate"),tr("삭제","Delete")},-1,k->{if(k==0)input(tr("이름 변경","Rename"),p.name,name->{p.name=name;saveProject(p);});else if(k==1){p.id=UUID.randomUUID().toString();p.name+=tr(" 복제"," copy");saveProject(p);}else StudioDialogs.confirmDanger(a,tr("반주 삭제","Delete backing"),p.name+tr(" 프로젝트를 삭제할까요?"," · Delete this project?"),tr("삭제","Delete"),()->{s.worker.execute(()->{s.store.delete(p.id);a.runOnUiThread(this::refresh);});});})));}}
-    void saveProject(ComposerProject p){s.worker.execute(()->{try{s.store.write(p,false);a.runOnUiThread(this::refresh);}catch(Exception e){a.runOnUiThread(()->a.toast(e.getMessage()));}});}
+
+    void form(String title, View panel, String positive, Runnable apply, Runnable cancel) {
+        ComposerProject project = s.project;
+        int revision = s.revision;
+        String part = s.part().id;
+        StudioDialogs.form(a, title, panel, positive, () -> {
+            if (!current(project, revision, part)) {
+                stale();
+                return;
+            }
+            apply.run();
+        }, cancel == null ? null : () -> {
+            if (current(project, revision, part)) cancel.run();
+        });
+    }
+
+    void heading(String t) {
+        a.add(a.text(t, 18, MainActivity.TEXT));
+    }
+
+    String tr(String ko, String en) {
+        return a.tr(ko, en);
+    }
+
+    String[] scales() {
+        return AppLanguage.english(a)
+                ? new String[]{"Major", "Natural minor", "Harmonic minor", "Dorian", "Mixolydian"}
+                : MusicTheory.SCALES;
+    }
+
+    String[] rhythms() {
+        return AppLanguage.english(a)
+                ? new String[]{"Pop 8-beat", "Pop 16-beat", "Shuffle", "R&B", "Rock", "Bossa nova", "Waltz", "6/8 ballad"}
+                : MusicTheory.RHYTHMS;
+    }
+
+    String[] presets() {
+        return AppLanguage.english(a)
+                ? new String[]{"Pop I–V–vi–IV", "Ballad I–vi–IV–V", "Canon I–V–vi–iii–IV–I–IV–V", "Jazz ii7–V7–Imaj7", "Minor i–VI–III–VII", "Minor cadence i–VI–iv–V7"}
+                : MusicTheory.PRESETS;
+    }
+
+    TextView caption(String text) {
+        TextView v = a.text(text, 12, MainActivity.MUTED);
+        v.setTypeface(StudioTheme.medium(a));
+        return v;
+    }
+
+    void section(String name, String detail) {
+        LinearLayout row = a.row();
+        TextView title = a.text(name, 19, MainActivity.TEXT);
+        title.setTypeface(StudioTheme.bold(a));
+        row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        if (detail != null) row.addView(caption(detail));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = a.dp(15);
+        lp.bottomMargin = a.dp(8);
+        a.content.addView(row, lp);
+    }
+
+    TextView action(String text, Runnable onClick) {
+        TextView v = a.text(text, 13, MainActivity.LIME);
+        v.setTypeface(StudioTheme.medium(a));
+        v.setPadding(a.dp(4), a.dp(10), a.dp(4), a.dp(10));
+        v.setOnClickListener(w -> onClick.run());
+        v.setFocusable(true);
+        v.setMinHeight(a.dp(48));
+        v.setMinWidth(a.dp(48));
+        v.setGravity(Gravity.CENTER_VERTICAL);
+        return v;
+    }
+
+    void stat(LinearLayout row, String label, String value, Runnable click) {
+        LinearLayout tile = a.column();
+        tile.setPadding(a.dp(12), a.dp(10), a.dp(10), a.dp(10));
+        tile.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
+        tile.addView(caption(label));
+        TextView text = a.text(value + "  ▾", 15, MainActivity.TEXT);
+        text.setTypeface(StudioTheme.bold(a));
+        tile.addView(text);
+        tile.setMinimumHeight(a.dp(65));
+        tile.setOnClickListener(v -> click.run());
+        tile.setFocusable(true);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+        if (row.getChildCount() > 0) lp.leftMargin = a.dp(7);
+        row.addView(tile, lp);
+    }
+
+    String chordName(ComposerProject.Chord c) {
+        return MusicTheory.ROOTS[c.root] + MusicTheory.QUALITIES[c.quality] + (c.bass >= 0 ? "/" + MusicTheory.ROOTS[c.bass] : "");
+    }
+
+    String chordDegree(ComposerProject.Chord c, ComposerProject p) {
+        String label = c.label(p);
+        int split = label.indexOf(" · ");
+        return split < 0 ? label : label.substring(split + 3).replace(" 직접", tr(" 직접", " manual"));
+    }
+
+    void draw(boolean voice) {
+        readout = transportLabel = lcdStatus = null;
+        play = phrase = voicePower = null;
+        chordCards.clear();
+        highlightedBar = -2;
+        if (voice) {
+            voice();
+            return;
+        }
+        ComposerProject p = s.project;
+        ComposerProject.Part part = s.part();
+        if (soloProject != p || !soloPart.equals(part.id)) {
+            clearSolo();
+            soloProject = p;
+            soloPart = part.id;
+        }
+
+        LinearLayout hero = StudioTheme.card(a);
+        hero.setBackground(StudioTheme.background(a, Color.rgb(16, 20, 15), 7));
+        hero.setPadding(a.dp(18), a.dp(17), a.dp(18), a.dp(16));
+        LinearLayout top = a.row();
+        LinearLayout name = a.column();
+        name.addView(caption(tr("내 반주 프로젝트", "BACKING PROJECT")));
+        TextView projectName = a.text(p.name, 23, MainActivity.TEXT);
+        projectName.setTypeface(StudioTheme.bold(a));
+        projectName.setSingleLine();
+        projectName.setEllipsize(TextUtils.TruncateAt.END);
+        name.addView(projectName);
+        top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        top.addView(action(tr("관리 ⋯", "Manage ⋯"), this::projectMenu));
+        hero.addView(top);
+        TextView summary = caption(tr("작곡 초안 · ", "Composition draft · ") + p.parts.size()
+                + tr("개 파트 · ", " parts · ") + p.totalBars() + tr("마디", " bars")
+                + " · " + new String[]{"4/4", "3/4", "6/8"}[p.meter]);
+        summary.setPadding(0, a.dp(7), 0, a.dp(15));
+        hero.addView(summary);
+        lcdStatus = a.text("", 14, Color.rgb(225, 228, 196));
+        lcdStatus.setTypeface(StudioTheme.bold(a));
+        lcdStatus.setPadding(0, 0, 0, a.dp(10));
+        hero.addView(lcdStatus);
+
+        LinearLayout stats = a.row();
+        stat(stats, tr("키", "KEY"), MusicTheory.ROOTS[p.key], () ->
+                choose(tr("키 · 모든 코드와 프레이즈 전조", "Key · transpose chords and phrases"), MusicTheory.ROOTS, p.key, k ->
+                        edit(x -> x.transpose(k), false)));
+        stat(stats, tr("템포", "TEMPO"), p.bpm + " BPM", this::tempo);
+        hero.addView(stats);
+
+        LinearLayout scaleRow = a.row();
+        LinearLayout.LayoutParams scaleSpacing = new LinearLayout.LayoutParams(-1, -2);
+        scaleSpacing.topMargin = a.dp(7);
+        stat(scaleRow, tr("스케일", "SCALE"), scales()[p.scale], () ->
+                choose(tr("스케일", "Scale"), scales(), p.scale, k ->
+                        edit(x -> x.scale(k), false)));
+        hero.addView(scaleRow, scaleSpacing);
+        a.add(hero);
+
+        StudioButton export = StudioTheme.styled(a, tr("AI용 내보내기", "Export for AI"), StudioButton.STANDARD, this::exportProject);
+        StudioTheme.selected(export, true);
+        a.add(export);
+        a.add(caption(tr("프로젝트를 내보내 AI와 수정한 뒤 수정본을 불러오세요.", "Export your project, revise it with an AI, then import the revision.")));
+        a.add(StudioTheme.styled(a, tr("AI 수정본 불러오기", "Import AI revision"), StudioButton.OUTLINE, () -> a.exchange.showImport()));
+
+        section(tr("파트", "Parts"), p.parts.size() + " / 8");
+        HorizontalScrollView scroll = new HorizontalScrollView(a);
+        scroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout parts = a.row();
+        for (int i = 0; i < p.parts.size(); i++) {
+            int n = i;
+            ComposerProject.Part item = p.parts.get(i);
+            StudioButton chip = StudioTheme.styled(a, item.label + "  ·  " + item.bars + tr("마디", " bars"), StudioButton.CHIP, () -> {
+                clearSolo();
+                s.selectedPart = n;
+                refresh();
+            });
+            StudioTheme.selected(chip, i == s.selectedPart);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(48));
+            lp.rightMargin = a.dp(8);
+            parts.addView(chip, lp);
+        }
+        scroll.addView(parts);
+        a.add(scroll);
+
+        LinearLayout partActions = a.row();
+        partActions.addView(action(tr("파트 편집", "Edit part"), this::partMenu), new LinearLayout.LayoutParams(0, -2, 1));
+        partActions.addView(action(tr("연주 느낌", "Feel"), this::performance));
+        a.add(partActions);
+
+        section(tr("코드 진행", "Chord progression"), part.label + " · " + part.bars + tr("마디", " bars"));
+        LinearLayout chordActions = a.row();
+        chordActions.addView(caption(tr("카드를 눌러 코드를 편집하세요", "Tap a card to edit its chords")), new LinearLayout.LayoutParams(0, -2, 1));
+        chordActions.addView(action(tr("프리셋 ▾", "Presets ▾"), () ->
+                choose(tr("진행 · 파트 길이에 맞춰 반복", "Progression · repeats to fit the part"), presets(), -1, k ->
+                        edit(x -> x.preset(s.part(), k), false))));
+        a.add(chordActions);
+
+        for (int b = 0; b < part.bars; b += 2) {
+            if (b % 4 == 0 && part.bars > 4) {
+                a.add(caption(tr("마디 ", "Bars ") + (b + 1) + "–" + Math.min(b + 4, part.bars)));
+            }
+            LinearLayout row = a.row();
+            for (int c = 0; c < 2 && b + c < part.bars; c++) {
+                int bar = b + c;
+                LinearLayout card = a.column();
+                card.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+                card.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 14));
+                card.setMinimumHeight(a.dp(116));
+                card.setOnClickListener(v -> chord(bar, 0));
+                card.setFocusable(true);
+                StringBuilder accessible = new StringBuilder(tr("마디 ", "Bar ") + (bar + 1));
+                for (ComposerProject.Chord item : part.chords.get(bar)) {
+                    accessible.append(" · ").append(chordName(item)).append(" · ").append(chordDegree(item, p));
+                }
+                card.setContentDescription(accessible.toString());
+                card.addView(caption(String.format(Locale.US, "%02d", bar + 1)));
+                LinearLayout chordLine = a.column();
+                for (int j = 0; j < part.chords.get(bar).size(); j++) {
+                    ComposerProject.Chord ch = part.chords.get(bar).get(j);
+                    if (j > 0) {
+                        View divider = new View(a);
+                        divider.setBackgroundColor(StudioTheme.BORDER);
+                        LinearLayout.LayoutParams d = new LinearLayout.LayoutParams(-1, a.dp(1));
+                        d.topMargin = a.dp(6);
+                        d.bottomMargin = a.dp(6);
+                        chordLine.addView(divider, d);
+                    }
+                    LinearLayout ctext = a.column();
+                    TextView root = a.text(chordName(ch), part.chords.get(bar).size() > 1 ? 18 : 23, MainActivity.TEXT);
+                    root.setTypeface(StudioTheme.bold(a));
+                    ctext.addView(root);
+                    ctext.addView(caption(chordDegree(ch, p)));
+                    chordLine.addView(ctext, new LinearLayout.LayoutParams(-1, -2));
+                }
+                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+                cp.topMargin = a.dp(9);
+                card.addView(chordLine, cp);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+                if (c > 0) lp.leftMargin = a.dp(8);
+                row.addView(card, lp);
+                chordCards.add(card);
+            }
+            a.add(row);
+        }
+
+        section(tr("악기 트랙", "Tracks"), part.tracks.size() + " / 8");
+        LinearLayout rhythmRow = a.row();
+        rhythmRow.addView(caption(tr("리듬", "RHYTHM")), new LinearLayout.LayoutParams(0, -2, 1));
+        rhythmRow.addView(action(rhythms()[part.rhythm] + " ▾", () -> {
+            List<Integer> ids = new ArrayList<>();
+            List<String> labels = new ArrayList<>();
+            for (int i = 0; i < 8; i++) {
+                if (MusicTheory.rhythmFits(i, p.meter)) {
+                    ids.add(i);
+                    labels.add(rhythms()[i]);
+                }
+            }
+            choose(tr("리듬 · BPM 유지", "Rhythm · keep tempo"), labels.toArray(new String[0]), ids.indexOf(part.rhythm), k ->
+                    edit(x -> s.part().rhythm = ids.get(k), false));
+        }));
+        a.add(rhythmRow);
+
+        for (int i = 0; i < part.tracks.size(); i++) {
+            int n = i;
+            TrackConfig t = part.tracks.get(i);
+            LinearLayout row = a.row();
+            row.setPadding(a.dp(12), a.dp(9), a.dp(9), a.dp(9));
+            row.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12));
+            TextView icon = a.text(t.drums() ? "◉" : t.family() == 4 ? "♩" : t.family() == 3 ? "♫" : "♪", 20, MainActivity.LIME);
+            icon.setGravity(Gravity.CENTER);
+            row.addView(icon, new LinearLayout.LayoutParams(a.dp(38), a.dp(44)));
+            LinearLayout details = a.column();
+            TextView nameText = a.text(t.name, 15, t.muted ? MainActivity.MUTED : MainActivity.TEXT);
+            nameText.setTypeface(StudioTheme.bold(a));
+            nameText.setSingleLine();
+            nameText.setEllipsize(TextUtils.TruncateAt.END);
+            details.addView(nameText);
+            String[] patterns = InstrumentCatalog.patternLabels(a, t);
+            details.addView(caption((t.drums() ? tr("드럼 키트 ", "Drum kit ") + t.program : InstrumentCatalog.GM[t.program])
+                    + " · " + patterns[Math.min(t.pattern, patterns.length - 1)]));
+            details.setOnClickListener(v -> track(n));
+            details.setFocusable(true);
+            row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
+            TextView mute = action(t.muted ? tr("뮤트됨", "Muted") : tr("뮤트", "Mute"), () -> {
+                edit(x -> t.muted = !t.muted, false);
+                liveTrack(n);
+            });
+            mute.setTextColor(t.muted ? MainActivity.LIME : MainActivity.MUTED);
+            row.addView(mute);
+            TextView levels = action(tr(" 믹스 ", " Mix "), () -> trackLevels(n));
+            levels.setContentDescription(tr("볼륨 · 팬", "Volume & pan"));
+            row.addView(levels);
+            row.addView(action(" ⋯", () -> track(n)));
+            a.add(row);
+        }
+        a.add(StudioTheme.styled(a, tr("＋ 악기 추가", "＋ Add instrument"), StudioButton.OUTLINE, () -> instrument(-1, false)));
+
+        section(tr("곡 순서", "Song order"), p.totalBars() + " / 256 " + tr("마디", "bars"));
+        HorizontalScrollView orderScroll = new HorizontalScrollView(a);
+        orderScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout orderRow = a.row();
+        for (int i = 0; i < p.order.size(); i++) {
+            int n = i;
+            ComposerProject.Order o = p.order.get(i);
+            StudioButton chip = StudioTheme.styled(a, (i + 1) + "  " + p.part(o.part).label + " ×" + o.repeats + "  ⋯", StudioButton.CHIP, () -> order(n));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(48));
+            lp.rightMargin = a.dp(8);
+            orderRow.addView(chip, lp);
+        }
+        orderRow.addView(StudioTheme.styled(a, "＋", StudioButton.CHIP, () -> {
+            String[] labels = new String[p.parts.size()];
+            for (int i = 0; i < labels.length; i++) labels[i] = p.parts.get(i).label;
+            choose(tr("추가할 파트", "Add a part"), labels, -1, k ->
+                    edit(x -> x.order.add(new ComposerProject.Order(x.parts.get(k).id, 1)), true));
+        }), new LinearLayout.LayoutParams(a.dp(52), a.dp(48)));
+        orderScroll.addView(orderRow);
+        a.add(orderScroll);
+
+        LinearLayout links = a.row();
+        links.addView(action(tr("저장된 프로젝트 ›", "Saved projects ›"), () -> {
+            a.libraryFilter = 1;
+            a.chooseTab(4);
+        }), new LinearLayout.LayoutParams(0, -2, 1));
+        links.addView(action(tr("목소리로 연주 ›", "Play with voice ›"), () -> a.chooseTab(8)));
+        a.add(links);
+        dock(false);
+        if (!s.ready) a.note(tr("오프라인 샘플 음원을 준비하고 있습니다…", "Preparing offline sounds…"));
+    }
+
+    ComposerProject newProject() {
+        ComposerProject p = new ComposerProject();
+        if (AppLanguage.english(a)) {
+            p.name = "New backing";
+            String[] names = {"Guitar", "Bass", "Drums", "Keyboard"};
+            for (ComposerProject.Part part : p.parts) {
+                for (int i = 0; i < Math.min(names.length, part.tracks.size()); i++) {
+                    part.tracks.get(i).name = names[i];
+                }
+            }
+        }
+        return p;
+    }
+
+    void exportProject() {
+        a.exchange.showExport(s.project);
+    }
+
+    void projectMenu() {
+        choose(tr("프로젝트", "Project"), new String[]{
+                tr("저장", "Save"),
+                tr("이름 변경", "Rename"),
+                tr("복제", "Duplicate"),
+                tr("새 반주", "New backing"),
+                tr("실행 취소", "Undo"),
+                tr("다시 실행", "Redo"),
+                tr("내 반주 열기", "Open saved projects"),
+                tr("AI 수정본 불러오기", "Import AI revision")
+        }, -1, k -> {
+            if (k == 0) s.save();
+            else if (k == 1) input(tr("프로젝트 이름", "Project name"), s.project.name, name -> edit(p -> p.name = name, false));
+            else if (k == 2) s.duplicate();
+            else if (k == 3) s.open(newProject());
+            else if (k == 4) s.history(false);
+            else if (k == 5) s.history(true);
+            else if (k == 6) {
+                a.libraryFilter = 1;
+                a.chooseTab(4);
+            } else {
+                a.exchange.showImport();
+                return;
+            }
+            refresh();
+        });
+    }
+
+    void tempo() {
+        final int[] bpm = {s.project.bpm}, meter = {s.project.meter};
+        LinearLayout panel = a.column();
+        StudioFader fader = new StudioFader(a, tr("템포", "Tempo"), 40, 240, bpm[0], v -> Math.round(v) + " BPM", v -> bpm[0] = Math.round(v));
+        panel.addView(fader, new LinearLayout.LayoutParams(-1, -2));
+        TextView caption = a.text(tr("박자", "Meter"), 14, MainActivity.MUTED);
+        caption.setPadding(0, a.dp(18), 0, a.dp(8));
+        panel.addView(caption);
+        LinearLayout choices = a.row();
+        String[] names = {"4/4", "3/4", "6/8"};
+        Button[] buttons = new Button[3];
+        for (int i = 0; i < 3; i++) {
+            final int n = i;
+            buttons[i] = StudioTheme.styled(a, names[i], StudioButton.CHIP, () -> {
+                meter[0] = n;
+                for (int j = 0; j < 3; j++) StudioTheme.selected(buttons[j], j == n);
+            });
+            StudioTheme.selected(buttons[i], i == meter[0]);
+            a.weighted(choices, buttons[i], 48);
+        }
+        panel.addView(choices);
+        form(tr("템포 · 박자", "Tempo & meter"), panel, tr("적용", "Apply"), () -> edit(p -> {
+            p.bpm = bpm[0];
+            p.meter(meter[0]);
+        }, false), null);
+    }
+
+    void performance() {
+        ComposerProject.Part part = s.part();
+        float[] values = {part.energy, part.humanize};
+        boolean[] fill = {part.fill};
+        LinearLayout panel = a.column();
+        TextView explanation = a.text(part.label + tr("파트에만 적용됩니다.", " part only."), 14, MainActivity.MUTED);
+        panel.addView(explanation);
+        panel.addView(new StudioFader(a, tr("연주 강도", "Energy"), 0, 1, values[0], v -> Math.round(v * 100) + "%", v -> values[0] = v));
+        StudioFader timing = new StudioFader(a, tr("자연스러운 타이밍", "Humanize timing"), 0, 1, values[1], v -> Math.round(v * 100) + "%", v -> values[1] = v);
+        LinearLayout.LayoutParams spacing = new LinearLayout.LayoutParams(-1, -2);
+        spacing.topMargin = a.dp(16);
+        panel.addView(timing, spacing);
+        Button toggle = StudioTheme.styled(a, tr("마무리 필인: ", "Ending fill: ") + (fill[0] ? tr("켜짐", "On") : tr("꺼짐", "Off")), StudioButton.CHIP, () -> {});
+        StudioTheme.selected(toggle, fill[0]);
+        toggle.setOnClickListener(v -> {
+            fill[0] = !fill[0];
+            toggle.setText(tr("마무리 필인: ", "Ending fill: ") + (fill[0] ? tr("켜짐", "On") : tr("꺼짐", "Off")));
+            StudioTheme.selected(toggle, fill[0]);
+        });
+        LinearLayout.LayoutParams toggleSpacing = new LinearLayout.LayoutParams(-1, -2);
+        toggleSpacing.topMargin = a.dp(16);
+        panel.addView(toggle, toggleSpacing);
+        form(part.label + tr("파트 · 연주 느낌", " · Performance feel"), panel, tr("적용", "Apply"), () -> edit(p -> {
+            part.energy = values[0];
+            part.humanize = values[1];
+            part.fill = fill[0];
+        }, false), null);
+    }
+
+    void partMenu() {
+        String partId = s.part().id;
+        choose(tr("파트 ", "Part ") + s.part().label, new String[]{
+                tr("4마디", "4 bars"),
+                tr("8마디", "8 bars"),
+                tr("16마디", "16 bars"),
+                tr("복제해 새 파트", "Duplicate part"),
+                tr("파트 삭제", "Delete part")
+        }, -1, k -> {
+            int before = s.revision;
+            edit(p -> {
+                ComposerProject.Part target = p.part(partId);
+                if (k < 3) {
+                    p.resize(target, new int[]{4, 8, 16}[k]);
+                } else if (k == 3) {
+                    try {
+                        p.duplicate(target);
+                    } catch (org.json.JSONException e) {
+                        throw new IllegalArgumentException(e);
+                    }
+                } else {
+                    if (p.parts.size() == 1) throw new IllegalArgumentException(tr("파트는 하나 이상 필요합니다.", "At least one part is required."));
+                    p.parts.remove(target);
+                    p.order.removeIf(o -> o.part.equals(partId));
+                    if (p.order.isEmpty()) p.order.add(new ComposerProject.Order(p.parts.get(0).id, 1));
+                }
+            }, true);
+            if (s.revision != before) {
+                if (k == 3) s.selectedPart = s.project.parts.size() - 1;
+                else if (k == 4) s.selectedPart = 0;
+                refresh();
+            }
+        });
+    }
+
+    void chord(int bar, int slot) {
+        ComposerProject.Chord ch = s.part().chords.get(bar).get(slot);
+        choose(tr("마디 ", "Bar ") + (bar + 1) + " · " + chordName(ch) + " · " + chordDegree(ch, s.project), new String[]{
+                tr("근음 변경", "Change root"),
+                tr("코드 종류", "Chord quality"),
+                tr("분수코드 베이스", "Slash bass"),
+                tr("스케일 자동 코드로 복원", "Restore scale chord"),
+                s.part().chords.get(bar).size() == 1 ? tr("코드 2개로 분할", "Split into two chords") : tr("첫 코드 편집", "Edit first chord"),
+                s.part().chords.get(bar).size() == 1 ? tr("닫기", "Close") : tr("두 번째 코드 편집", "Edit second chord"),
+                s.part().chords.get(bar).size() == 1 ? tr("닫기", "Close") : tr("코드 1개로 합치기", "Merge into one chord")
+        }, -1, k -> {
+            if (k == 0) {
+                choose(tr("근음", "Root"), MusicTheory.ROOTS, ch.root, n -> edit(p -> {
+                    ch.root = n;
+                    ch.automatic = false;
+                }, false));
+            } else if (k == 1) {
+                String[] q = MusicTheory.QUALITIES.clone();
+                q[0] = tr("메이저", "Major");
+                choose(tr("코드 종류", "Chord quality"), q, ch.quality, n -> edit(p -> {
+                    ch.quality = n;
+                    ch.automatic = false;
+                }, false));
+            } else if (k == 2) {
+                String[] bass = new String[13];
+                bass[0] = tr("분수코드 해제", "Remove slash bass");
+                System.arraycopy(MusicTheory.ROOTS, 0, bass, 1, 12);
+                choose(tr("베이스음", "Bass note"), bass, ch.bass + 1, n -> edit(p -> {
+                    ch.bass = n - 1;
+                    if (n > 0) ch.automatic = false;
+                }, false));
+            } else if (k == 3) {
+                choose(tr("스케일 도수", "Scale degree"), new String[]{"I / i", "II / ii", "III / iii", "IV / iv", "V / v", "VI / vi", "VII / vii"}, ch.degree, n -> edit(p -> {
+                    ch.degree = n;
+                    ch.automatic = true;
+                    ch.dominant = false;
+                    ch.resolve(p);
+                }, false));
+            } else if (k == 4) {
+                if (s.part().chords.get(bar).size() == 2) {
+                    chord(bar, 0);
+                } else {
+                    edit(p -> {
+                        try {
+                            s.part().chords.get(bar).add(ComposerProject.Chord.read(ch.json()));
+                        } catch (Exception e) {
+                            throw new IllegalArgumentException(e);
+                        }
+                    }, false);
+                }
+            } else if (k == 5 && s.part().chords.get(bar).size() == 2) {
+                chord(bar, 1);
+            } else if (k == 6 && s.part().chords.get(bar).size() == 2) {
+                edit(p -> s.part().chords.get(bar).remove(1), false);
+            }
+        });
+    }
+
+    void track(int index) {
+        TrackConfig t = s.part().tracks.get(index);
+        choose(t.name, new String[]{
+                tr("음색 선택", "Choose instrument"),
+                tr("패턴", "Pattern"),
+                t.muted ? tr("뮤트 해제", "Unmute") : tr("뮤트", "Mute"),
+                tr("볼륨 · 팬", "Volume & pan"),
+                solo == index ? tr("솔로 종료", "End solo") : tr("솔로 미리듣기", "Solo preview"),
+                tr("트랙 이름", "Track name"),
+                tr("트랙 삭제", "Delete track")
+        }, -1, k -> {
+            if (k == 0) {
+                instrument(index, false);
+            } else if (k == 1) {
+                choose(tr("패턴", "Pattern"), InstrumentCatalog.patternLabels(a, t), Math.min(t.pattern, InstrumentCatalog.patternLabels(a, t).length - 1), n -> edit(p -> t.pattern = n, false));
+            } else if (k == 2) {
+                edit(p -> t.muted = !t.muted, false);
+                liveTrack(index);
+            } else if (k == 3) {
+                trackLevels(index);
+            } else if (k == 4) {
+                if (s.playing() && liveChannel(t.id) < 0) {
+                    a.toast(tr("재생 중인 파트에서 솔로를 사용해 주세요.", "Use solo on the currently playing part."));
+                    return;
+                }
+                solo = solo == index ? -1 : index;
+                for (int ch = 0; ch < s.part().tracks.size(); ch++) liveTrack(ch);
+            } else if (k == 5) {
+                input(tr("트랙 이름", "Track name"), t.name, name -> edit(p -> t.name = name, false));
+            } else {
+                clearSolo();
+                edit(p -> {
+                    String id = t.id;
+                    for (ComposerProject.Part part : p.parts) {
+                        part.tracks.removeIf(tr -> tr.id.equals(id));
+                        part.phrases.removeIf(ph -> ph.trackId.equals(id));
+                    }
+                }, true);
+            }
+        });
+    }
+
+    int liveChannel(String trackId) {
+        ComposerProject.Part playing = s.part();
+        double[] state = s.state();
+        if (s.playing()) {
+            int part = (int) state[2];
+            if (part < 0 || part >= s.project.parts.size()) return -1;
+            playing = s.project.parts.get(part);
+            if (!playing.id.equals(s.part().id)) return -1;
+        }
+        for (int i = 0; i < playing.tracks.size(); i++) {
+            if (playing.tracks.get(i).id.equals(trackId)) return i;
+        }
+        return -1;
+    }
+
+    void liveTrack(int index) {
+        if (index < 0 || index >= s.part().tracks.size()) return;
+        TrackConfig t = s.part().tracks.get(index);
+        int channel = liveChannel(t.id);
+        if (channel >= 0) NativeComposer.track(channel, t.volume, t.pan, t.muted, solo == index);
+    }
+
+    void clearSolo() {
+        solo = -1;
+        NativeComposer.clearSolo();
+    }
+
+    void trackLevels(int index) {
+        TrackConfig t = s.part().tracks.get(index);
+        float[] values = {t.volume, t.pan};
+        LinearLayout panel = a.column();
+        ComposerProject context = s.project;
+        int revision = s.revision;
+        String partId = s.part().id;
+        Runnable preview = () -> {
+            if (current(context, revision, partId)) {
+                int channel = liveChannel(t.id);
+                if (channel >= 0) NativeComposer.track(channel, values[0], values[1], t.muted, solo == index);
+            }
+        };
+        StudioFader volume = new StudioFader(a, tr("볼륨", "Volume"), 0, 1, values[0], v -> Math.round(v * 100) + "%", v -> {
+            values[0] = v;
+            preview.run();
+        });
+        StudioFader pan = new StudioFader(a, tr("팬", "Pan"), -1, 1, values[1], v -> {
+            int n = Math.round(v * 100);
+            return n == 0 ? "CENTER" : n < 0 ? "L " + (-n) : "R " + n;
+        }, v -> {
+            values[1] = v;
+            preview.run();
+        });
+        panel.addView(volume, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = a.dp(18);
+        panel.addView(pan, lp);
+        form(t.name + tr(" · 볼륨과 팬", " · Volume & pan"), panel, tr("저장", "Save"), () -> edit(x -> {
+            t.volume = values[0];
+            t.pan = values[1];
+        }, false), () -> liveTrack(index));
+    }
+
+    void order(int index) {
+        choose(tr("곡 순서", "Song order"), new String[]{
+                tr("반복 횟수", "Repeats"),
+                tr("앞으로", "Move earlier"),
+                tr("뒤로", "Move later"),
+                tr("삭제", "Delete")
+        }, -1, k -> {
+            if (k == 0) {
+                String[] r = new String[16];
+                for (int i = 0; i < 16; i++) r[i] = "×" + (i + 1);
+                choose(tr("반복", "Repeats"), r, s.project.order.get(index).repeats - 1, n -> edit(p -> p.order.get(index).repeats = n + 1, true));
+            } else {
+                edit(p -> {
+                    if (k == 1 && index > 0) Collections.swap(p.order, index, index - 1);
+                    else if (k == 2 && index < p.order.size() - 1) Collections.swap(p.order, index, index + 1);
+                    else if (k == 3) {
+                        if (p.order.size() == 1) throw new IllegalArgumentException(tr("순서는 하나 이상 필요합니다.", "At least one order entry is required."));
+                        p.order.remove(index);
+                    }
+                }, true);
+            }
+        });
+    }
+
+    void voice() {
+        VoiceInstrumentSettings v = s.project.voice;
+        a.add(a.title(tr("목소리로 연주", "Play with voice")));
+        LinearLayout old = a.beginCard();
+        readout = a.text(tr("목소리 — → 악기 —", "Voice — → Instrument —"), 24, MainActivity.LIME);
+        readout.setGravity(Gravity.CENTER);
+        readout.setMinHeight(a.dp(100));
+        a.add(readout);
+        a.note(tr("입력 음 → 악기 출력 음", "Input note → instrument note"));
+        a.endCard(old);
+
+        a.add(a.button(tr("악기: ", "Instrument: ") + InstrumentCatalog.GM[v.program] + " ▾", () -> instrument(-1, true)));
+        a.add(a.button(tr("연주 방식: ", "Playing mode: ") + (v.mode == 0 ? tr("멜로디", "Melody") : tr("코드", "Chord")) + " ▾", () ->
+                choose(tr("목소리 연주", "Voice performance"), new String[]{
+                        tr("멜로디 · 한 음씩", "Melody · one note at a time"),
+                        tr("코드 · 부른 근음으로 연주", "Chord · sing the root")
+                }, v.mode, n -> edit(p -> p.voice.mode = n, false))));
+        a.add(a.button(tr("파트 ", "Part ") + s.part().label + " · " + s.part().bars + tr("마디 ▾", " bars ▾"), () -> {
+            String[] labels = new String[s.project.parts.size()];
+            for (int i = 0; i < labels.length; i++) labels[i] = s.project.parts.get(i).label;
+            choose(tr("기록할 파트", "Part to record"), labels, s.selectedPart, n -> {
+                if (!s.capturing) {
+                    clearSolo();
+                    s.selectedPart = n;
+                    refresh();
+                }
+            });
+        }));
+
+        voicePower = a.button(s.voiceOn ? tr("목소리 악기 끄기", "Turn voice instrument off") : tr("마이크로 연주 켜기", "Play with microphone"), () -> {
+            if (s.voiceOn) {
+                s.voice(false);
+                refresh();
+            } else if (s.ready) {
+                a.ensureMic(7);
+            } else {
+                a.toast(tr("음원을 준비하고 있습니다.", "Preparing sounds."));
+            }
+        });
+        ((StudioButton) voicePower).glyph("mic");
+        StudioTheme.selected(voicePower, s.voiceOn);
+        a.add(voicePower);
+
+        a.add(a.button(tr("보컬 화음 쌓기 ›", "Build vocal harmonies ›"), () -> a.chooseTab(9)));
+        a.add(a.button(tr("연주 세부 설정 ▾", "Performance settings ▾"), this::voiceSettings));
+        a.add(a.button(tr("작곡기로 돌아가기 ›", "Back to composer ›"), () -> a.chooseTab(7)));
+        a.note(tr("단선율 입력을 사용합니다. 스케일 맞춤과 원래 목소리 섞기는 기본 꺼짐입니다.", "Uses monophonic input. Scale snap and mixing the original voice are off by default."));
+        dock(true);
+        poll();
+    }
+
+    void voiceSettings() {
+        VoiceInstrumentSettings v = s.project.voice;
+        String[] opts = {
+                tr("반응: ", "Response: ") + (v.response == 0 ? tr("빠른 반응", "Fast") : tr("안정 우선", "Stable")),
+                tr("자동 음역: ", "Auto range: ") + (v.autoRange ? tr("켜짐", "On") : tr("꺼짐", "Off")),
+                tr("옥타브: ", "Octave: ") + v.octave,
+                tr("스케일 맞춤: ", "Scale snap: ") + (v.snap ? tr("켜짐", "On") : tr("꺼짐", "Off")),
+                tr("코드 종류: ", "Chord quality: ") + (v.quality < 0 ? tr("스케일 자동", "Auto from scale") : MusicTheory.QUALITIES[v.quality]),
+                tr("코드 발음: ", "Chord articulation: ") + (v.rhythm ? tr("현재 리듬", "Current rhythm") : tr("한 번 연주", "Play once")),
+                tr("원래 목소리 섞기: ", "Mix original voice: ") + (v.mixVoice ? tr("켜짐", "On") : tr("꺼짐", "Off")),
+                tr("양자화: ", "Quantize: ") + (v.quantize == 0 ? "OFF" : "1/" + v.quantize),
+                tr("입력 게이트 · 신뢰도", "Input gate & confidence")
+        };
+        choose(tr("연주 설정", "Performance settings"), opts, -1, k -> {
+            if (k == 0) edit(p -> v.response = 1 - v.response, false);
+            else if (k == 1) edit(p -> v.autoRange = !v.autoRange, false);
+            else if (k == 2) choose(tr("수동 옥타브", "Manual octave"), new String[]{"−3", "−2", "−1", "0", "+1", "+2", "+3"}, v.octave + 3, n -> edit(p -> v.octave = n - 3, false));
+            else if (k == 3) edit(p -> v.snap = !v.snap, false);
+            else if (k == 4) {
+                String[] q = new String[12];
+                q[0] = tr("스케일 자동", "Auto from scale");
+                System.arraycopy(MusicTheory.QUALITIES, 0, q, 1, 11);
+                q[1] = tr("메이저", "Major");
+                choose(tr("코드 종류", "Chord quality"), q, v.quality + 1, n -> edit(p -> v.quality = n - 1, false));
+            } else if (k == 5) edit(p -> v.rhythm = !v.rhythm, false);
+            else if (k == 6) edit(p -> v.mixVoice = !v.mixVoice, false);
+            else if (k == 7) choose(tr("기록 양자화", "Recording quantization"), new String[]{"OFF", "1/8", "1/16"}, v.quantize == 0 ? 0 : v.quantize == 8 ? 1 : 2, n -> edit(p -> v.quantize = new int[]{0, 8, 16}[n], false));
+            else choose(tr("입력 검출", "Input detection"), new String[]{
+                    tr("기본 · 신뢰도 0.85 / 게이트 0.007", "Default · confidence 0.85 / gate 0.007"),
+                    tr("작은 목소리 · 0.85 / 0.004", "Quiet voice · 0.85 / 0.004"),
+                    tr("잡음 억제 · 0.90 / 0.012", "Noise reduction · 0.90 / 0.012")
+            }, -1, n -> edit(p -> {
+                v.confidence = n == 2 ? .9f : .85f;
+                v.gate = n == 0 ? .007f : n == 1 ? .004f : .012f;
+            }, false));
+        });
+    }
+
+    void dock(boolean voice) {
+        a.actionDock.setVisibility(View.VISIBLE);
+        transportLabel = a.text("", 12, MainActivity.MUTED);
+        a.actionDock.addView(transportLabel);
+        LinearLayout row = a.row();
+        play = a.button(s.playing() ? tr("일시정지", "Pause") : tr("재생", "Play"), () -> {
+            if (s.playing()) s.pause();
+            else s.play();
+        });
+        ((StudioButton) play).glyph(s.playing() ? "pause" : "play");
+        StudioTheme.selected(play, true);
+        a.weighted(row, play, 48);
+        a.weighted(row, a.button(tr("■ 정지", "■ Stop"), s::stop), 48);
+        a.actionDock.addView(row);
+        if (voice) {
+            phrase = a.button(s.capturing ? tr("취소 · 이전 프레이즈 유지", "Cancel · keep previous phrase") : tr("프레이즈 기록", "Record phrase"), () -> {
+                s.recordPhrase();
+                refresh();
+            });
+            ((StudioButton) phrase).role(StudioButton.RECORD).glyph("record");
+            a.actionDock.addView(phrase, new LinearLayout.LayoutParams(-1, -2));
+        }
+        poll();
+    }
+
+    void poll() {
+        double[] st = s.state();
+        int active = s.playing() && st[0] >= st[3] && (int) st[2] == s.selectedPart
+                ? (int) ((st[0] - st[3]) / MusicTheory.barBeats(s.project.meter))
+                : -1;
+        if (active < 0 || active >= chordCards.size()) active = -1;
+        if (active != highlightedBar) {
+            for (int i = 0; i < chordCards.size(); i++) {
+                android.graphics.drawable.GradientDrawable bg = StudioTheme.background(a, StudioTheme.SURFACE, 14);
+                if (i == active) bg.setStroke(a.dp(2), MainActivity.LIME);
+                chordCards.get(i).setBackground(bg);
+            }
+            highlightedBar = active;
+        }
+        if (lcdStatus != null) {
+            ComposerProject.Part displayed = s.part();
+            int bar = 0, slot = 0;
+            int playingPart = (int) st[2];
+            if (s.playing() && playingPart >= 0 && playingPart < s.project.parts.size()) {
+                displayed = s.project.parts.get(playingPart);
+                double elapsed = Math.max(0, st[0] - st[3]);
+                double beats = MusicTheory.barBeats(s.project.meter);
+                bar = Math.min(displayed.bars - 1, (int) (elapsed / beats));
+                if (elapsed % beats >= MusicTheory.split(s.project.meter)) slot = 1;
+            }
+            String chord = "—";
+            if (bar >= 0 && bar < displayed.chords.size() && !displayed.chords.get(bar).isEmpty()) {
+                List<ComposerProject.Chord> chords = displayed.chords.get(bar);
+                chord = chordName(chords.get(Math.min(slot, chords.size() - 1)));
+            }
+            lcdStatus.setText(displayed.label + " · " + tr("마디 ", "Bar ") + (bar + 1) + " · " + chord
+                    + (s.playing() ? tr(" · 재생 중", " · Playing") : tr(" · 정지", " · Stopped")));
+        }
+        if (transportLabel != null) {
+            String status = s.capturing
+                    ? (st[8] == 1 ? tr("카운트인 / 다음 마디 대기", "Count-in / waiting for next bar") : tr("프레이즈 기록 중 · 파트 끝에서 저장", "Recording phrase · saves at end of part"))
+                    : st[0] < 0
+                    ? tr("1마디 카운트인", "One-bar count-in")
+                    : tr("마디 ", "Bar ") + (1 + (int) (Math.max(0, st[0]) / MusicTheory.barBeats(s.project.meter)))
+                            + " · " + s.project.bpm + " BPM" + (s.playing() ? tr(" · 재생 중", " · Playing") : "");
+            transportLabel.setText(status);
+        }
+        if (play != null) {
+            play.setText(s.playing() ? tr("일시정지", "Pause") : tr("재생", "Play"));
+            ((StudioButton) play).glyph(s.playing() ? "pause" : "play");
+        }
+        if (readout != null) {
+            readout.setText(tr("목소리 ", "Voice ") + (st[5] >= 0 ? MusicTheory.note((int) st[5]) : "—")
+                    + "\n→ " + InstrumentCatalog.GM[s.project.voice.program] + " " + (st[6] >= 0 ? MusicTheory.note((int) st[6]) : "—")
+                    + String.format(Locale.US, tr("\n입력 %.0f dB", "\nInput %.0f dB"), 20 * Math.log10(Math.max(.00001, st[7]))));
+        }
+    }
+
+    void instrument(int track, boolean voice) {
+        ComposerProject context = s.project;
+        int revision = s.revision;
+        String partId = s.part().id;
+        Dialog dialog = new Dialog(a);
+        LinearLayout panel = a.column();
+        panel.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
+        panel.setBackground(StudioTheme.background(a, MainActivity.PANEL, 20));
+        EditText search = new EditText(a);
+        search.setTextColor(MainActivity.TEXT);
+        search.setHintTextColor(MainActivity.MUTED);
+        search.setHint(tr("악기 · 카테고리 검색", "Search instruments or categories"));
+        search.setSingleLine();
+        search.setTypeface(StudioTheme.body(a));
+        search.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        search.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
+        panel.addView(search);
+        final int[] category = {0};
+        List<String> cats = new ArrayList<>(Arrays.asList(tr("대표 24음색", "Featured 24"), tr("전체 GM 128", "All GM 128"), tr("즐겨찾기", "Favorites")));
+        cats.addAll(Arrays.asList(InstrumentCatalog.categories(a)));
+        if (!voice) cats.add(tr("드럼 키트", "Drum kits"));
+        Button categoryButton = a.button(tr("카테고리: ", "Category: ") + cats.get(0) + " ▾", () ->
+                choose(tr("악기 카테고리", "Instrument category"), cats.toArray(new String[0]), category[0], n -> category[0] = n));
+        panel.addView(categoryButton);
+        ScrollView scroll = new ScrollView(a);
+        LinearLayout list = a.column();
+        scroll.addView(list);
+        panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        panel.addView(a.button(tr("닫기", "Close"), dialog::dismiss));
+        Set<String> favorites = new HashSet<>(a.getPreferences(0).getStringSet("gmFavorites", Collections.emptySet()));
+        Runnable fill = () -> {
+            list.removeAllViews();
+            String query = search.getText().toString().toLowerCase(Locale.ROOT);
+            int cat = category[0];
+            if (!voice && cat == cats.size() - 1) {
+                String[] kits = NativeComposer.drumKits();
+                for (String kit : kits) {
+                    int program = Integer.parseInt(kit.split(" · ")[0]);
+                    list.addView(a.button(kit, () -> {
+                        if (current(context, revision, partId)) selectInstrument(track, false, program, 128);
+                        else stale();
+                        dialog.dismiss();
+                    }));
+                }
+                return;
+            }
+            for (int n = 0; n < 128; n++) {
+                int program = n;
+                if (voice && n >= 112) continue;
+                boolean featured = false;
+                for (int f : InstrumentCatalog.FEATURED) if (f == n) featured = true;
+                if (query.isEmpty() && ((cat == 0 && !featured) || (cat == 2 && !favorites.contains("" + n)) || (cat >= 3 && cat - 3 != n / 8))) continue;
+                String label = InstrumentCatalog.GM[n], family = InstrumentCatalog.categories(a)[n / 8];
+                if (!query.isEmpty() && !(label + " " + family).toLowerCase(Locale.ROOT).contains(query)) continue;
+                Button item = a.button((favorites.contains("" + n) ? "★ " : "") + label + " · " + family, () -> {
+                    if (current(context, revision, partId)) selectInstrument(track, voice, program, 0);
+                    else stale();
+                    dialog.dismiss();
+                });
+                item.setOnLongClickListener(view -> {
+                    String id = "" + program;
+                    if (!favorites.add(id)) favorites.remove(id);
+                    a.getPreferences(0).edit().putStringSet("gmFavorites", favorites).apply();
+                    item.setText((favorites.contains(id) ? "★ " : "") + label + " · " + family);
+                    return true;
+                });
+                list.addView(item, new LinearLayout.LayoutParams(-1, -2));
+            }
+        };
+        categoryButton.setOnClickListener(v -> choose(tr("악기 카테고리", "Instrument category"), cats.toArray(new String[0]), category[0], n -> {
+            category[0] = n;
+            categoryButton.setText(tr("카테고리: ", "Category: ") + cats.get(n) + " ▾");
+            fill.run();
+        }));
+        search.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                fill.run();
+            }
+            public void afterTextChanged(Editable e) {}
+        });
+        fill.run();
+        dialog.setContentView(panel);
+        dialog.show();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        dialog.getWindow().setLayout(Math.min(a.root.getWidth(), a.dp(520)), Math.max(a.dp(250), (int) (a.root.getHeight() * .82f)));
+    }
+
+    void selectInstrument(int index, boolean voice, int program, int bank) {
+        edit(p -> {
+            if (voice) {
+                p.voice.program = program;
+                p.voice.autoRange = program / 8 == 4;
+            } else if (index < 0) {
+                TrackConfig t = new TrackConfig(bank == 128 ? tr("드럼", "Drums") : InstrumentCatalog.GM[program], program, false);
+                t.bank = bank;
+                p.addTrack(t);
+            } else {
+                TrackConfig t = s.part().tracks.get(index);
+                t.program = program;
+                t.bank = bank;
+                t.pattern = 0;
+            }
+        }, index < 0 && !voice);
+    }
+
+    void input(String title, String value, Consumer<String> action) {
+        EditText field = new EditText(a);
+        field.setText(value);
+        field.setSingleLine();
+        field.setTextColor(MainActivity.TEXT);
+        field.setHintTextColor(MainActivity.MUTED);
+        field.setTypeface(StudioTheme.body(a));
+        field.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        field.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
+        field.setSelectAllOnFocus(true);
+        form(title, field, tr("저장", "Save"), () -> {
+            String name = field.getText().toString().trim();
+            if (!name.isEmpty()) action.accept(name);
+        }, null);
+    }
+
+    void projects() {
+        a.add(a.title(tr("내 반주", "Saved projects")));
+        a.add(a.button(tr("＋ 새 프로젝트", "＋ New project"), () -> {
+            s.open(newProject());
+            a.chooseTab(7);
+        }));
+        for (ComposerProject p : s.store.list()) {
+            a.add(a.button(p.name + "\n" + MusicTheory.ROOTS[p.key] + " · " + p.bpm + " BPM · " + p.totalBars() + tr("마디", " bars"), () -> {
+                s.open(p);
+                a.chooseTab(7);
+            }));
+            a.add(a.button(tr("프로젝트 ⋯", "Project ⋯"), () ->
+                    choose(p.name, new String[]{tr("이름 변경", "Rename"), tr("복제", "Duplicate"), tr("삭제", "Delete")}, -1, k -> {
+                        if (k == 0) {
+                            input(tr("이름 변경", "Rename"), p.name, name -> {
+                                p.name = name;
+                                saveProject(p);
+                            });
+                        } else if (k == 1) {
+                            p.id = UUID.randomUUID().toString();
+                            p.name += tr(" 복제", " copy");
+                            saveProject(p);
+                        } else {
+                            StudioDialogs.confirmDanger(a, tr("반주 삭제", "Delete backing"), p.name + tr(" 프로젝트를 삭제할까요?", " · Delete this project?"), tr("삭제", "Delete"), () ->
+                                    s.worker.execute(() -> {
+                                        s.store.delete(p.id);
+                                        a.runOnUiThread(this::refresh);
+                                    }));
+                        }
+                    })));
+        }
+    }
+
+    void saveProject(ComposerProject p) {
+        s.worker.execute(() -> {
+            try {
+                s.store.write(p, false);
+                a.runOnUiThread(this::refresh);
+            } catch (Exception e) {
+                a.runOnUiThread(() -> a.toast(e.getMessage()));
+            }
+        });
+    }
 }

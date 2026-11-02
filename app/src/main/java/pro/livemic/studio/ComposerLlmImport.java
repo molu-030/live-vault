@@ -10,7 +10,7 @@ final class ComposerLlmImport {
     static final class Invalid extends Exception {Invalid(String path){super(path);}}
     private static void fail(String p)throws Invalid{throw new Invalid(p);}
     private static void keys(JSONObject o,String path,String... allowed)throws Invalid{Set<String> names=new HashSet<>(Arrays.asList(allowed));Iterator<String> it=o.keys();while(it.hasNext()){String key=it.next();if(!names.contains(key))fail(path+"."+key+" unknown");}}
-    private static void seed(JSONObject o)throws Exception{Object value=o.get("seed");if(!(value instanceof Number))fail("project.seed");try{new java.math.BigDecimal(value.toString()).toBigIntegerExact().longValueExact();}catch(ArithmeticException|NumberFormatException e){fail("project.seed");}}
+    private static void seed(JSONObject o)throws Exception{Object value=o.get("seed");if(!(value instanceof Number))fail("project.seed");try{new java.math.BigDecimal(value.toString()).longValueExact();}catch(ArithmeticException|NumberFormatException e){fail("project.seed");}}
     private static JSONObject obj(JSONObject o,String k,String p)throws Exception{Object x=o.get(k);if(!(x instanceof JSONObject))fail(p+"."+k);return (JSONObject)x;}
     private static JSONArray arr(JSONObject o,String k,String p,int min,int max)throws Exception{Object x=o.get(k);if(!(x instanceof JSONArray))fail(p+"."+k);JSONArray a=(JSONArray)x;if(a.length()<min||a.length()>max)fail(p+"."+k);return a;}
     private static String str(JSONObject o,String k,String p)throws Exception{Object x=o.get(k);if(!(x instanceof String)||((String)x).isEmpty())fail(p+"."+k);return (String)x;}
