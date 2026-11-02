@@ -627,6 +627,7 @@ public class MainActivity extends Activity {
         // Hamburger Menu with Live, Backing, Composer, Library, and Studio Tools
         String[] names = {
                 tr("라이브", "Live"),
+                tr("반주", "Backing"),
                 tr("작곡기", "Composer"),
                 tr("보관함", "Library"),
                 tr("오디오 설정", "Audio settings"),
@@ -637,6 +638,7 @@ public class MainActivity extends Activity {
         };
         String[] subtitles = {
                 tr("보컬 효과 · 실시간 모니터링 · 녹음", "Vocal FX · live monitoring · recording"),
+                tr("내 파일 · 작곡기 · 온라인", "My files · Composer · Online"),
                 tr("코드 진행 · AI 반주 제작", "Chord progression · AI backing"),
                 tr("녹음 테이크 · 내 반주 프로젝트", "Recorded takes · saved projects"),
                 tr("출력 · 레이턴시 · 상세 효과", "Output · latency · effects"),
@@ -645,20 +647,21 @@ public class MainActivity extends Activity {
                 tr("목소리 화음과 루프", "Vocal harmonies and loops"),
                 tr("사용 방법 · 앱 정보", "Guide · about")
         };
-        String[] glyphs = {"mic", "piano", "folder", "settings", "record", "piano", "music", "help"};
+        String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help"};
 
         for (int i = 0; i < names.length; i++) {
             final int k = i;
             LinearLayout item = row();
             item.setPadding(dp(8), dp(11), dp(8), dp(11));
             boolean currentItem = (k == 0 && tab == 0)
-                    || (k == 1 && (tab == 7 || tab == 8))
-                    || (k == 2 && tab == 4)
-                    || (k == 3 && tab == 6)
-                    || (k == 5 && tab == 5)
-                    || (k == 6 && tab == 9);
+                    || (k == 1 && tab == 1)
+                    || (k == 2 && (tab == 7 || tab == 8))
+                    || (k == 3 && tab == 4)
+                    || (k == 4 && tab == 6)
+                    || (k == 6 && tab == 5)
+                    || (k == 7 && tab == 9);
             ImageView icon = new ImageView(this);
-            icon.setImageDrawable(new StudioGlyph(glyphs[i], currentItem ? LIME : (i == 5 ? RED : 0xffbcc5d4)));
+            icon.setImageDrawable(new StudioGlyph(glyphs[i], currentItem ? LIME : (i == 6 ? RED : 0xffbcc5d4)));
             item.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
             LinearLayout copy = column();
@@ -679,12 +682,13 @@ public class MainActivity extends Activity {
             item.setOnClickListener(v -> {
                 popup.dismiss();
                 if (k == 0) chooseTab(0);
-                else if (k == 1) chooseTab(7);
-                else if (k == 2) chooseTab(4);
-                else if (k == 3) chooseTab(6);
-                else if (k == 4) recordingOptions();
-                else if (k == 5) chooseTab(5);
-                else if (k == 6) chooseTab(9);
+                else if (k == 1) chooseBacking();
+                else if (k == 2) chooseTab(7);
+                else if (k == 3) chooseTab(4);
+                else if (k == 4) chooseTab(6);
+                else if (k == 5) recordingOptions();
+                else if (k == 6) chooseTab(5);
+                else if (k == 7) chooseTab(9);
                 else {
                     AlertDialog dialog = StudioDialogs.darkAlert(this)
                             .setTitle("Live Vault")
@@ -1441,6 +1445,15 @@ public class MainActivity extends Activity {
         getPreferences(0).edit().putInt("preset", p).apply();
         showTab();
         toast(tr("프리셋을 적용했습니다.", "Preset applied."));
+    }
+
+    void chooseBacking() {
+        if (settingsLocked()) {
+            toast(tr("녹음 또는 예약을 마친 뒤 반주를 선택하세요.", "Finish recording or the countdown before choosing backing."));
+            return;
+        }
+        if (sourceTab < 0 || sourceTab > 2) sourceTab = 1;
+        chooseTab(1);
     }
 
     void backing() {

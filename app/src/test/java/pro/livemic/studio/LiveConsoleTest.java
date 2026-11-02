@@ -564,12 +564,11 @@ public class LiveConsoleTest {
         brand.performClick();
         assertEquals(0, a.tab);
 
-        // 3. Drawer does not contain "Backing" or "Mute output"
+        // 3. Drawer exposes Backing through its clickable row, not a Button.
         a.drawer();
         assertNotNull(a.drawerPopup);
         View drawer = a.drawerPopup.getContentView();
-        assertNull(StudioScreenshotTest.findButtonContaining(drawer, "Backing"));
-        assertNull(StudioScreenshotTest.findButtonContaining(drawer, "반주"));
+        assertNotNull(StudioScreenshotTest.findDescription(drawer, "Backing,"));
         assertNull(StudioScreenshotTest.findButtonContaining(drawer, "Mute output"));
         assertNull(StudioScreenshotTest.findButtonContaining(drawer, "출력 끄기"));
         a.drawerPopup.dismiss();

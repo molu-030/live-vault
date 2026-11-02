@@ -264,10 +264,13 @@ final class LiveScreen {
         backingTime.setTypeface(StudioTheme.mono(a));
         track.addView(backing);
         track.addView(backingTime);
-        track.setOnClickListener(v -> toggleBackingPlay());
+        track.setOnClickListener(v -> a.chooseBacking());
         track.setFocusable(true);
-        track.setContentDescription(tr("반주 재생 / 일시정지", "Accompaniment play / pause"));
+        track.setContentDescription(tr("반주 선택 또는 변경", "Choose or change backing"));
         player.addView(track, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+
+        Button chooseBacking = button(tr("반주 선택 ▾", "Choose backing ▾"), a::chooseBacking);
+        if (!a.youtube.selected) player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
 
         if (!a.youtube.selected) accompaniment.addView(player);
         if (!a.youtube.selected) backingVolume = gain(accompaniment, tr("반주", "Backing"), 1, 100, volumeLabel);
@@ -289,10 +292,13 @@ final class LiveScreen {
             detailsButton = button(tr("상세 ▾", "Details ▾"), this::effectsDetails);
             detailsButton.setTextSize(10.5f);
             detailsButton.setPadding(a.dp(2), 0, a.dp(2), 0);
+            LinearLayout actions = a.column();
+            actions.addView(chooseBacking, new LinearLayout.LayoutParams(-1, a.dp(48)));
+            actions.addView(detailsButton, new LinearLayout.LayoutParams(-1, a.dp(48)));
             LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(a.dp(76), a.dp(96));
             dp.leftMargin = a.dp(6);
             dp.gravity = Gravity.CENTER_VERTICAL;
-            row.addView(detailsButton, dp);
+            row.addView(actions, dp);
             fx.addView(row);
         } else {
             LinearLayout fh = a.row();
@@ -405,6 +411,10 @@ final class LiveScreen {
         else if (s[16] > .5f) NativeAudio.playLocal(false);
         else if (AudioService.composerRequested) a.composer.play();
         else if (!a.selectedFile.isEmpty()) a.ensureMic(4);
+        else {
+            a.chooseBacking();
+            return;
+        }
         poll(NativeAudio.stats(), AudioService.active);
     }
 
@@ -471,11 +481,11 @@ final class LiveScreen {
         boolean playing = a.composer.playing() || s[16] > .5f;
         if (composer) {
             double[] cs = a.composer.state();
-            backing.setText(a.composer.project.name);
+            backing.setText(a.composer.project.name + " ▾");
             backingTime.setText(tr("작곡기 · 마디 ", "Composer · bar ") + (1 + (int) (Math.max(0, cs[0]) / MusicTheory.barBeats(a.composer.project.meter))) + (!playing ? tr(" · 일시정지", " · paused") : ""));
         } else {
             double[] local = NativeAudio.localPlaybackInfo();
-            backing.setText(a.selectedFile.isEmpty() ? tr("반주 없음", "No backing") : a.selectedFile);
+            backing.setText(a.selectedFile.isEmpty() ? tr("반주 선택 ▾", "Choose backing ▾") : a.selectedFile + " ▾");
             backingTime.setText(a.formatTime(local[0]) + " / " + a.formatTime(local[1]));
         }
         if (a.youtube.selected) {
@@ -483,7 +493,7 @@ final class LiveScreen {
             backingTime.setText(tr("마이크만 녹음 · 동영상 제어 사용", "Mic-only recording · use video controls"));
             playing = false;
         }
-        backing.setContentDescription(backing.getText());
+        backing.setContentDescription(tr("반주 선택: ", "Choose backing: ") + backing.getText().toString().replace(" ▾", ""));
         backingPlayButton.setText(playing ? "Ⅱ" : "▶");
         backingPlayButton.setContentDescription(playing ? tr("반주 일시정지", "Pause accompaniment") : tr("반주 재생", "Play accompaniment"));
         paint(backingPlayButton, playing);

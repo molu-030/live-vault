@@ -29,13 +29,17 @@ public class YouTubeScreenshotTest {
     }
     static void mainEffectsVisible(MainActivity a) {
         android.graphics.Rect viewport=StudioScreenshotTest.bounds(a,a.pageScroll);
-        View[] controls={a.liveScreen.reverbVolume,a.liveScreen.echoVolume,a.liveScreen.detailsButton};
+        Button chooser=StudioScreenshotTest.findButtonContaining(a.page,AppLanguage.text(a,"반주 선택", "Choose backing"));
+        assertNotNull("Selected YouTube keeps a visible backing chooser",chooser);
+        View[] controls={a.liveScreen.reverbVolume,a.liveScreen.echoVolume,chooser,a.liveScreen.detailsButton};
         for(View control:controls) {
             assertNotNull(control);assertTrue("Main FX control is shown",control.isShown());
             android.graphics.Rect bounds=StudioScreenshotTest.bounds(a,control);
             assertTrue("Main FX touch target >=48: "+bounds,bounds.width()>=48&&bounds.height()>=48);
             assertTrue("Main FX fully inside viewport: "+bounds+" in "+viewport,viewport.contains(bounds));
         }
+        assertEquals("YouTube chooser target",a.dp(48),chooser.getHeight());
+        assertEquals("YouTube details target",a.dp(48),a.liveScreen.detailsButton.getHeight());
         for(TextView label:new TextView[]{a.liveScreen.reverbLabel,a.liveScreen.echoLabel}) {
             assertNotNull(label);assertTrue(label.getText().toString().contains("%"));
             assertTrue("Main FX amount visible",viewport.contains(StudioScreenshotTest.bounds(a,label)));
@@ -102,4 +106,37 @@ public class YouTubeScreenshotTest {
             }
         } finally { RuntimeEnvironment.setFontScale(1f);AppLanguage.set(RuntimeEnvironment.getApplication(),false);AudioService.youtubeSelected=false;RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.active=false;StudioScreenshotTest.Audio.supplied=null; }
     }
+    @Test public void restoredBackingEntryPointsAndSourcesNativePreview() throws Exception {
+        File out=new File(System.getProperty("user.dir"),"build/studio-screenshots");out.mkdirs();
+        try {
+            for(boolean english:new boolean[]{true,false}) {
+                int width=english?412:360,height=english?893:800;
+                RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");RuntimeEnvironment.setFontScale(english?1f:1.3f);
+                AppLanguage.set(RuntimeEnvironment.getApplication(),english);
+                RuntimeEnvironment.getApplication().getSharedPreferences("MainActivity",0).edit().clear().commit();
+                AudioService.active=false;AudioService.playbackActive=false;AudioService.youtubeSelected=false;RecordingManager.active=false;
+                StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};
+                MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
+                try {
+                    a.handler.removeCallbacks(a.tick);a.composer.worker.submit(()->{}).get();org.robolectric.shadows.ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
+                    a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),Insets.of(0,36,0,24)).build());
+                    String prefix="v383-backing-"+(english?"en-412-default":"ko-360-large");
+                    StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-live.png"),false);
+                    Button chooser=StudioScreenshotTest.findButtonContaining(a.page,english?"Choose backing":"반주 선택");assertNotNull(chooser);
+                    assertTrue(StudioScreenshotTest.bounds(a,a.pageScroll).contains(StudioScreenshotTest.bounds(a,chooser)));
+                    assertEquals(a.dp(48),chooser.getHeight());
+                    a.drawer();StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-drawer.png"),true);
+                    View row=StudioScreenshotTest.findDescription(a.drawerPopup.getContentView(),english?"Backing,":"반주,");assertNotNull(row);row.performClick();assertEquals(1,a.tab);
+                    if(english) {
+                        String[] labels={"My files","Composer","Online"};
+                        for(String label:labels) {
+                            Button source=StudioScreenshotTest.findButtonContaining(a.page,label);assertNotNull(source);source.performClick();
+                            StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-"+label.replace(' ','-')+".png"),false);
+                        }
+                    }
+                } finally {a.handler.removeCallbacks(a.tick);a.youtube.destroy();a.io.shutdown();}
+            }
+        } finally {RuntimeEnvironment.setFontScale(1f);AppLanguage.set(RuntimeEnvironment.getApplication(),false);}
+    }
+
 }
