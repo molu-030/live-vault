@@ -58,7 +58,8 @@ public:
     PlaybackMixer playback;
     FeedbackGuard feedback;
     int monitorMode = 0;
-    std::atomic<float> monitorLevel{1};
+    std::atomic<float> monitorLevel{.18f};
+    std::atomic<bool> monitorLevelChosen{false};
     Ring<32768> pitchRing;
     Ring<1048576> recordRing;
     std::thread analyzer, writer;
@@ -115,7 +116,12 @@ public:
         if (!preserve) playback.reset();
         params[11] = 0;
         monitorMode = mode;
-        monitorLevel = mode > 0 ? .18f : 1.f;
+        if (preserve) {
+            monitorLevel = std::min(monitorLevel.load(), .18f);
+        } else {
+            monitorLevel = .18f;
+            monitorLevelChosen = false;
+        }
         fault = 0;
         frequency = 0;
         if (!preserve) {
@@ -184,7 +190,7 @@ public:
                 std::min(AAudioStream_getBufferCapacityInFrames(output), AAudioStream_getFramesPerBurst(output) * requestedBursts.load())
         );
         dsp.init(sr);
-        feedback.init(sr, mode > 0);
+        feedback.init(sr, true, preserve);
         composer.sampleRate(sr);
         {
             std::lock_guard<std::mutex> lock(vocalControl);
@@ -261,7 +267,7 @@ public:
         inputChannels = ch;
         inputRate = rate;
         monitorMode = mode;
-        monitorLevel = mode > 0 ? .18f : 1.f;
+        if (!monitorLevelChosen) monitorLevel = feedback.isEnabled() ? .18f : 1.f;
         result = AAudioStream_requestStart(input);
         if (result != AAUDIO_OK) {
             AAudioStream_close(input);
@@ -528,7 +534,7 @@ public:
             uint64_t nowFrame = frames.load();
             if (filled == window.size() && nowFrame - lastAnalyzed >= uint64_t(sr / 50)) {
                 lastAnalyzed = nowFrame;
-                if (++feedbackTick % 5 == 0 && (params[11] > .5f || composer.enabled() || harmony.enabled()) && monitorLevel > 0) {
+                if (++feedbackTick % 5 == 0 && ((params[11] > .5f && vocalMonitor.load()) || (composer.enabled() && composer.monitoring())) && monitorLevel > 0) {
                     feedback.analyze(window.data(), window.size(), sr, double(nowFrame) / sr);
                 }
                 Pitch pitch = detectPitch(window.data(), window.size(), sr);
@@ -865,11 +871,26 @@ JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_pushPlayback(JNIEnv* 
 JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputSession(JNIEnv*, jclass) {
     return engine.input ? AAudioStream_getSessionId(engine.input) : 0;
 }
+JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_outputDevice(JNIEnv*, jclass) {
+    return engine.output ? AAudioStream_getDeviceId(engine.output) : 0;
+}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_feedbackProtection(JNIEnv*, jclass, jboolean risky) {
+    bool changed = engine.feedback.isEnabled() != bool(risky);
+    bool wasMuted = engine.feedback.muted();
+    if (risky && changed) engine.monitorLevel = std::min(engine.monitorLevel.load(), .18f);
+    engine.feedback.setEnabled(risky);
+    // Only restore the initial headphone default before a user has selected a
+    // level. Route changes must not override a chosen gain or a safety latch.
+    if (!risky && changed && !wasMuted && !engine.monitorLevelChosen.load()) engine.monitorLevel = 1.f;
+}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_monitorLevel(JNIEnv*, jclass, jfloat level) {
-    engine.monitorLevel = std::clamp(level, 0.f, engine.monitorMode > 0 ? .65f : 1.f);
+    if (!std::isfinite(level)) return;
+    engine.monitorLevelChosen = true;
+    engine.monitorLevel = std::clamp(level, 0.f, engine.feedback.isEnabled() ? .65f : 1.f);
 }
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_resetFeedback(JNIEnv*, jclass) {
-    engine.monitorLevel = engine.monitorMode > 0 ? .18f : 1.f;
+    engine.monitorLevel = engine.feedback.isEnabled() ? .18f : std::min(engine.monitorLevel.load(), .18f);
+    engine.monitorLevelChosen = true;
     engine.feedback.reset();
 }
 

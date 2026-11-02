@@ -70,7 +70,15 @@ public class AudioService extends Service {
 
     private final AudioDeviceCallback devices = new AudioDeviceCallback() {
         @Override
+        public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
+            AudioRouting.refreshFeedbackProtection(AudioService.this);
+        }
+
+        @Override
         public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) {
+            // Protect a possible fallback to the phone speaker immediately; the
+            // next pulse resolves the stream's actual replacement route.
+            NativeAudio.feedbackProtection(true);
             if (AudioRouting.selected(AudioService.this) == 0 && !hasWiredOutput(AudioService.this)) {
                 NativeAudio.set(11, 0);
                 NativeComposer.monitor(false);
@@ -96,6 +104,7 @@ public class AudioService extends Service {
     private final BroadcastReceiver noisy = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
+            NativeAudio.feedbackProtection(true);
             NativeAudio.set(11, 0);
             NativeComposer.monitor(false);
             NativeHarmony.monitor(false);
@@ -285,6 +294,7 @@ public class AudioService extends Service {
                     if (!NativeAudio.startPlayback(routing.output, routing.mode)) {
                         throw new IllegalStateException(AppLanguage.text(AudioService.this, "반주 출력 장치를 열지 못했습니다.", "Could not open the backing output device."));
                     }
+                    AudioRouting.refreshFeedbackProtection(this);
                 }
                 if (intent != null && intent.getBooleanExtra("playLocal", false)) {
                     NativeAudio.playLocal(true);
@@ -390,6 +400,7 @@ public class AudioService extends Service {
                 if (!NativeAudio.reroute(routing.input, routing.output, routing.mode, wasActive)) {
                     throw new IllegalStateException(AppLanguage.text(this, "선택한 오디오 장치를 열지 못했습니다.", "Could not open the selected audio device."));
                 }
+                AudioRouting.refreshFeedbackProtection(this);
                 syncEffects();
                 if (wasActive) {
                     routing.attachEffects();
@@ -414,6 +425,7 @@ public class AudioService extends Service {
                         NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts" + previous.mode, 2));
                         restored = NativeAudio.reroute(previous.input, previous.output, previous.mode, wasActive);
                         if (restored) {
+                            AudioRouting.refreshFeedbackProtection(this);
                             syncEffects();
                             if (wasActive) {
                                 previous.attachEffects();
@@ -642,6 +654,7 @@ public class AudioService extends Service {
         @Override
         public void run() {
             if (destroying) return;
+            if (active || playbackActive) AudioRouting.refreshFeedbackProtection(AudioService.this);
             composer.poll();
             harmony.poll();
             if (active || playbackActive) {

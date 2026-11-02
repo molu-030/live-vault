@@ -1,6 +1,6 @@
-# Live Vault 3.8.1 — Android native preview
+# Live Vault 3.8.2 — Android native preview
 
-**3.8.1-preview / versionCode 19**은 리버브 양과 에코 양을 YouTube 재생 화면에서도 메인에 표시하는 개인용 체크포인트입니다. 잔향 길이·에코 간격/반복·EQ 등은 상세에서 조절합니다. [3.8.1 변경과 검증](docs/LIVE_VAULT_V3_8_1_UI.md) · [3.8 명세](docs/LIVE_VAULT_V3_8_SPEC.md) · [3.8 검증](docs/LIVE_VAULT_V3_8_VALIDATION.md). 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
+**3.8.2-preview / versionCode 20**은 최신 `572f260`의 디자인·DSP·작곡기 변경을 유지하며 하울링 보호를 검수·보완한 개인용 체크포인트입니다. 실제 출력 장치에 따른 보호, 저음역 필터, 같은 주파수 재발 시 음소거, 낮은 출력으로 재시작과 장치 전환 시 보호 상태 유지를 보강했습니다. [검수와 검증 결과](docs/LIVE_VAULT_V3_8_2_FEEDBACK_REVIEW.md). 이전 [3.8.1 변경](docs/LIVE_VAULT_V3_8_1_UI.md)과 [3.8 검증](docs/LIVE_VAULT_V3_8_VALIDATION.md)은 이력으로 유지합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
 
 LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 소스/마이크/모니터 세 버튼, 마이크/반주/리버브/에코 네 슬라이더, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 입출력 장치와 반주 선택은 **소스 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
 
@@ -14,7 +14,7 @@ LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 �
 
 ## 미리보기 APK
 
-기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.8.1 변경과 검증](docs/LIVE_VAULT_V3_8_1_UI.md)을 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
+기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.8.2 검수 기록](docs/LIVE_VAULT_V3_8_2_FEEDBACK_REVIEW.md)을 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
 
 ## AI로 반주 수정하기
 

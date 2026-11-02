@@ -283,6 +283,35 @@ public class LiveConsoleTest {
     }
 
     @Test
+    public void safetyResetKeepsRecordingAndEffectGainsWhileRestoringMonitor() {
+        AudioService.active = true;
+        RecordingManager.active = true;
+        RecordingManager.micOnly = true;
+        float[] stats = new float[22];
+        stats[10] = 1;
+        stats[17] = 1;
+        StudioScreenshotTest.Audio.supplied = stats;
+        float[] before = a.values.clone();
+        StudioScreenshotTest.Audio.changes.clear();
+        StudioScreenshotTest.Composer.monitorCalls.clear();
+        int previousResets = StudioScreenshotTest.Audio.feedbackResets;
+        a.liveScreen.toggleMonitor();
+        assertEquals(previousResets + 1, StudioScreenshotTest.Audio.feedbackResets);
+        assertTrue(RecordingManager.active);
+        assertTrue(RecordingManager.micOnly);
+        assertTrue(AudioService.active);
+        assertFalse(StudioScreenshotTest.Composer.monitorCalls.isEmpty());
+        for (boolean enabled : StudioScreenshotTest.Composer.monitorCalls) assertTrue(enabled);
+        assertEquals(1, StudioScreenshotTest.Audio.changes.size());
+        assertEquals(11, StudioScreenshotTest.Audio.changes.get(0)[0], 0);
+        assertEquals(1, StudioScreenshotTest.Audio.changes.get(0)[1], 0);
+        for (int key = 0; key < before.length; key++) {
+            if (key != 11) assertEquals("effect parameter " + key, before[key], a.values[key], 0);
+        }
+        RecordingManager.micOnly = false;
+    }
+
+    @Test
     public void noiseReductionInDetailedEffectsUpdatesParameter() {
         a.chooseTab(6);
         Switch noise = findSwitch(a.page, "Noise reduction");

@@ -60,6 +60,31 @@ public final class AudioRouting implements AutoCloseable {
         return prefs(c).getInt("mode", 0);
     }
 
+    // A connected device is not necessarily the stream's current output. Only
+    // positively identified personal listening devices bypass feedback control.
+    static boolean feedbackRiskForType(int type) {
+        return type != AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+                && type != AudioDeviceInfo.TYPE_WIRED_HEADSET
+                && type != AudioDeviceInfo.TYPE_USB_HEADSET
+                && type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                && type != AudioDeviceInfo.TYPE_BLE_HEADSET
+                && type != AudioDeviceInfo.TYPE_HEARING_AID;
+    }
+
+    public static void refreshFeedbackProtection(Context c) {
+        int actual = NativeAudio.outputDevice();
+        boolean risky = true;
+        if (actual > 0) {
+            for (AudioDeviceInfo device : listOutputs(c)) {
+                if (device.getId() == actual) {
+                    risky = feedbackRiskForType(device.getType());
+                    break;
+                }
+            }
+        }
+        NativeAudio.feedbackProtection(risky);
+    }
+
     public static int selectedInput(Context c) {
         return prefs(c).getInt("inputDevice", 0);
     }
@@ -302,6 +327,7 @@ public final class AudioRouting implements AutoCloseable {
     }
 
     public void attachEffects() {
+        refreshFeedbackProtection(context);
         int session = NativeAudio.inputSession();
         if (session <= 0 && mode == 0) return;
         if (session > 0) {
@@ -326,9 +352,6 @@ public final class AudioRouting implements AutoCloseable {
                 }
             } catch (Exception ignored) {
             }
-        }
-        if (mode > 0) {
-            NativeAudio.monitorLevel(.18f);
         }
     }
 

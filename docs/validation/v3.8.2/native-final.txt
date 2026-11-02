@@ -1,0 +1,6 @@
+PASS: local seek bounds, invalid input, latest request and clearing
+PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail
+PASS: stereo Haas echo and delay modulation stability
+PASS: noise reduction suppresses quiet signal while preserving voiced signal
+PASS: silence stability, growing-tone suppression, overload mute and explicit reset
+PASS: captured stereo gain, underflow silence, disabled capture drain, fresh-session isolation

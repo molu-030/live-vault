@@ -13,6 +13,8 @@ public final class NativeAudio {
     public static native void guideTone(float frequency);
     public static native float[] pitchFrame();
     public static native int inputSession();
+    public static native int outputDevice();
+    public static native void feedbackProtection(boolean riskyOutput);
     public static native void monitorLevel(float level);
     public static native void resetFeedback();
     public static native void set(int key,float value);

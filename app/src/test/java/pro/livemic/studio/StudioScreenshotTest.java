@@ -45,6 +45,13 @@ public class StudioScreenshotTest {
   @Implementation protected static boolean bufferBursts(int n){burstCalls.add(n);return true;}
   @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
   @Implementation protected static int inputSession(){inputSessions++;return 0;}
+  static int actualOutputDevice,feedbackResets;
+  static final java.util.List<Boolean> feedbackProtectionCalls=new java.util.ArrayList<>();
+  static final java.util.List<Float> monitorLevelCalls=new java.util.ArrayList<>();
+  @Implementation protected static int outputDevice(){return actualOutputDevice;}
+  @Implementation protected static void feedbackProtection(boolean risky){feedbackProtectionCalls.add(risky);}
+  @Implementation protected static void monitorLevel(float level){monitorLevelCalls.add(level);}
+  @Implementation protected static void resetFeedback(){feedbackResets++;}
   @Implementation protected static void microphoneOff(){}
   static final java.util.List<Boolean> micOnlyCalls=new java.util.ArrayList<>();
   static final java.util.List<Integer> syncCalls=new java.util.ArrayList<>();
