@@ -31,7 +31,7 @@ public class YouTubePlayerTest {
         StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};
         a=Robolectric.buildActivity(MainActivity.class).setup().get(); a.handler.removeCallbacks(a.tick);
     }
-    @After public void cleanup() { a.handler.removeCallbacks(a.tick); a.io.shutdown(); AudioService.youtubeSelected=false; RecordingManager.active=false; RecordingManager.micOnly=false; StudioScreenshotTest.Audio.supplied=null; }
+    @After public void cleanup() { a.handler.removeCallbacks(a.tick); a.io.shutdown(); AudioService.youtubeSelected=false; RecordingManager.active=false; RecordingManager.micOnly=false; AudioService.active=false; StudioScreenshotTest.Audio.supplied=null; }
     @Test public void startupNeverLoadsYouTube() { assertTrue(OfflineWeb.pages.isEmpty()); }
     @Test public void rejectingConsentOrInvalidInputNeverCreatesPlayerOrLoadsNetwork() {
         a.selectYouTube("not a video"); assertNull(a.youtube.web); assertTrue(OfflineWeb.pages.isEmpty());
@@ -69,6 +69,32 @@ public class YouTubePlayerTest {
         OfflineWeb.scripts.clear();a.onWindowFocusChanged(true);
         for(String script:OfflineWeb.scripts)assertFalse(script.contains("playVideo"));
         assertEquals(1,OfflineWeb.pages.size());
+    }
+    @Test public void mainReverbAndEchoStayAdjustableDuringYouTubeMicrophoneOnlyRecording() {
+        a.getPreferences(0).edit().putBoolean("youtubeConsent",true).commit();a.selectYouTube("dQw4w9WgXcQ");
+        assertTrue(a.youtube.selected);AudioService.active=true;RecordingManager.active=true;RecordingManager.micOnly=true;
+        float mic=a.values[0],backing=a.values[1],monitor=a.values[11],local=a.values[13];
+        android.media.AudioManager manager=(android.media.AudioManager)a.getSystemService(android.content.Context.AUDIO_SERVICE);
+        int music=manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC),voice=manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL);
+        android.widget.SeekBar[] sliders={a.liveScreen.reverbVolume,a.liveScreen.echoVolume};int[] keys={2,4};
+        android.widget.TextView[] labels={a.liveScreen.reverbLabel,a.liveScreen.echoLabel};
+        assertEquals("All four main gains remain available",4,LiveConsoleTest.countSliders(a.page));
+        for(int i=0;i<keys.length;i++) {
+            assertNotNull(sliders[i]);assertNotNull(labels[i]);assertTrue(sliders[i].isEnabled());
+            StudioScreenshotTest.Audio.changes.clear();OfflineWeb.scripts.clear();
+            LiveConsoleTest.adjust(sliders[i],35);assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
+            for(float[] change:StudioScreenshotTest.Audio.changes)assertEquals(keys[i],(int)change[0]);
+            assertEquals(a.values[keys[i]],a.getPreferences(0).getFloat("p"+keys[i],-1),.001);
+            assertTrue(labels[i].getText().toString().contains(Math.round(a.values[keys[i]]*100)+"%"));
+            assertTrue("FX amount never changes YouTube gain or transport",OfflineWeb.scripts.isEmpty());
+            assertTrue(RecordingManager.active);assertTrue(RecordingManager.micOnly);assertTrue(AudioService.active);assertTrue(a.youtube.selected);
+        }
+        StudioScreenshotTest.Audio.changes.clear();a.liveScreen.sync();assertTrue(StudioScreenshotTest.Audio.changes.isEmpty());
+        assertEquals(mic,a.values[0],0);assertEquals(backing,a.values[1],0);assertEquals(monitor,a.values[11],0);assertEquals(local,a.values[13],0);
+        assertEquals(music,manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC));assertEquals(voice,manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL));
+        float reverb=a.values[2],echo=a.values[4];a.chooseTab(4);a.chooseTab(0);
+        assertEquals(Math.round(reverb*100),a.liveScreen.reverbVolume.getProgress());assertEquals(Math.round(echo*100),a.liveScreen.echoVolume.getProgress());
+        assertTrue(RecordingManager.active);assertTrue(RecordingManager.micOnly);
     }
     @Test public void youtubeRecordingUsesMicOnlyAndNativeSourcesKeepNormalMixAndSync() {
         StudioScreenshotTest.Audio.supplied=new float[22];StudioScreenshotTest.Audio.supplied[10]=1;

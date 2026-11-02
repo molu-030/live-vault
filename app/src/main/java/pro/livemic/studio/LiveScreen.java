@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -56,6 +57,11 @@ final class LiveScreen {
         TextView name=text(label,12,StudioTheme.MUTED);name.setMaxLines(1);name.setGravity(Gravity.CENTER_VERTICAL);
         row.addView(name,new LinearLayout.LayoutParams(a.dp(64),a.dp(48)));
         value.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);value.setTypeface(StudioTheme.mono(a));
+        SeekBar bar=gainBar(label,key,max,value);
+        row.addView(bar,new LinearLayout.LayoutParams(0,a.dp(48),1));
+        row.addView(value,new LinearLayout.LayoutParams(a.dp(44),a.dp(48))); parent.addView(row); return bar;
+    }
+    SeekBar gainBar(String label,int key,int max,TextView value) {
         SeekBar bar=new SeekBar(a); bar.setMax(max); bar.setProgress(Math.round(a.values[key]*100));
         bar.setContentDescription(label); bar.setMinimumHeight(a.dp(48));
         bar.setProgressTintList(ColorStateList.valueOf(StudioTheme.ACCENT));
@@ -67,8 +73,23 @@ final class LiveScreen {
             public void onStopTrackingTouch(SeekBar b) { dragging[key]=false;if(key==0)micVolumeDragging=false;if(key==1)volumeDragging=false; }
             public void onProgressChanged(SeekBar b,int v,boolean user) { if(user) { a.set(key,v/100f);value.setText(v+"%"); } }
         });
-        row.addView(bar,new LinearLayout.LayoutParams(0,a.dp(48),1));
-        row.addView(value,new LinearLayout.LayoutParams(a.dp(44),a.dp(48))); parent.addView(row); return bar;
+        return bar;
+    }
+    SeekBar compactGain(LinearLayout parent,String label,int key,int max,TextView value) {
+        FrameLayout control=new FrameLayout(a);
+        SeekBar bar=gainBar(label,key,max,value);
+        // Keep the native 48dp touch target; captions sit above the track at 32dp.
+        FrameLayout.LayoutParams slider=new FrameLayout.LayoutParams(-1,a.dp(48));slider.topMargin=a.dp(8);
+        control.addView(bar,slider);
+        LinearLayout caption=a.row();
+        TextView name=text(label,11,StudioTheme.MUTED);name.setMaxLines(1);name.setGravity(Gravity.CENTER_VERTICAL);
+        caption.addView(name,new LinearLayout.LayoutParams(0,-1,1));
+        value.setTextSize(11);value.setTypeface(StudioTheme.mono(a));value.setMaxLines(1);value.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        caption.addView(value,new LinearLayout.LayoutParams(a.dp(40),-1));
+        control.addView(caption,new FrameLayout.LayoutParams(-1,a.dp(22)));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,a.dp(56),1);
+        if(parent.getChildCount()>0)lp.leftMargin=a.dp(12);
+        parent.addView(control,lp);return bar;
     }
     void draw() {
         LinearLayout session=panel();
@@ -87,7 +108,12 @@ final class LiveScreen {
         // Kept for routing accessibility; main has exactly three controls.
         a.outputButton=null;
         route=text("",10,StudioTheme.MUTED); route.setVisibility(View.GONE);
-        micVolumeLabel=text("",11,StudioTheme.MUTED);micVolume=gain(session,tr("마이크","Mic"),0,200,micVolumeLabel);
+        micVolumeLabel=text("",11,StudioTheme.MUTED);volumeLabel=text("",11,StudioTheme.MUTED);
+        if(a.youtube.selected) {
+            LinearLayout gains=a.row();
+            micVolume=compactGain(gains,tr("마이크","Mic"),0,200,micVolumeLabel);
+            backingVolume=compactGain(gains,tr("반주","Backing"),1,100,volumeLabel);session.addView(gains);
+        } else micVolume=gain(session,tr("마이크","Mic"),0,200,micVolumeLabel);
         a.page.addView(session,new LinearLayout.LayoutParams(-1,-2));
 
         LinearLayout accompaniment=panel();
@@ -99,15 +125,25 @@ final class LiveScreen {
         backingTime=text("00:00 / 00:00",10,StudioTheme.OLIVE);backingTime.setTypeface(StudioTheme.mono(a));track.addView(backing);track.addView(backingTime);
         track.setOnClickListener(v->playbackSources());track.setFocusable(true);track.setContentDescription(tr("반주 소스 선택","Choose accompaniment source"));
         player.addView(track,new LinearLayout.LayoutParams(0,a.dp(48),1)); if(!a.youtube.selected) accompaniment.addView(player);
-        volumeLabel=text("",11,StudioTheme.MUTED);backingVolume=gain(accompaniment,tr("반주","Backing"),1,100,volumeLabel);
+        if(!a.youtube.selected)backingVolume=gain(accompaniment,tr("반주","Backing"),1,100,volumeLabel);
         if(a.youtube.selected) a.youtube.attach(accompaniment);
         addPanel(accompaniment);
 
         LinearLayout fx=panel();LinearLayout fh=a.row();
-        fh.addView(heading(tr("보컬 효과","VOCAL FX")),new LinearLayout.LayoutParams(0,a.dp(48),1));
-        detailsButton=button(tr("상세 ▾","Details ▾"),this::effectsDetails);fh.addView(detailsButton,new LinearLayout.LayoutParams(a.dp(90),a.dp(48)));fx.addView(fh);
-        reverbLabel=text("",11,StudioTheme.MUTED);if(!a.youtube.selected)reverbVolume=gain(fx,tr("리버브","Reverb"),2,100,reverbLabel);
-        echoLabel=text("",11,StudioTheme.MUTED);if(!a.youtube.selected)echoVolume=gain(fx,tr("에코","Echo"),4,80,echoLabel);addPanel(fx);
+        reverbLabel=text("",11,StudioTheme.MUTED);echoLabel=text("",11,StudioTheme.MUTED);
+        if(a.youtube.selected) {
+            reverbVolume=compactGain(fh,tr("리버브","Reverb"),2,100,reverbLabel);
+            echoVolume=compactGain(fh,tr("에코","Echo"),4,80,echoLabel);
+            detailsButton=button(tr("상세","Details"),this::effectsDetails);detailsButton.setTextSize(11);
+            LinearLayout.LayoutParams dp=new LinearLayout.LayoutParams(a.dp(64),a.dp(48));dp.leftMargin=a.dp(6);dp.gravity=Gravity.CENTER_VERTICAL;
+            fh.addView(detailsButton,dp);fx.addView(fh);
+        } else {
+            fh.addView(heading(tr("보컬 효과","VOCAL FX")),new LinearLayout.LayoutParams(0,a.dp(48),1));
+            detailsButton=button(tr("상세 ▾","Details ▾"),this::effectsDetails);fh.addView(detailsButton,new LinearLayout.LayoutParams(a.dp(90),a.dp(48)));fx.addView(fh);
+            reverbVolume=gain(fx,tr("리버브","Reverb"),2,100,reverbLabel);
+            echoVolume=gain(fx,tr("에코","Echo"),4,80,echoLabel);
+        }
+        addPanel(fx);
 
         LinearLayout dock=a.row();a.recButton=button(tr("● 녹음 시작","● Record"),a::toggleRecord);dock.addView(a.recButton,new LinearLayout.LayoutParams(0,a.dp(52),1));
         video=button(tr("영상","Video"),()->a.chooseTab(3));LinearLayout.LayoutParams vp=new LinearLayout.LayoutParams(a.dp(90),a.dp(52));vp.leftMargin=a.dp(8);dock.addView(video,vp);a.actionDock.addView(dock);
@@ -145,9 +181,7 @@ final class LiveScreen {
         LinearLayout previous=a.content;a.content=p;
         Button preset=button(tr("프리셋 · ","Preset · ")+a.presetName()+" ▾",()->{});
         p.addView(preset);
-        a.slider(tr("리버브 양","Reverb amount"),2,0,1,v->Math.round(v*100)+"%");
         a.slider(tr("리버브 잔향","Reverb decay"),3,.3f,6,v->String.format(Locale.US,"%.1f s",v));
-        a.slider(tr("에코 양","Echo amount"),4,0,.8f,v->Math.round(v*100)+"%");
         a.slider(tr("에코 간격","Echo delay"),5,70,700,v->Math.round(v)+" ms");
         a.slider(tr("에코 반복","Echo feedback"),6,0,.7f,v->Math.round(v*100)+"%");
         for(int key=7;key<=9;key++)a.slider(new String[]{"Low EQ","Mid EQ","High EQ"}[key-7],key,-12,12,v->Math.round(v)+" dB");

@@ -317,7 +317,11 @@ public class LiveConsoleTest {
         android.app.Dialog dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
         assertNotNull(dialog);
         View content = dialog.getWindow().getDecorView();
-        assertTrue("Advanced effect controls remain available", countSliders(content) >= 5);
+        assertEquals("Details keep decay, delay, feedback and three EQ bands", 6, countSliders(content));
+        assertNull("Reverb amount remains on main", StudioScreenshotTest.findDescription(content, "Reverb amount"));
+        assertNull("Echo amount remains on main", StudioScreenshotTest.findDescription(content, "Echo amount"));
+        for (String name : new String[]{"Echo delay", "Echo feedback", "Low EQ", "Mid EQ", "High EQ"})
+            assertNotNull("Advanced effect retained: " + name, StudioScreenshotTest.findDescription(content, name));
         View decay = StudioScreenshotTest.findDescription(content, "Reverb decay");
         assertNotNull(decay);
         Bundle value = new Bundle();
