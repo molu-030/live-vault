@@ -18,6 +18,9 @@ import java.util.function.IntConsumer;
 
 /** Shared, scrollable option sheet for app-owned choices. System pickers remain native. */
 final class StudioDialogs {
+    private static final int POPUP_BG = 0xff0d0f12;
+    private static final int POPUP_BORDER = 0xff353b44;
+    private static final float POPUP_DIM = .82f;
     private StudioDialogs() {}
 
     static void choose(Activity activity, String title, String[] items, int selected, IntConsumer onChoose) {
@@ -27,7 +30,7 @@ final class StudioDialogs {
         LinearLayout sheet = new LinearLayout(activity);
         sheet.setOrientation(LinearLayout.VERTICAL);
         sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
-        sheet.setBackground(StudioTheme.background(activity, StudioTheme.SURFACE, 18, StudioTheme.BORDER));
+        sheet.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
 
         TextView handle = StudioTheme.text(activity, "━━━━", 16, StudioTheme.MUTED);
         handle.setGravity(Gravity.CENTER);
@@ -90,7 +93,7 @@ final class StudioDialogs {
             window.setGravity(Gravity.BOTTOM);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams params = window.getAttributes();
-            params.dimAmount = .72f;
+            params.dimAmount = POPUP_DIM;
             window.setAttributes(params);
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
@@ -108,7 +111,7 @@ final class StudioDialogs {
         sheet.setOrientation(LinearLayout.VERTICAL);
         int pad = StudioTheme.dp(activity, 20);
         sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
-        sheet.setBackground(StudioTheme.background(activity, StudioTheme.SURFACE, 18, StudioTheme.BORDER));
+        sheet.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
         TextView handle = StudioTheme.text(activity, "━━━━", 16, StudioTheme.MUTED);
         handle.setGravity(Gravity.CENTER);
         sheet.addView(handle, new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
@@ -139,7 +142,7 @@ final class StudioDialogs {
             window.setGravity(Gravity.BOTTOM);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams params = window.getAttributes();
-            params.dimAmount = .72f;
+            params.dimAmount = POPUP_DIM;
             window.setAttributes(params);
         }
         dialog.show();
@@ -155,14 +158,46 @@ final class StudioDialogs {
         return scroll;
     }
 
+    static AlertDialog.Builder darkAlert(Activity activity) {
+        return new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+    }
+
+    static AlertDialog showDark(Activity activity, AlertDialog dialog) {
+        dialog.show();
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
+            View content = window.getDecorView().findViewById(android.R.id.content);
+            if (content != null) {
+                content.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
+            }
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.dimAmount = POPUP_DIM;
+            window.setAttributes(params);
+        }
+        android.widget.Button pos = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (pos != null) pos.setTextColor(StudioTheme.ACCENT);
+        android.widget.Button neg = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        if (neg != null) neg.setTextColor(StudioTheme.TEXT);
+        android.widget.Button neu = dialog.getButton(AlertDialog.BUTTON_NEUTRAL);
+        if (neu != null) neu.setTextColor(StudioTheme.MUTED);
+        return dialog;
+    }
+
     static void confirmDanger(Activity activity, String title, String message, String action, Runnable confirmed) {
-        AlertDialog dialog = new AlertDialog.Builder(activity)
+        AlertDialog dialog = darkAlert(activity)
                 .setTitle(title)
                 .setMessage(message)
                 .setNegativeButton(AppLanguage.text(activity, "취소", "Cancel"), null)
                 .setPositiveButton(action, (d, w) -> confirmed.run())
                 .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(StudioTheme.DANGER));
-        dialog.show();
+        dialog.setOnShowListener(ignored -> {
+            android.widget.Button pos = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (pos != null) pos.setTextColor(StudioTheme.DANGER);
+        });
+        showDark(activity, dialog);
+        android.widget.Button pos = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (pos != null) pos.setTextColor(StudioTheme.DANGER);
     }
 }

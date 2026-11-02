@@ -88,7 +88,12 @@ public class LiveConsoleScreenshotTest {
                 assertEquals(rec,StudioScreenshotTest.bounds(a,a.recButton));
                 checkControls(a,a.page);
                 checkControls(a,a.transport);
-                assertEquals(3, ((ViewGroup)a.liveScreen.sourceButton.getParent()).getChildCount());
+                ViewGroup micRow = (ViewGroup) a.liveScreen.micButton.getParent();
+                ViewGroup inputRow = (ViewGroup) a.liveScreen.inputButton.getParent();
+                assertEquals(2, micRow.getChildCount());
+                assertEquals(2, inputRow.getChildCount());
+                assertTrue(StudioScreenshotTest.bounds(a, a.liveScreen.micButton).top < StudioScreenshotTest.bounds(a, a.liveScreen.inputButton).top);
+                assertTrue(StudioScreenshotTest.bounds(a, a.liveScreen.monitorToggle).top < StudioScreenshotTest.bounds(a, a.outputButton).top);
 
                 float[] original=a.values.clone();
                 a.values[0]=2;a.values[1]=1;a.values[2]=1;a.values[4]=.8f;

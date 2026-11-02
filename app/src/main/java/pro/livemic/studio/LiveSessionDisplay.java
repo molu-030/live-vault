@@ -62,14 +62,16 @@ final class LiveSessionDisplay extends View {
         c.drawLine(right-24*d,h-6*d,right,h-6*d,p);c.drawLine(right,h-10*d,right,h-6*d,p);
         long now = SystemClock.uptimeMillis();
         float dt = lastFrame == 0 ? 0 : Math.min(.2f, (now-lastFrame)/1000f); lastFrame = now;
-        text(c, "LIVE SESSION", left, 23*d, 11*d, StudioTheme.OLIVE, Paint.Align.LEFT, false, (right-left)*.47f);
-        text(c,routeStatus,right,23*d,9*d,routeStatus.toLowerCase(Locale.ROOT).contains("safety")||routeStatus.contains("보호")?StudioTheme.DANGER:StudioTheme.OLIVE,Paint.Align.RIGHT,false,(right-left)*.5f);
-        float bottom = h-13*d;
-        text(c, recordStatus, left+(recording?10*d:0), bottom, 10*d, recording ? StudioTheme.ACCENT : StudioTheme.OLIVE, Paint.Align.LEFT, true,(right-left)*.48f-(recording?10*d:0));
-        text(c, recordClock, right, bottom, 16*d, StudioTheme.ACCENT, Paint.Align.RIGHT, true,(right-left)*.48f);
+        boolean ultraCompact = h < 105*d;
+        float headerY = ultraCompact ? 17*d : 23*d;
+        text(c, "LIVE SESSION", left, headerY, (ultraCompact ? 10 : 11)*d, StudioTheme.OLIVE, Paint.Align.LEFT, false, (right-left)*.47f);
+        text(c,routeStatus,right, headerY, 9*d,routeStatus.toLowerCase(Locale.ROOT).contains("safety")||routeStatus.contains("보호")?StudioTheme.DANGER:StudioTheme.OLIVE,Paint.Align.RIGHT,false,(right-left)*.5f);
+        float bottom = h - (ultraCompact ? 9*d : 13*d);
+        text(c, recordStatus, left+(recording?10*d:0), bottom, (ultraCompact ? 9.5f : 10)*d, recording ? StudioTheme.ACCENT : StudioTheme.OLIVE, Paint.Align.LEFT, true,(right-left)*.48f-(recording?10*d:0));
+        text(c, recordClock, right, bottom, (ultraCompact ? 14 : 16)*d, StudioTheme.ACCENT, Paint.Align.RIGHT, true,(right-left)*.48f);
         // The tall display spends extra space around the pitch, while meters retain readable spacing.
         boolean compact = h < 151*d;
-        float meterTop = 42*d, meterGap = 24*d;
+        float meterTop = ultraCompact ? 25*d : 42*d, meterGap = ultraCompact ? 16*d : 24*d;
         float meterRight = compact ? left + (right-left)*.61f : right;
         boolean animating = false;
         for (int row=0; row<2; row++) {
@@ -99,10 +101,13 @@ final class LiveSessionDisplay extends View {
             // Cap compact text's scaled height as well as width at large system font sizes.
             float center=meterRight+(right-meterRight)*.57f;
             float fontScale=getResources().getDisplayMetrics().scaledDensity/d;
-            float noteSize=Math.min(26*d,26*d/fontScale);
-            float hzSize=Math.min(9*d,11*d/fontScale);
-            text(c,note,center,54*d,noteSize,StudioTheme.ACCENT,Paint.Align.CENTER,true,(right-meterRight)*.85f);
-            text(c,frequency>0?String.format(Locale.US,"%.0f Hz",frequency):"— Hz",center,73*d,hzSize,StudioTheme.OLIVE,Paint.Align.CENTER,true,(right-meterRight)*.85f);
+            float baseNote = ultraCompact ? 20*d : 26*d;
+            float noteSize=Math.min(baseNote,baseNote/fontScale);
+            float hzSize=Math.min((ultraCompact?8.5f:9)*d,(ultraCompact?9.5f:11)*d/fontScale);
+            float noteY = ultraCompact ? 40*d : 54*d;
+            float hzY = ultraCompact ? 53*d : 73*d;
+            text(c,note,center,noteY,noteSize,StudioTheme.ACCENT,Paint.Align.CENTER,true,(right-meterRight)*.85f);
+            text(c,frequency>0?String.format(Locale.US,"%.0f Hz",frequency):"— Hz",center,hzY,hzSize,StudioTheme.OLIVE,Paint.Align.CENTER,true,(right-meterRight)*.85f);
             if(recording) { p.setColor(StudioTheme.DANGER); p.setAlpha((now/650)%2==0?255:90); c.drawCircle(left+3*d,bottom-4*d,3*d,p); p.setAlpha(255); }
             if(animating || recording) postInvalidateDelayed(32);
             return;

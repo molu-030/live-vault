@@ -27,7 +27,29 @@ final class StudioRootLayout extends LinearLayout {
 
 /** Supplies the actual space left after fixed recording controls and navigation. */
 final class StudioScrollView extends ScrollView {
-    StudioScrollView(Context context){super(context);setFillViewport(true);setVerticalScrollBarEnabled(false);}
+    int pendingScrollY = -1;
+
+    StudioScrollView(Context context){
+        super(context);
+        setFillViewport(true);
+        setVerticalScrollBarEnabled(false);
+        setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+    }
+
+    void preserveScroll(int y) {
+        pendingScrollY = y;
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if (pendingScrollY >= 0) {
+            int target = pendingScrollY;
+            pendingScrollY = -1;
+            int maxScroll = getChildCount() > 0 ? Math.max(0, getChildAt(0).getHeight() - getHeight()) : 0;
+            scrollTo(0, Math.min(target, maxScroll));
+        }
+    }
     @Override protected void onMeasure(int widthSpec,int heightSpec){
         if(getChildCount()>0&&getChildAt(0) instanceof StudioPageLayout)
             ((StudioPageLayout)getChildAt(0)).viewport=Math.max(0,MeasureSpec.getSize(heightSpec)-getPaddingTop()-getPaddingBottom());

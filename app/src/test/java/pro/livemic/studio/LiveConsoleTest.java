@@ -241,22 +241,18 @@ public class LiveConsoleTest {
 
     @Test
     public void sourceChooserRetainsBackingSourcesAndDeviceAccess() {
-        a.liveScreen.sourceButton.performClick();
-        android.app.Dialog dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-        assertNotNull(dialog);
-        View content = dialog.getWindow().getDecorView();
-        for (String label : new String[]{"Input", "Output", "files", "Online", "Composer"})
-            assertNotNull("Source chooser entry: " + label, StudioScreenshotTest.findButtonContaining(content, label));
-        dialog.dismiss();
-        for (String device : new String[]{"Input", "Output"}) {
-            a.liveScreen.sourceButton.performClick();
-            android.app.Dialog chooser = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            StudioScreenshotTest.findButtonContaining(chooser.getWindow().getDecorView(), device).performClick();
-            android.app.Dialog routes = org.robolectric.shadows.ShadowDialog.getLatestDialog();
-            assertNotSame("Device selector opens from unified source chooser", chooser, routes);
-            assertTrue(routes.isShowing());
-            routes.dismiss();
-        }
+        a.liveScreen.inputButton.performClick();
+        android.app.Dialog inputDialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull(inputDialog);
+        assertTrue(inputDialog.isShowing());
+        inputDialog.dismiss();
+
+        a.outputButton.performClick();
+        android.app.Dialog outputDialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull(outputDialog);
+        assertTrue(outputDialog.isShowing());
+        outputDialog.dismiss();
+
         a.liveScreen.openSource(1);
         assertEquals(1, a.tab);
         assertEquals(1, a.sourceTab);
@@ -403,19 +399,13 @@ public class LiveConsoleTest {
     }
 
     @Test
-    public void hamburgerMenuNavigatesToLiveBackingComposerAndLibrary() {
+    public void hamburgerMenuNavigatesToLiveComposerAndLibrary() {
         assertEquals(View.GONE, a.nav.getVisibility());
         a.drawer();
         View liveItem = StudioScreenshotTest.findDescription(a.drawerPopup.getContentView(), "Live,");
         assertNotNull(liveItem);
         liveItem.performClick();
         assertEquals(0, a.tab);
-
-        a.drawer();
-        View backingItem = StudioScreenshotTest.findDescription(a.drawerPopup.getContentView(), "Backing,");
-        assertNotNull(backingItem);
-        backingItem.performClick();
-        assertEquals(1, a.tab);
 
         a.drawer();
         View composerItem = StudioScreenshotTest.findDescription(a.drawerPopup.getContentView(), "Composer,");
@@ -519,5 +509,40 @@ public class LiveConsoleTest {
         boolean nextAgc = !agc.isChecked();
         agc.performClick();
         assertEquals(nextAgc, AudioRouting.autoGainPreferred(a));
+    }
+
+    @Test
+    public void topBarLogoAndBrandReturnHomeAndEffectsStacked() {
+        a.root.measure(View.MeasureSpec.makeMeasureSpec(412, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(893, View.MeasureSpec.EXACTLY));
+        a.root.layout(0, 0, 412, 893);
+        // 1. Reverb volume is vertically above echo volume
+        android.graphics.Rect rev = StudioScreenshotTest.bounds(a, a.liveScreen.reverbVolume);
+        android.graphics.Rect echo = StudioScreenshotTest.bounds(a, a.liveScreen.echoVolume);
+        assertTrue("Reverb is above echo", rev.top < echo.top);
+
+        // 2. Logo and brand click from another tab returns to tab 0
+        LinearLayout header = (LinearLayout) a.root.getChildAt(0);
+        View logo = header.getChildAt(1);
+        View brand = header.getChildAt(2);
+
+        a.chooseTab(7);
+        assertEquals(7, a.tab);
+        logo.performClick();
+        assertEquals(0, a.tab);
+
+        a.chooseTab(7);
+        assertEquals(7, a.tab);
+        brand.performClick();
+        assertEquals(0, a.tab);
+
+        // 3. Drawer does not contain "Backing" or "Mute output"
+        a.drawer();
+        assertNotNull(a.drawerPopup);
+        View drawer = a.drawerPopup.getContentView();
+        assertNull(StudioScreenshotTest.findButtonContaining(drawer, "Backing"));
+        assertNull(StudioScreenshotTest.findButtonContaining(drawer, "반주"));
+        assertNull(StudioScreenshotTest.findButtonContaining(drawer, "Mute output"));
+        assertNull(StudioScreenshotTest.findButtonContaining(drawer, "출력 끄기"));
+        a.drawerPopup.dismiss();
     }
 }

@@ -304,6 +304,9 @@ public class MainActivity extends Activity {
         logo.setImageResource(R.drawable.live_vault_mark);
         logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
         logo.setContentDescription(tr("승인된 Live Vault 원호 마이크 로고", "Live Vault microphone logo"));
+        logo.setClickable(true);
+        logo.setFocusable(true);
+        logo.setOnClickListener(v -> chooseTab(0));
         header.addView(logo, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
         TextView brand = text("Live Vault", 18, TEXT);
@@ -312,6 +315,9 @@ public class MainActivity extends Activity {
         brand.setEllipsize(TextUtils.TruncateAt.END);
         brand.setPadding(dp(8), 0, 0, 0);
         brand.setGravity(Gravity.CENTER_VERTICAL);
+        brand.setClickable(true);
+        brand.setFocusable(true);
+        brand.setOnClickListener(v -> chooseTab(0));
         header.addView(brand, new LinearLayout.LayoutParams(0, dp(48), 1));
 
         StudioButton mute = StudioTheme.styled(this, tr("출력 끄기", "Mute output"), StudioButton.QUIET, () -> {
@@ -601,14 +607,6 @@ public class MainActivity extends Activity {
 
         LinearLayout close = row();
         close.setGravity(Gravity.END);
-        StudioButton emergency = StudioTheme.styled(this, tr("출력 끄기", "Mute output"), StudioButton.QUIET, () -> {
-            set(11, 0);
-            toast(tr("내 목소리 출력만 껐습니다. 녹음은 계속됩니다.", "Voice output muted. Recording continues."));
-        });
-        emergency.glyph("mute");
-        emergency.setTextSize(11);
-        emergency.setMaxLines(1);
-        close.addView(emergency, new LinearLayout.LayoutParams(-2, dp(48)));
         close.addView(new Space(this), new LinearLayout.LayoutParams(0, 1, 1));
         close.addView(StudioTheme.icon(this, "close", tr("메뉴 닫기", "Close menu"), popup::dismiss), new LinearLayout.LayoutParams(dp(48), dp(48)));
         panel.addView(close);
@@ -629,7 +627,6 @@ public class MainActivity extends Activity {
         // Hamburger Menu with Live, Backing, Composer, Library, and Studio Tools
         String[] names = {
                 tr("라이브", "Live"),
-                tr("반주", "Backing"),
                 tr("작곡기", "Composer"),
                 tr("보관함", "Library"),
                 tr("오디오 설정", "Audio settings"),
@@ -640,7 +637,6 @@ public class MainActivity extends Activity {
         };
         String[] subtitles = {
                 tr("보컬 효과 · 실시간 모니터링 · 녹음", "Vocal FX · live monitoring · recording"),
-                tr("내 파일 · 작곡기 · 온라인 반주", "My files · composer · online backing"),
                 tr("코드 진행 · AI 반주 제작", "Chord progression · AI backing"),
                 tr("녹음 테이크 · 내 반주 프로젝트", "Recorded takes · saved projects"),
                 tr("출력 · 레이턴시 · 상세 효과", "Output · latency · effects"),
@@ -649,19 +645,18 @@ public class MainActivity extends Activity {
                 tr("목소리 화음과 루프", "Vocal harmonies and loops"),
                 tr("사용 방법 · 앱 정보", "Guide · about")
         };
-        String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help"};
+        String[] glyphs = {"mic", "piano", "folder", "settings", "record", "piano", "music", "help"};
 
         for (int i = 0; i < names.length; i++) {
             final int k = i;
             LinearLayout item = row();
             item.setPadding(dp(8), dp(11), dp(8), dp(11));
             boolean currentItem = (k == 0 && tab == 0)
-                    || (k == 1 && tab == 1)
-                    || (k == 2 && (tab == 7 || tab == 8))
-                    || (k == 3 && tab == 4)
-                    || (k == 4 && tab == 6)
-                    || (k == 6 && tab == 5)
-                    || (k == 7 && tab == 9);
+                    || (k == 1 && (tab == 7 || tab == 8))
+                    || (k == 2 && tab == 4)
+                    || (k == 3 && tab == 6)
+                    || (k == 5 && tab == 5)
+                    || (k == 6 && tab == 9);
             ImageView icon = new ImageView(this);
             icon.setImageDrawable(new StudioGlyph(glyphs[i], currentItem ? LIME : (i == 5 ? RED : 0xffbcc5d4)));
             item.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
@@ -684,22 +679,22 @@ public class MainActivity extends Activity {
             item.setOnClickListener(v -> {
                 popup.dismiss();
                 if (k == 0) chooseTab(0);
-                else if (k == 1) chooseTab(1);
-                else if (k == 2) chooseTab(7);
-                else if (k == 3) chooseTab(4);
-                else if (k == 4) chooseTab(6);
-                else if (k == 5) recordingOptions();
-                else if (k == 6) chooseTab(5);
-                else if (k == 7) chooseTab(9);
+                else if (k == 1) chooseTab(7);
+                else if (k == 2) chooseTab(4);
+                else if (k == 3) chooseTab(6);
+                else if (k == 4) recordingOptions();
+                else if (k == 5) chooseTab(5);
+                else if (k == 6) chooseTab(9);
                 else {
-                    new AlertDialog.Builder(this)
+                    AlertDialog dialog = StudioDialogs.darkAlert(this)
                             .setTitle("Live Vault")
                             .setMessage(tr(
                                     "효과와 함께 듣고, 녹음하고, 음정을 연습하세요.\n\n스피커는 낮은 출력에서 시작하세요. 블루투스 전송 지연은 기기마다 다릅니다.\nNoto Sans KR · Roboto Mono / SIL OFL",
                                     "Listen with effects, record, and practice pitch.\n\nStart speakers at low volume. Bluetooth delay varies by device.\nNoto Sans KR · Roboto Mono / SIL OFL"
                             ))
                             .setPositiveButton(tr("닫기", "Close"), null)
-                            .show();
+                            .create();
+                    StudioDialogs.showDark(this, dialog);
                 }
             });
             item.setMinimumHeight(dp(68));
@@ -1170,7 +1165,7 @@ public class MainActivity extends Activity {
         help.setPadding(0, dp(12), 0, dp(12));
         panel.addView(help);
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        AlertDialog dialog = StudioDialogs.darkAlert(this)
                 .setTitle(tr("출력 설정", "Output settings"))
                 .setView(StudioDialogs.scrollable(this, panel))
                 .setPositiveButton(tr("닫기", "Close"), null)
@@ -1235,7 +1230,7 @@ public class MainActivity extends Activity {
             protection.setPadding(0, dp(12), 0, dp(8));
             panel.addView(protection);
         }
-        dialog.show();
+        StudioDialogs.showDark(this, dialog);
     }
 
     void outputMode() {
@@ -1349,7 +1344,7 @@ public class MainActivity extends Activity {
                 MUTED
         ));
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = StudioDialogs.darkAlert(this)
                 .setTitle(tr("백그라운드 녹음", "Background recording"))
                 .setView(StudioDialogs.scrollable(this, panel))
                 .setPositiveButton(tr("설정 저장", "Save settings"), (d, w) -> {
@@ -1364,7 +1359,8 @@ public class MainActivity extends Activity {
                             .apply();
                 })
                 .setNegativeButton(tr("취소", "Cancel"), null)
-                .show();
+                .create();
+        StudioDialogs.showDark(this, dialog);
     }
 
     void requestRecording() {

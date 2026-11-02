@@ -32,6 +32,7 @@ final class ComposerScreen {
 
     void refresh() {
         int tab = a.tab, y = a.pageScroll.getScrollY();
+        a.pageScroll.preserveScroll(y);
         a.showTab();
         a.pageScroll.post(() -> {
             if (a.tab == tab) a.pageScroll.scrollTo(0, y);
@@ -341,7 +342,7 @@ final class ComposerScreen {
             details.addView(caption((t.drums() ? tr("드럼 키트 ", "Drum kit ") + t.program : InstrumentCatalog.GM[t.program])
                     + " · " + patterns[Math.min(t.pattern, patterns.length - 1)]));
             details.setOnClickListener(v -> track(n));
-            details.setFocusable(true);
+            details.setFocusable(false);
             row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
             TextView mute = action(t.muted ? tr("뮤트됨", "Muted") : tr("뮤트", "Mute"), () -> {
                 edit(x -> t.muted = !t.muted, false);
@@ -885,7 +886,7 @@ final class ComposerScreen {
         Dialog dialog = new Dialog(a);
         LinearLayout panel = a.column();
         panel.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
-        panel.setBackground(StudioTheme.background(a, MainActivity.PANEL, 20));
+        panel.setBackground(StudioTheme.background(a, 0xff0d0f12, 20, 0xff353b44));
         EditText search = new EditText(a);
         search.setTextColor(MainActivity.TEXT);
         search.setHintTextColor(MainActivity.MUTED);
@@ -930,8 +931,8 @@ final class ComposerScreen {
                 boolean featured = false;
                 for (int f : InstrumentCatalog.FEATURED) if (f == n) featured = true;
                 if (query.isEmpty() && ((cat == 0 && !featured) || (cat == 2 && !favorites.contains("" + n)) || (cat >= 3 && cat - 3 != n / 8))) continue;
-                String label = InstrumentCatalog.GM[n], family = InstrumentCatalog.categories(a)[n / 8];
-                if (!query.isEmpty() && !(label + " " + family).toLowerCase(Locale.ROOT).contains(query)) continue;
+                String label = InstrumentCatalog.displayName(a, n), family = InstrumentCatalog.categories(a)[n / 8];
+                if (!query.isEmpty() && !(label + " " + family + " " + InstrumentCatalog.GM[n]).toLowerCase(Locale.ROOT).contains(query)) continue;
                 Button item = a.button((favorites.contains("" + n) ? "★ " : "") + label + " · " + family, () -> {
                     if (current(context, revision, partId)) selectInstrument(track, voice, program, 0);
                     else stale();
@@ -962,8 +963,15 @@ final class ComposerScreen {
         fill.run();
         dialog.setContentView(panel);
         dialog.show();
-        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-        dialog.getWindow().setLayout(Math.min(a.root.getWidth(), a.dp(520)), Math.max(a.dp(250), (int) (a.root.getHeight() * .82f)));
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawableResource(android.R.color.transparent);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.dimAmount = 0.82f;
+            window.setAttributes(params);
+            window.setLayout(Math.min(a.root.getWidth(), a.dp(520)), Math.max(a.dp(250), (int) (a.root.getHeight() * .82f)));
+        }
     }
 
     void selectInstrument(int index, boolean voice, int program, int bank) {
