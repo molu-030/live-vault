@@ -195,15 +195,15 @@ final class LiveScreen {
         }
 
         // Section label "입출력" & 2x2 Input / Output Controls Grid
-        session.addView(heading(tr("🎛 입출력", "🎛 I/O")), new LinearLayout.LayoutParams(-1, -2));
+        session.addView(heading(tr("입출력", "I/O")), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout grid = a.column();
 
         // Row 1: Mic Toggle (left) | Monitor Toggle (right)
         LinearLayout row1 = a.row();
-        micButton = a.micButton = button(tr("🎤 마이크 켜기", "🎤 Turn mic on"), a::requestMicToggle);
+        micButton = a.micButton = button(tr("마이크 켜기", "Turn mic on"), a::requestMicToggle);
         row1.addView(a.micButton, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
-        monitorToggle = button(tr("🎧 목소리 듣기", "🎧 Monitor"), this::toggleMonitor);
+        monitorToggle = button(tr("목소리 듣기", "Monitor"), this::toggleMonitor);
         LinearLayout.LayoutParams monLp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
         monLp.leftMargin = a.dp(6);
         row1.addView(monitorToggle, monLp);
@@ -214,11 +214,11 @@ final class LiveScreen {
         LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(-1, a.dp(48));
         row2Lp.topMargin = a.dp(a.youtube.selected ? 2 : 4);
 
-        inputButton = button(tr("🎤 입력", "🎤 Input") + " ▾\n" + compactDevice(a.inputName()), a::selectInput);
+        inputButton = button(tr("입력", "Input") + " ▾\n" + compactDevice(a.inputName()), a::selectInput);
         sourceButton = inputButton; // Keep reference for test compatibility
         row2.addView(inputButton, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
-        a.outputButton = button(tr("🔊 출력", "🔊 Output") + " ▾\n" + compactDevice(a.outputName()), a::outputMode);
+        a.outputButton = button(tr("출력", "Output") + " ▾\n" + compactDevice(a.outputName()), a::outputMode);
         LinearLayout.LayoutParams outLp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
         outLp.leftMargin = a.dp(6);
         row2.addView(a.outputButton, outLp);
@@ -270,7 +270,7 @@ final class LiveScreen {
         track.setContentDescription(tr("반주 선택 또는 변경", "Choose or change backing"));
         player.addView(track, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
-        Button chooseBacking = button(tr("🎵 반주 선택 ▾", "🎵 Choose backing ▾"), a::chooseBacking);
+        Button chooseBacking = button(tr("반주 선택 ▾", "Choose backing ▾"), a::chooseBacking);
         if (!a.youtube.selected) player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
 
         if (!a.youtube.selected) accompaniment.addView(player);
@@ -311,7 +311,7 @@ final class LiveScreen {
         LinearLayout dock = a.row();
         a.recButton = button(tr("● 녹음 시작", "● Record"), a::toggleRecord);
         dock.addView(a.recButton, new LinearLayout.LayoutParams(0, a.dp(48), 1));
-        video = button(tr("🎬 영상", "🎬 Video"), () -> a.chooseTab(3));
+        video = button(tr("영상", "Video"), () -> a.chooseTab(3));
         LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(a.dp(90), a.dp(48));
         vp.leftMargin = a.dp(8);
         dock.addView(video, vp);
@@ -450,21 +450,21 @@ final class LiveScreen {
         if (s != null) for (int i = 0; i < Math.min(s.length, safe.length); i++) safe[i] = Float.isFinite(s[i]) ? s[i] : 0;
         s = safe;
 
-        a.micButton.setText(running ? tr("🎤 마이크 끄기", "🎤 Turn mic off") : tr("🎤 마이크 켜기", "🎤 Turn mic on"));
+        a.micButton.setText(running ? tr("마이크 끄기", "Turn mic off") : tr("마이크 켜기", "Turn mic on"));
         paint(a.micButton, running);
 
         boolean muted = s[17] > .5f, on = !muted && running && s[21] > .5f;
         String monitoring = muted ? tr("보호 음소거", "Safety mute") : on ? tr("모니터 켜짐", "Monitoring on") : tr("모니터 꺼짐", "Monitoring off");
         route.setText(monitoring);
-        monitorToggle.setText(muted ? tr("🛡 보호 해제", "🛡 Reset safety") : on ? tr("🎧 목소리 듣기 켬", "🎧 Monitor ON") : tr("🎧 목소리 듣기", "🎧 Monitor"));
+        monitorToggle.setText(muted ? tr("보호 해제", "Reset safety") : on ? tr("목소리 듣기 켬", "Monitor ON") : tr("목소리 듣기", "Monitor"));
         monitorToggle.setContentDescription(monitoring);
         paint(monitorToggle, on);
 
-        inputButton.setText(tr("🎤 입력", "🎤 Input") + " ▾\n" + compactDevice(a.inputName()));
+        inputButton.setText(tr("입력", "Input") + " ▾\n" + compactDevice(a.inputName()));
         inputButton.setContentDescription(tr("입력 장치: ", "Input device: ") + a.inputName());
 
         if (a.outputButton != null) {
-            a.outputButton.setText(tr("🔊 출력", "🔊 Output") + " ▾\n" + compactDevice(a.outputName()));
+            a.outputButton.setText(tr("출력", "Output") + " ▾\n" + compactDevice(a.outputName()));
             a.outputButton.setContentDescription(tr("출력 장치: ", "Output device: ") + a.outputName());
         }
 
@@ -483,7 +483,7 @@ final class LiveScreen {
             backingTime.setText(tr("작곡기 · 마디 ", "Composer · bar ") + (1 + (int) (Math.max(0, cs[0]) / MusicTheory.barBeats(a.composer.project.meter))) + (!playing ? tr(" · 일시정지", " · paused") : ""));
         } else {
             double[] local = NativeAudio.localPlaybackInfo();
-            backing.setText(a.selectedFile.isEmpty() ? tr("🎵 반주 선택 ▾", "🎵 Choose backing ▾") : a.selectedFile + " ▾");
+            backing.setText(a.selectedFile.isEmpty() ? tr("반주 선택 ▾", "Choose backing ▾") : a.selectedFile + " ▾");
             backingTime.setText(a.formatTime(local[0]) + " / " + a.formatTime(local[1]));
         }
         if (a.youtube.selected) {

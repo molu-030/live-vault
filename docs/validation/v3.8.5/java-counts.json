@@ -1,0 +1,48 @@
+{
+  "version": "3.8.5-preview",
+  "versionCode": 23,
+  "scope": "LiveConsoleTest, BackingNavigationTest, YouTubePlayerTest, LiveConsoleScreenshotTest, YouTubeScreenshotTest",
+  "totals": {
+    "tests": 49,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "classes": [
+    {
+      "name": "pro.livemic.studio.BackingNavigationTest",
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.LiveConsoleScreenshotTest",
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.LiveConsoleTest",
+      "tests": 29,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.YouTubePlayerTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.YouTubeScreenshotTest",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ]
+}

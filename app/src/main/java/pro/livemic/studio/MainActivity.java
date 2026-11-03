@@ -752,7 +752,6 @@ public class MainActivity extends Activity {
                 tr("사용 방법 · 앱 정보", "Guide · about")
         };
         String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help"};
-        String[] emoji = {"🎙️", "🎵", "🎹", "📁", "🎛️", "⏺️", "🎤", "🎶", "💡"};
 
         for (int i = 0; i < names.length; i++) {
             final int k = i;
@@ -771,7 +770,7 @@ public class MainActivity extends Activity {
 
             LinearLayout copy = column();
             copy.setPadding(dp(14), 0, dp(8), 0);
-            TextView itemTitle = text(emoji[i] + "  " + names[i], 16, currentItem ? LIME : TEXT);
+            TextView itemTitle = text(names[i], 16, currentItem ? LIME : TEXT);
             itemTitle.setTypeface(StudioTheme.bold(this));
             copy.addView(itemTitle);
             TextView detail = text(subtitles[i], 11, MUTED);
