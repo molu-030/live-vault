@@ -30,7 +30,7 @@ final class ComposerExchange {
         goal.setHint(activity.tr("예: 더 따뜻한 재즈 느낌 (선택)","e.g. a warmer jazz feel (optional)"));
         goal.setMinLines(3);goal.setMaxLines(6);goal.setSingleLine(false);goal.setVerticalScrollBarEnabled(true);goal.setGravity(android.view.Gravity.TOP|android.view.Gravity.START);
         goal.setTypeface(StudioTheme.body(activity));goal.setTextColor(MainActivity.TEXT);goal.setHintTextColor(MainActivity.MUTED);goal.setBackground(StudioTheme.background(activity,StudioTheme.RAISED,12));int pad=activity.dp(12);goal.setPadding(pad,pad,pad,pad);
-        new AlertDialog.Builder(activity).setTitle(activity.tr("AI용 내보내기","Export for AI"))
+        StudioDialogs.alert(activity).setTitle(activity.tr("AI용 내보내기","Export for AI"))
             .setMessage(activity.tr("ChatGPT 등 AI에 ZIP을 첨부하고 원하는 수정을 요청하세요. 오디오는 포함되지 않습니다.","Attach the ZIP to ChatGPT or another AI and request the changes you want. Audio is not included."))
             .setView(goal).setNegativeButton(activity.tr("취소","Cancel"),null)
             .setPositiveButton(activity.tr("파일로 저장","Save to files"),(dialog,which)->{
@@ -58,12 +58,12 @@ final class ComposerExchange {
             int start=bytes.length>=3&&(bytes[0]&255)==239&&(bytes[1]&255)==187&&(bytes[2]&255)==191?3:0;
             String json=StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes,start,bytes.length-start)).toString();
             ComposerProject imported=ComposerLlmImport.parse(json);activity.runOnUiThread(()->{if(ownerAlive())preview(imported);});
-        }catch(Exception e){String detail=e instanceof ComposerLlmImport.Invalid?e.getMessage():"JSON";activity.runOnUiThread(()->{if(ownerAlive())new AlertDialog.Builder(activity).setTitle(activity.tr("가져올 수 없습니다","Cannot import")).setMessage(activity.tr("8 MiB 이하의 일반 프로젝트 JSON을 선택하세요. 오류 위치: ","Choose plain project JSON up to 8 MiB. Invalid field: ")+detail).setPositiveButton(activity.tr("확인","OK"),null).show();});}},"composer-import").start();
+        }catch(Exception e){String detail=e instanceof ComposerLlmImport.Invalid?e.getMessage():"JSON";activity.runOnUiThread(()->{if(ownerAlive())StudioDialogs.alert(activity).setTitle(activity.tr("가져올 수 없습니다","Cannot import")).setMessage(activity.tr("8 MiB 이하의 일반 프로젝트 JSON을 선택하세요. 오류 위치: ","Choose plain project JSON up to 8 MiB. Invalid field: ")+detail).setPositiveButton(activity.tr("확인","OK"),null).show();});}},"composer-import").start();
     }
     private void preview(ComposerProject p){
         int tracks=0,notes=0;java.util.Set<String> ids=new java.util.HashSet<>();for(ComposerProject.Part part:p.parts){for(TrackConfig t:part.tracks)ids.add(t.id);for(VoicePhrase ph:part.phrases)notes+=ph.notes.size();}tracks=ids.size();
         String[] scales=AppLanguage.english(activity)?new String[]{"Major","Natural minor","Harmonic minor","Dorian","Mixolydian"}:MusicTheory.SCALES,meters={"4/4","3/4","6/8"};String message=p.name+"\n"+MusicTheory.ROOTS[p.key]+" "+scales[p.scale]+" · "+p.bpm+" BPM · "+meters[p.meter]+"\n"+activity.tr("마디: ","Bars: ")+p.totalBars()+" · "+activity.tr("파트: ","Parts: ")+p.parts.size()+" · "+activity.tr("트랙: ","Tracks: ")+tracks+" · "+activity.tr("음표: ","Notes: ")+notes+"\n\n"+activity.tr("현재 프로젝트를 보관함에 저장한 뒤 새 복사본으로 엽니다.","The current project will be saved to your library, then this will open as a new copy.");
-        new AlertDialog.Builder(activity).setTitle(activity.tr("가져오기 미리보기","Import preview")).setMessage(message).setNegativeButton(activity.tr("취소","Cancel"),null).setPositiveButton(activity.tr("새 복사본 열기","Open new copy"),(d,w)->applyImport(p)).show();
+        StudioDialogs.alert(activity).setTitle(activity.tr("가져오기 미리보기","Import preview")).setMessage(message).setNegativeButton(activity.tr("취소","Cancel"),null).setPositiveButton(activity.tr("새 복사본 열기","Open new copy"),(d,w)->applyImport(p)).show();
     }
     private void applyImport(ComposerProject imported){
         if(importBlocked()){activity.toast(activity.tr("녹음이나 예약을 마친 뒤 가져오세요.","Finish recording or scheduled actions before importing."));return;}

@@ -98,6 +98,7 @@ final class StudioDialogs {
             window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         }
         dialog.show();
+        track(activity, dialog);
         if (window != null) {
             window.setLayout(Math.min(availableWidth, StudioTheme.dp(activity, 520)), ViewGroup.LayoutParams.WRAP_CONTENT);
         }
@@ -146,6 +147,7 @@ final class StudioDialogs {
             window.setAttributes(params);
         }
         dialog.show();
+        track(activity, dialog);
         if (window != null) {
             window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels, StudioTheme.dp(activity, 520)), ViewGroup.LayoutParams.WRAP_CONTENT);
         }
@@ -158,12 +160,31 @@ final class StudioDialogs {
         return scroll;
     }
 
+    static void track(Activity activity, Dialog dialog) {
+        if (activity instanceof MainActivity) ((MainActivity) activity).trackBackWindow(dialog);
+    }
+
+    static AlertDialog.Builder alert(Activity activity) {
+        return trackedBuilder(activity, 0);
+    }
+
+    private static AlertDialog.Builder trackedBuilder(Activity activity, int theme) {
+        return new AlertDialog.Builder(activity, theme) {
+            @Override public AlertDialog show() {
+                AlertDialog dialog = super.show();
+                track(activity, dialog);
+                return dialog;
+            }
+        };
+    }
+
     static AlertDialog.Builder darkAlert(Activity activity) {
-        return new AlertDialog.Builder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        return trackedBuilder(activity, android.R.style.Theme_DeviceDefault_Dialog_Alert);
     }
 
     static AlertDialog showDark(Activity activity, AlertDialog dialog) {
         dialog.show();
+        track(activity, dialog);
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawable(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));

@@ -1052,6 +1052,7 @@ final class ComposerScreen {
         fill.run();
         dialog.setContentView(panel);
         dialog.show();
+        StudioDialogs.track(a, dialog);
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);

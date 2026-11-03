@@ -3,6 +3,7 @@ package pro.livemic.studio;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -109,6 +110,11 @@ public class MainActivity extends Activity {
     TextView globalTimer, liveState, playerTime, recordCaption;
     StudioPlaybackLine playerLine;
 
+    final BackNavigation navigation = new BackNavigation();
+    BackNavigation.Page renderedPage;
+    final ArrayList<Object> backWindows = new ArrayList<>();
+    private ModernBack modernBack;
+
     PopupWindow drawerPopup;
     int drawerLeft, drawerTop;
     LinearLayout transport;
@@ -170,7 +176,11 @@ public class MainActivity extends Activity {
                 NativeAudio.set(i, values[i]);
             }
         }
+        BackNavigation.Page restored = navigation.restore(state);
+        if (restored != null) applyPage(restored);
         build();
+        if (restored != null) restorePageScroll(restored);
+        if (Build.VERSION.SDK_INT >= 33) modernBack = new ModernBack(this);
         handler.post(tick);
     }
 
@@ -178,6 +188,7 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         out.putInt("selectedLiveEffect", selectedLiveEffect);
+        navigation.save(out, currentPage());
         exchange.saveState(out);
         if (recordingRequestStage != 0) {
             out.putInt("recordingRequestStage", recordingRequestStage);
@@ -393,31 +404,122 @@ public class MainActivity extends Activity {
         showTab();
     }
 
+    BackNavigation.Page currentPage() {
+        BackNavigation.Page shown = renderedPage;
+        return new BackNavigation.Page(shown == null ? tab : shown.tab,
+                shown == null ? sourceTab : shown.source, shown == null ? libraryFilter : shown.filter,
+                pageScroll == null ? 0 : pageScroll.getScrollY());
+    }
+
+    private void applyPage(BackNavigation.Page destination) {
+        tab = destination.tab;
+        sourceTab = destination.source;
+        libraryFilter = destination.filter;
+        if (tab == 1 && sourceTab != 2) leaveYouTube();
+        getPreferences(0).edit().putInt("backingSource", sourceTab).apply();
+    }
+
+    private void restorePageScroll(BackNavigation.Page destination) {
+        pageScroll.preserveScroll(destination.scroll);
+        pageScroll.requestLayout();
+    }
+
     void chooseTab(int k) {
-        if (testActive) finishSyncTest(false);
-        if (AudioService.practice != null && AudioService.practice.active) {
-            AudioService.practice.stop(false);
+        navigate(new BackNavigation.Page(k, sourceTab, libraryFilter, 0), false);
+    }
+
+    void chooseSource(int source) {
+        if (settingsLocked()) { toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.", "Finish recording or the countdown before changing sources.")); return; }
+        navigate(new BackNavigation.Page(1, source, libraryFilter, 0), false);
+    }
+
+    void chooseLibraryFilter(int filter) {
+        navigate(new BackNavigation.Page(4, sourceTab, filter, 0), false);
+    }
+
+    private void navigate(BackNavigation.Page destination, boolean back) {
+        BackNavigation.Page origin = currentPage();
+        if (destination.tab == 1 && destination.source != sourceTab && settingsLocked()) {
+            toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.", "Finish recording or the countdown before changing sources."));
+            return;
         }
-        pendingAction = 0;
+        if (origin.sameDestination(destination)) {
+            applyPage(destination);
+            showTab();
+            restorePageScroll(new BackNavigation.Page(tab, sourceTab, libraryFilter, origin.scroll));
+            return;
+        }
         if (videoPreparing) {
             toast(tr("카메라를 준비하고 있습니다.", "Preparing camera."));
             return;
         }
+        Runnable accepted = () -> {
+            if (testActive) finishSyncTest(false);
+            if (AudioService.practice != null && AudioService.practice.active) AudioService.practice.stop(false);
+            pendingAction = 0;
+            if (back) navigation.pop(); else navigation.visit(origin, destination);
+            applyPage(destination);
+            showTab();
+            restorePageScroll(destination);
+        };
         if (camera != null && camera.recording) {
-            new AlertDialog.Builder(this)
+            StudioDialogs.alert(this)
                     .setTitle(tr("녹화를 마칠까요?", "Finish recording video?"))
                     .setMessage(tr("영상을 저장한 뒤 화면을 이동합니다.", "Save the video before leaving this screen."))
                     .setPositiveButton(tr("저장 후 이동", "Save and leave"), (d, w) -> {
                         stopVideo();
-                        tab = k;
-                        showTab();
+                        accepted.run();
                     })
                     .setNegativeButton(tr("계속 녹화", "Keep recording"), null)
                     .show();
             return;
         }
-        tab = k;
-        showTab();
+        accepted.run();
+    }
+
+    void trackBackWindow(Object window) {
+        backWindows.removeIf(item -> item == window
+                || (item instanceof Dialog && !((Dialog) item).isShowing())
+                || (item instanceof PopupWindow && !((PopupWindow) item).isShowing()));
+        backWindows.add(window);
+    }
+
+    /** Window callbacks retain their own cancel/dismiss listeners and preview rollback. */
+    boolean closeTopBackWindow() {
+        for (int i = backWindows.size() - 1; i >= 0; i--) {
+            Object window = backWindows.get(i);
+            if (window instanceof Dialog && ((Dialog) window).isShowing()) {
+                ((Dialog) window).onBackPressed();
+                return true;
+            }
+            if (window instanceof PopupWindow && ((PopupWindow) window).isShowing()) {
+                ((PopupWindow) window).dismiss();
+                return true;
+            }
+            backWindows.remove(i);
+        }
+        return false;
+    }
+
+    @Override public void onBackPressed() {
+        if (closeTopBackWindow()) return;
+        BackNavigation.Page previous = navigation.previous();
+        if (previous != null) navigate(previous, true);
+        else if (tab != 0) navigate(new BackNavigation.Page(0, sourceTab, libraryFilter, 0), true);
+        else moveTaskToBack(true);
+    }
+
+    /** Kept behind the SDK guard so API 28 never resolves android.window classes. */
+    @android.annotation.TargetApi(33)
+    private static final class ModernBack {
+        final android.window.OnBackInvokedDispatcher dispatcher;
+        final android.window.OnBackInvokedCallback callback;
+        ModernBack(MainActivity activity) {
+            dispatcher = activity.getOnBackInvokedDispatcher();
+            callback = activity::onBackPressed;
+            dispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+        }
+        void unregister() { dispatcher.unregisterOnBackInvokedCallback(callback); }
     }
 
     void showTab() {
@@ -480,6 +582,7 @@ public class MainActivity extends Activity {
         else if (tab == 8) composerScreen.draw(true);
         else if (tab == 9) harmonyScreen.draw();
         else library();
+        renderedPage = new BackNavigation.Page(tab, sourceTab, libraryFilter, 0);
         updateTransportVisibility();
     }
 
@@ -599,6 +702,7 @@ public class MainActivity extends Activity {
         popup.setElevation(dp(24));
         popup.setOutsideTouchable(true);
         drawerPopup = popup;
+        trackBackWindow(popup);
         root.setForeground(new ColorDrawable(0x88000000));
         popup.setOnDismissListener(() -> {
             root.setForeground(null);
@@ -648,6 +752,7 @@ public class MainActivity extends Activity {
                 tr("사용 방법 · 앱 정보", "Guide · about")
         };
         String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help"};
+        String[] emoji = {"🎙️", "🎵", "🎹", "📁", "🎛️", "⏺️", "🎤", "🎶", "💡"};
 
         for (int i = 0; i < names.length; i++) {
             final int k = i;
@@ -666,7 +771,7 @@ public class MainActivity extends Activity {
 
             LinearLayout copy = column();
             copy.setPadding(dp(14), 0, dp(8), 0);
-            TextView itemTitle = text(names[i], 16, currentItem ? LIME : TEXT);
+            TextView itemTitle = text(emoji[i] + "  " + names[i], 16, currentItem ? LIME : TEXT);
             itemTitle.setTypeface(StudioTheme.bold(this));
             copy.addView(itemTitle);
             TextView detail = text(subtitles[i], 11, MUTED);
@@ -1107,7 +1212,7 @@ public class MainActivity extends Activity {
                 }
             }
         }
-        new AlertDialog.Builder(this)
+        StudioDialogs.alert(this)
                 .setTitle(result.optBoolean("complete") ? tr("연습 완료", "Practice complete") : tr("부분 연습 결과", "Partial practice results"))
                 .setMessage(TextUtils.join("\n", lines))
                 .setPositiveButton(tr("닫기", "Close"), null)
@@ -1470,11 +1575,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < 3; i++) {
             final int src = targets[i];
             StudioButton b = StudioTheme.styled(this, labels[i], StudioButton.CHIP, () -> {
-                if (settingsLocked()) { toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.", "Finish recording or the countdown before changing sources.")); return; }
-                if (src != 2) leaveYouTube();
-                sourceTab = src;
-                getPreferences(0).edit().putInt("backingSource", src).apply();
-                showTab();
+                chooseSource(src);
             });
             StudioTheme.selected(b, sourceTab == src);
             weighted(tabs, b, 48);
@@ -1664,7 +1765,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     selectedFile = "";
-                    new AlertDialog.Builder(this)
+                    StudioDialogs.alert(this)
                             .setTitle(tr("파일을 열 수 없어요", "Cannot open file"))
                             .setMessage(tr("파일이 이동·삭제되었거나 접근권한이 만료되었을 수 있습니다. 다시 가져와 주세요.", "The file may have moved, been deleted, or lost access. Import it again."))
                             .setPositiveButton(tr("확인", "OK"), null)
@@ -1726,12 +1827,11 @@ public class MainActivity extends Activity {
             captureOtherApps = pendingCapture = false;
             NativeAudio.enablePlaybackCapture(false, 0);
             youtube.pause(); youtube.id = id; youtube.selected = true; AudioService.youtubeSelected = true;
-            sourceTab = 2; tab = 0;
             if (youtube.web != null) youtube.load();
-            showTab();
+            navigate(new BackNavigation.Page(0, 2, libraryFilter, 0), false);
         };
         if (getPreferences(0).getBoolean("youtubeConsent", false)) { select.run(); return; }
-        new AlertDialog.Builder(this).setTitle(tr("YouTube 플레이어 사용", "Use the YouTube player"))
+        StudioDialogs.alert(this).setTitle(tr("YouTube 플레이어 사용", "Use the YouTube player"))
                 .setMessage(tr("YouTube 내장 플레이어를 불러오면 Google/YouTube에 IP·기기 정보가 전송되며 쿠키/저장소를 사용할 수 있습니다. 사용 시 YouTube 서비스 약관(https://www.youtube.com/t/terms)에 동의합니다. Google 개인정보처리방침: https://policies.google.com/privacy. 녹음은 마이크만 저장합니다. 이어폰을 사용하면 스피커 소리 유입을 줄일 수 있습니다.", "Loading the embedded player connects to Google/YouTube, shares your IP and device information, and may use cookies/storage. By using it you agree to YouTube Terms of Service (https://www.youtube.com/t/terms). Google Privacy Policy: https://policies.google.com/privacy. Recordings save only the microphone. Use headphones to reduce speaker audio entering the microphone."))
                 .setPositiveButton(tr("동의하고 불러오기", "Agree and load"), (d, w) -> {
                     getPreferences(0).edit().putBoolean("youtubeConsent", true).apply(); select.run();
@@ -1890,13 +1990,11 @@ public class MainActivity extends Activity {
     void library() {
         LinearLayout filters = row();
         StudioButton recFilter = StudioTheme.styled(this, tr("녹음", "Recording"), StudioButton.CHIP, () -> {
-            libraryFilter = 0;
-            showTab();
+            chooseLibraryFilter(0);
         });
         StudioTheme.selected(recFilter, libraryFilter == 0);
         StudioButton backFilter = StudioTheme.styled(this, tr("내 반주", "My backing"), StudioButton.CHIP, () -> {
-            libraryFilter = 1;
-            showTab();
+            chooseLibraryFilter(1);
         });
         StudioTheme.selected(backFilter, libraryFilter == 1);
         weighted(filters, recFilter, 48);
@@ -2099,7 +2197,7 @@ public class MainActivity extends Activity {
         actions.add(() -> {
             EditText input = new EditText(this);
             input.setText(j.optString("name"));
-            new AlertDialog.Builder(this)
+            StudioDialogs.alert(this)
                     .setTitle(tr("테이크 이름", "Take name"))
                     .setView(input)
                     .setPositiveButton(tr("저장", "Save"), (a, b) -> {
@@ -2136,7 +2234,7 @@ public class MainActivity extends Activity {
     void requestMicToggle() {
         if (AudioService.active && (RecordingManager.active || AudioService.waiting())) {
             boolean waiting = AudioService.waiting();
-            new AlertDialog.Builder(this)
+            StudioDialogs.alert(this)
                     .setTitle(tr("마이크를 끌까요?", "Turn off the microphone?"))
                     .setMessage(waiting
                             ? tr("예약을 취소하고 마이크를 끕니다.", "Cancel the countdown and turn off the microphone.")
@@ -2997,6 +3095,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (modernBack != null) modernBack.unregister();
+        backWindows.clear();
         boolean ownsYouTube = YouTubePlayer.current == youtube;
         youtube.destroy();
         if (ownsYouTube) AudioService.youtubeSelected = false;

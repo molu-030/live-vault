@@ -40,13 +40,14 @@ public class YouTubeScreenshotTest {
         }
         assertEquals("YouTube chooser target",a.dp(48),chooser.getHeight());
         assertEquals("YouTube details target",a.dp(48),a.liveScreen.detailsButton.getHeight());
-        for(TextView label:new TextView[]{a.liveScreen.reverbLabel,a.liveScreen.echoLabel}) {
-            assertNotNull(label);assertTrue(label.getText().toString().contains("%"));
-            assertTrue("Main FX amount visible",viewport.contains(StudioScreenshotTest.bounds(a,label)));
-            android.text.Layout layout=label.getLayout();assertNotNull(layout);
-            assertEquals("Main FX amount has no ellipsis",0,layout.getEllipsisCount(layout.getLineCount()-1));
-            assertTrue("Main FX amount text fits height",layout.getHeight()<=label.getHeight()-label.getCompoundPaddingTop()-label.getCompoundPaddingBottom());
+        for(StudioKnob knob:new StudioKnob[]{a.liveScreen.reverbVolume,a.liveScreen.echoVolume}) {
+            assertTrue("Visible main FX exposes a percent value",knob.getContentDescription().toString().contains("%"));
+            assertNotNull("Visible main FX has an accessible range",knob.createAccessibilityNodeInfo().getRangeInfo());
         }
+        android.graphics.Rect reverb=StudioScreenshotTest.bounds(a,a.liveScreen.reverbVolume);
+        android.graphics.Rect echo=StudioScreenshotTest.bounds(a,a.liveScreen.echoVolume);
+        assertEquals("YouTube main knobs share a row",reverb.top,echo.top);
+        assertTrue("YouTube main knob targets do not overlap",reverb.right<=echo.left);
         a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals("YouTube Live fits without scrolling",0,a.pageScroll.getScrollY());
     }
     static void consentCapture(MainActivity a,View content,int width,int height,File output)throws Exception {
@@ -62,13 +63,14 @@ public class YouTubeScreenshotTest {
         public String getMethod(){return "GET";}public java.util.Map<String,String> getRequestHeaders(){return java.util.Collections.emptyMap();}
     }; }
     @Test public void youtubeSourceConsentErrorAndLiveOfflineFixtureInBothLanguages() throws Exception {
-        File out=new File(System.getProperty("user.dir"),"build/studio-screenshots");out.mkdirs();
+        File out=new File(System.getProperty("user.dir"),"build/outputs/studio-previews");out.mkdirs();
         try {
             for(boolean english:new boolean[]{false,true}) for(int width:new int[]{412,360}) for(float scale:new float[]{1f,1.3f}) {
                 int height=width==412?893:800;
                 RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");RuntimeEnvironment.setFontScale(scale);
                 AppLanguage.set(RuntimeEnvironment.getApplication(),english);
                 RuntimeEnvironment.getApplication().getSharedPreferences("MainActivity",0).edit().clear().commit();
+                StudioScreenshotTest.Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};
                 AudioService.active=false;AudioService.playbackActive=false;AudioService.youtubeSelected=false;RecordingManager.active=false;
                 StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};
                 MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
@@ -76,14 +78,14 @@ public class YouTubeScreenshotTest {
                     a.getPreferences(0).edit().clear().commit();
                     a.handler.removeCallbacks(a.tick);a.composer.worker.submit(()->{}).get();org.robolectric.shadows.ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
                     a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),Insets.of(0,36,0,24)).build());
-                    String prefix="v381-youtube-fx-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
+                    String prefix="v384-youtube-knobs-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
                     a.sourceTab=2;a.chooseTab(1);StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-source.png"),false);
                     assertNull(a.youtube.web);a.selectYouTube("M7lc1UVf-VE");AlertDialog consent=(AlertDialog)ShadowDialog.getLatestDialog();assertTrue(consent.isShowing());
                     consentCapture(a,consent.getWindow().getDecorView(),width,height,new File(out,prefix+"-consent.png"));
                     consent.getButton(AlertDialog.BUTTON_POSITIVE).performClick();org.robolectric.shadows.ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);assertTrue(a.youtube.selected);assertEquals(0,a.tab);
                     java.util.List<String> pages=YouTubePlayerTest.OfflineWeb.pages;
                     assertFalse(pages.isEmpty());
-                    java.nio.file.Files.write(new File(out,"v381-youtube-player.html").toPath(),pages.get(pages.size()-1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    java.nio.file.Files.write(new File(out,"v384-youtube-player.html").toPath(),pages.get(pages.size()-1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
                     TextView fixture=offlinePlayer(a);StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-live-OFFLINE-fixture.png"),false);
                     android.graphics.Rect playerBounds=StudioScreenshotTest.bounds(a,fixture);
                     assertTrue("Player meets visible minimum: "+playerBounds,playerBounds.width()>=200&&playerBounds.height()>=200);
@@ -107,20 +109,21 @@ public class YouTubeScreenshotTest {
         } finally { RuntimeEnvironment.setFontScale(1f);AppLanguage.set(RuntimeEnvironment.getApplication(),false);AudioService.youtubeSelected=false;RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.active=false;StudioScreenshotTest.Audio.supplied=null; }
     }
     @Test public void restoredBackingEntryPointsAndSourcesNativePreview() throws Exception {
-        File out=new File(System.getProperty("user.dir"),"build/studio-screenshots");out.mkdirs();
+        File out=new File(System.getProperty("user.dir"),"build/outputs/studio-previews");out.mkdirs();
         try {
             for(boolean english:new boolean[]{true,false}) {
                 int width=english?412:360,height=english?893:800;
                 RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");RuntimeEnvironment.setFontScale(english?1f:1.3f);
                 AppLanguage.set(RuntimeEnvironment.getApplication(),english);
                 RuntimeEnvironment.getApplication().getSharedPreferences("MainActivity",0).edit().clear().commit();
+                StudioScreenshotTest.Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};
                 AudioService.active=false;AudioService.playbackActive=false;AudioService.youtubeSelected=false;RecordingManager.active=false;
                 StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};
                 MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();
                 try {
                     a.handler.removeCallbacks(a.tick);a.composer.worker.submit(()->{}).get();org.robolectric.shadows.ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
                     a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),Insets.of(0,36,0,24)).build());
-                    String prefix="v383-backing-"+(english?"en-412-default":"ko-360-large");
+                    String prefix="v384-backing-"+(english?"en-412-default":"ko-360-large");
                     StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-live.png"),false);
                     Button chooser=StudioScreenshotTest.findButtonContaining(a.page,english?"Choose backing":"반주 선택");assertNotNull(chooser);
                     assertTrue(StudioScreenshotTest.bounds(a,a.pageScroll).contains(StudioScreenshotTest.bounds(a,chooser)));

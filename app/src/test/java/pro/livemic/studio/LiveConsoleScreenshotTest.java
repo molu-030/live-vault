@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 public class LiveConsoleScreenshotTest {
     static void checkControls(MainActivity a, View view) {
         if (view.getVisibility() != View.VISIBLE) return;
-        if (view instanceof Button || view instanceof SeekBar) {
+        if (view instanceof Button || view instanceof SeekBar || view instanceof StudioKnob) {
             Rect bounds = StudioScreenshotTest.bounds(a, view);
             assertTrue("Control width: " + view.getContentDescription() + " " + bounds, bounds.width() >= 48);
             assertTrue("Control height: " + view.getContentDescription() + " " + bounds, bounds.height() >= 48);
@@ -48,7 +48,7 @@ public class LiveConsoleScreenshotTest {
     }
 
     @Test public void liveDashboardInBothLanguagesSizesAndTextScales() throws Exception {
-        File out=new File(System.getProperty("user.dir"),"build/studio-screenshots");
+        File out=new File(System.getProperty("user.dir"),"build/outputs/studio-previews");
         out.mkdirs();
         java.lang.reflect.Field field=AudioService.class.getDeclaredField("countdown");
         field.setAccessible(true);
@@ -59,6 +59,7 @@ public class LiveConsoleScreenshotTest {
                 RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");
                 RuntimeEnvironment.setFontScale(scale);
                 AppLanguage.set(RuntimeEnvironment.getApplication(),english);
+                StudioScreenshotTest.Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};
                 AudioService.active=false;
                 AudioService.playbackActive=false;
                 AudioService.composerRequested=false;
@@ -72,12 +73,19 @@ public class LiveConsoleScreenshotTest {
                 a.handler.removeCallbacks(a.tick);
                 a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,36,0,24)).build());
                 a.chooseTab(0);
-                String prefix="v37-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
+                String prefix="v384-knobs-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
                 float[] stats=new float[22];
                 stats[2]=-1;
                 StudioScreenshotTest.Audio.supplied=stats;
                 tick(a);
                 StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-idle.png"),false);
+                if ((!english && width==360 && scale==1.3f) || (english && width==412 && scale==1f)) {
+                    a.drawer();
+                    assertNotNull(a.drawerPopup);
+                    StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-menu.png"),true);
+                    assertNotNull(StudioScreenshotTest.findDescription(a.drawerPopup.getContentView(),english?"Backing,":"반주,"));
+                    a.drawerPopup.dismiss();
+                }
                 Rect rec=StudioScreenshotTest.bounds(a,a.recButton);
                 assertEquals(3,a.nav.getChildCount());
                 assertTrue("Footer follows dashboard viewport",rec.top>=StudioScreenshotTest.bounds(a,a.pageScroll).bottom);
@@ -88,6 +96,12 @@ public class LiveConsoleScreenshotTest {
                 assertEquals(rec,StudioScreenshotTest.bounds(a,a.recButton));
                 checkControls(a,a.page);
                 checkControls(a,a.transport);
+                Rect reverb=StudioScreenshotTest.bounds(a,a.liveScreen.reverbVolume);
+                Rect echo=StudioScreenshotTest.bounds(a,a.liveScreen.echoVolume);
+                assertEquals("Compact main knobs share a row",reverb.top,echo.top);
+                assertTrue("Separate main knob touch targets",reverb.right<=echo.left);
+                assertTrue("Reverb exposes its visible amount",a.liveScreen.reverbVolume.getContentDescription().toString().contains("%"));
+                assertTrue("Echo exposes its visible amount",a.liveScreen.echoVolume.getContentDescription().toString().contains("%"));
                 ViewGroup micRow = (ViewGroup) a.liveScreen.micButton.getParent();
                 ViewGroup inputRow = (ViewGroup) a.liveScreen.inputButton.getParent();
                 assertEquals(2, micRow.getChildCount());

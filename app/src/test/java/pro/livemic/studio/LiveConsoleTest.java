@@ -48,15 +48,21 @@ public class LiveConsoleTest {
         AppLanguage.set(RuntimeEnvironment.getApplication(), false);
     }
 
-    static void adjust(SeekBar slider, int value) {
-        slider.setProgress(value);
-        assertTrue(slider.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT,
-                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT)));
+    static float knobValue(StudioKnob knob) {
+        return knob.createAccessibilityNodeInfo().getRangeInfo().getCurrent();
+    }
+
+    static void adjust(StudioKnob knob, int percent) {
+        Bundle value = new Bundle();
+        value.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, percent / 100f);
+        assertTrue(knob.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(), value));
+        assertTrue(knob.onKeyDown(KeyEvent.KEYCODE_DPAD_UP,
+                new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP)));
     }
 
     @Test
-    public void mainEffectSlidersPersistAndWriteOnlyReverbAndEcho() {
-        SeekBar[] sliders = {a.liveScreen.reverbVolume, a.liveScreen.echoVolume};
+    public void mainEffectKnobsPersistAndWriteOnlyReverbAndEcho() {
+        StudioKnob[] sliders = {a.liveScreen.reverbVolume, a.liveScreen.echoVolume};
         int[] ids = {2, 4};
         for (int i = 0; i < sliders.length; i++) {
             StudioScreenshotTest.Audio.changes.clear();
@@ -68,8 +74,139 @@ public class LiveConsoleTest {
         float reverb = a.values[2], echo = a.values[4];
         a.chooseTab(4);
         a.chooseTab(0);
-        assertEquals(Math.round(reverb * 100), a.liveScreen.reverbVolume.getProgress());
-        assertEquals(Math.round(echo * 100), a.liveScreen.echoVolume.getProgress());
+        assertEquals(reverb, knobValue(a.liveScreen.reverbVolume), .001);
+        assertEquals(echo, knobValue(a.liveScreen.echoVolume), .001);
+    }
+
+    static void touch(StudioKnob knob, int action, float x, float y) {
+        MotionEvent event = MotionEvent.obtain(0, 16, action, x, y, 0);
+        try { knob.onTouchEvent(event); } finally { event.recycle(); }
+    }
+
+    void layoutLive() {
+        a.root.measure(View.MeasureSpec.makeMeasureSpec(412, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(893, View.MeasureSpec.EXACTLY));
+        a.root.layout(0, 0, 412, 893);
+    }
+
+    @Test public void mainKnobTapAndHorizontalSwipeNeverChangeValues() {
+        layoutLive();
+        for (StudioKnob knob : new StudioKnob[]{a.liveScreen.reverbVolume, a.liveScreen.echoVolume}) {
+            float initial = knobValue(knob), x = knob.getWidth()/2f, y = knob.getHeight()/2f;
+            StudioScreenshotTest.Audio.changes.clear();
+            touch(knob, MotionEvent.ACTION_DOWN, x, y);
+            touch(knob, MotionEvent.ACTION_UP, x, y);
+            touch(knob, MotionEvent.ACTION_DOWN, x, y);
+            touch(knob, MotionEvent.ACTION_MOVE, x+60, y+3);
+            touch(knob, MotionEvent.ACTION_UP, x+60, y+3);
+            assertEquals(initial, knobValue(knob), 0);
+            assertTrue("Tap and horizontal drag must not write sound parameters", StudioScreenshotTest.Audio.changes.isEmpty());
+        }
+    }
+
+    @Test public void mainKnobVerticalDragBothDirectionsWritesOnlyItsParameterAndPersists() {
+        layoutLive();
+        StudioKnob[] knobs = {a.liveScreen.reverbVolume, a.liveScreen.echoVolume};
+        int[] keys = {2,4};
+        for (int i=0; i<knobs.length; i++) {
+            StudioKnob knob = knobs[i];
+            a.values[keys[i]]=.4f; a.liveScreen.sync();
+            float x=knob.getWidth()/2f, y=knob.getHeight()/2f;
+            StudioScreenshotTest.Audio.changes.clear();
+            touch(knob, MotionEvent.ACTION_DOWN, x,y);
+            touch(knob, MotionEvent.ACTION_MOVE, x,y-24);
+            assertTrue("Up increases amount",a.values[keys[i]]>.4f);
+            touch(knob, MotionEvent.ACTION_UP, x,y-24);
+            float high=a.values[keys[i]];
+            touch(knob, MotionEvent.ACTION_DOWN, x,y);
+            touch(knob, MotionEvent.ACTION_MOVE, x,y+24);
+            touch(knob, MotionEvent.ACTION_UP, x,y+24);
+            assertTrue("Down decreases amount",a.values[keys[i]]<high);
+            assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
+            for(float[] change:StudioScreenshotTest.Audio.changes) assertEquals(keys[i],(int)change[0]);
+            assertEquals(a.values[keys[i]],a.getPreferences(0).getFloat("p"+keys[i],-1),.001);
+        }
+    }
+
+    @Test public void compactKnobVerticalDragSurvivesScrollableParentDispatch() {
+        ScrollView scroll=new ScrollView(a);
+        LinearLayout content=new LinearLayout(a);content.setOrientation(LinearLayout.VERTICAL);
+        content.addView(new View(a),new LinearLayout.LayoutParams(360,100));
+        List<Float> updates=new ArrayList<>();
+        StudioKnob knob=new StudioKnob(a,"Reverb",0,1,.4f,v->Math.round(v*100)+"%",updates::add).compact();
+        content.addView(knob,new LinearLayout.LayoutParams(360,96));
+        content.addView(new View(a),new LinearLayout.LayoutParams(360,600));
+        scroll.addView(content);
+        scroll.measure(View.MeasureSpec.makeMeasureSpec(360,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(240,View.MeasureSpec.EXACTLY));
+        scroll.layout(0,0,360,240);
+        assertTrue("Fixture must have a scrollable ancestor",content.getHeight()>scroll.getHeight());
+        int[] actions={MotionEvent.ACTION_DOWN,MotionEvent.ACTION_MOVE,MotionEvent.ACTION_UP};
+        float[] ys={148,124,124};
+        for(int i=0;i<actions.length;i++) {
+            MotionEvent event=MotionEvent.obtain(0,16L*i,actions[i],180,ys[i],0);
+            assertTrue(scroll.dispatchTouchEvent(event));event.recycle();
+        }
+        assertFalse("Parent dispatch must deliver knob drag changes",updates.isEmpty());
+        assertTrue("Upward drag increases knob amount",knobValue(knob)>.4f);
+        assertEquals("Knob drag must not scroll the ancestor",0,scroll.getScrollY());
+    }
+
+    @Test public void mainKnobRejectsOutsideDialAndCancellationAllowsPollToSynchronize() {
+        layoutLive();
+        StudioKnob knob=a.liveScreen.reverbVolume;
+        float x=knob.getWidth()/2f,y=knob.getHeight()/2f;
+        StudioScreenshotTest.Audio.changes.clear();
+        MotionEvent outside=MotionEvent.obtain(0,0,MotionEvent.ACTION_DOWN,0,0,0);
+        assertFalse("Outside dial start is rejected",knob.onTouchEvent(outside));outside.recycle();
+        touch(knob,MotionEvent.ACTION_MOVE,0,-50);
+        touch(knob,MotionEvent.ACTION_UP,0,-50);
+        assertTrue(StudioScreenshotTest.Audio.changes.isEmpty());
+        touch(knob,MotionEvent.ACTION_DOWN,x,y);
+        float initial=knobValue(knob);
+        a.values[2]=initial>.2f?.1f:.6f;
+        a.liveScreen.poll(new float[22],false);
+        assertEquals("Polling must preserve an active touch",initial,knobValue(knob),0);
+        touch(knob,MotionEvent.ACTION_CANCEL,x,y);
+        a.liveScreen.poll(new float[22],false);
+        assertEquals("Cancellation releases synchronization",a.values[2],knobValue(knob),.001);
+        assertTrue("Poll and cancellation do not write audio",StudioScreenshotTest.Audio.changes.isEmpty());
+    }
+
+    @Test public void mainKnobsExposeKeyboardAndAccessibleRangeWithRealValueDescription() {
+        for(StudioKnob knob:new StudioKnob[]{a.liveScreen.reverbVolume,a.liveScreen.echoVolume}) {
+            AccessibilityNodeInfo info=knob.createAccessibilityNodeInfo();
+            assertEquals(SeekBar.class.getName(),info.getClassName());
+            assertNotNull(info.getRangeInfo());
+            assertEquals(0,info.getRangeInfo().getMin(),0);
+            assertTrue(info.getRangeInfo().getMax()>0);
+            Bundle value=new Bundle();value.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.4f);
+            assertTrue(knob.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),value));
+            assertEquals(.4f,knobValue(knob),.001);
+            assertTrue(knob.getContentDescription().toString().contains("40%"));
+            knob.onKeyDown(KeyEvent.KEYCODE_DPAD_UP,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_UP));
+            assertTrue(knobValue(knob)>.4f);
+            knob.onKeyDown(KeyEvent.KEYCODE_DPAD_DOWN,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_DOWN));
+            assertEquals(.4f,knobValue(knob),.001);
+            assertTrue(knob.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD,null));
+            assertTrue(knobValue(knob)<.4f);
+            assertTrue(knob.performAccessibilityAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD,null));
+            assertEquals(.4f,knobValue(knob),.001);
+        }
+    }
+
+    @Test @Config(sdk=35) public void mainKnobsReserveNoSystemGestureExclusionAndRejectScreenEdges() {
+        StudioKnob knob=new StudioKnob(a,"Reverb",0,1,.4f,v->Math.round(v*100)+"%",v->fail("Edge gesture changed value")).compact();
+        FrameLayout host=new FrameLayout(a);
+        host.addView(knob,new FrameLayout.LayoutParams(48,96));
+        host.measure(View.MeasureSpec.makeMeasureSpec(360,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(800,View.MeasureSpec.EXACTLY));
+        host.layout(0,0,360,800);
+        MotionEvent edge=MotionEvent.obtain(0,0,MotionEvent.ACTION_DOWN,20,48,0);
+        assertFalse("Left screen edge start belongs to system navigation",knob.onTouchEvent(edge));edge.recycle();
+        knob.layout(312,0,360,96);
+        MotionEvent right=MotionEvent.obtain(0,0,MotionEvent.ACTION_DOWN,340,48,0);
+        right.offsetLocation(-312,0);
+        assertFalse("Right screen edge start belongs to system navigation",knob.onTouchEvent(right));right.recycle();
+        for(View view:new View[]{a.root,a.page,a.liveScreen.reverbVolume,a.liveScreen.echoVolume,knob})
+            assertTrue("No system gesture exclusion rectangles",view.getSystemGestureExclusionRects().isEmpty());
     }
 
     @Test
@@ -170,7 +307,7 @@ public class LiveConsoleTest {
         assertTrue(AudioService.active);
         assertTrue(RecordingManager.active);
         assertEquals(.3, a.values[2], .001);
-        assertTrue(a.liveScreen.reverbLabel.getText().toString().contains("30%"));
+        assertTrue(a.liveScreen.reverbVolume.getContentDescription().toString().contains("30%"));
     }
 
     @Test
@@ -541,13 +678,14 @@ public class LiveConsoleTest {
     }
 
     @Test
-    public void topBarLogoAndBrandReturnHomeAndEffectsStacked() {
+    public void topBarLogoAndBrandReturnHomeAndEffectsShareCompactRow() {
         a.root.measure(View.MeasureSpec.makeMeasureSpec(412, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(893, View.MeasureSpec.EXACTLY));
         a.root.layout(0, 0, 412, 893);
-        // 1. Reverb volume is vertically above echo volume
+        // Main effects share a compact row with separate touch targets.
         android.graphics.Rect rev = StudioScreenshotTest.bounds(a, a.liveScreen.reverbVolume);
         android.graphics.Rect echo = StudioScreenshotTest.bounds(a, a.liveScreen.echoVolume);
-        assertTrue("Reverb is above echo", rev.top < echo.top);
+        assertEquals("Reverb and echo share a row", rev.top, echo.top);
+        assertTrue("Reverb and echo do not overlap", rev.right <= echo.left);
 
         // 2. Logo and brand click from another tab returns to tab 0
         LinearLayout header = (LinearLayout) a.root.getChildAt(0);

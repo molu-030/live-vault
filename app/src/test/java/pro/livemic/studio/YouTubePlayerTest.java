@@ -76,16 +76,15 @@ public class YouTubePlayerTest {
         float mic=a.values[0],backing=a.values[1],monitor=a.values[11],local=a.values[13];
         android.media.AudioManager manager=(android.media.AudioManager)a.getSystemService(android.content.Context.AUDIO_SERVICE);
         int music=manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC),voice=manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL);
-        android.widget.SeekBar[] sliders={a.liveScreen.reverbVolume,a.liveScreen.echoVolume};int[] keys={2,4};
-        android.widget.TextView[] labels={a.liveScreen.reverbLabel,a.liveScreen.echoLabel};
+        StudioKnob[] sliders={a.liveScreen.reverbVolume,a.liveScreen.echoVolume};int[] keys={2,4};
         assertEquals("All four main gains remain available",4,LiveConsoleTest.countSliders(a.page));
         for(int i=0;i<keys.length;i++) {
-            assertNotNull(sliders[i]);assertNotNull(labels[i]);assertTrue(sliders[i].isEnabled());
+            assertNotNull(sliders[i]);assertTrue(sliders[i].isEnabled());
             StudioScreenshotTest.Audio.changes.clear();OfflineWeb.scripts.clear();
             LiveConsoleTest.adjust(sliders[i],35);assertFalse(StudioScreenshotTest.Audio.changes.isEmpty());
             for(float[] change:StudioScreenshotTest.Audio.changes)assertEquals(keys[i],(int)change[0]);
             assertEquals(a.values[keys[i]],a.getPreferences(0).getFloat("p"+keys[i],-1),.001);
-            assertTrue(labels[i].getText().toString().contains(Math.round(a.values[keys[i]]*100)+"%"));
+            assertTrue(sliders[i].getContentDescription().toString().contains(Math.round(a.values[keys[i]]*100)+"%"));
             assertTrue("FX amount never changes YouTube gain or transport",OfflineWeb.scripts.isEmpty());
             assertTrue(RecordingManager.active);assertTrue(RecordingManager.micOnly);assertTrue(AudioService.active);assertTrue(a.youtube.selected);
         }
@@ -93,7 +92,7 @@ public class YouTubePlayerTest {
         assertEquals(mic,a.values[0],0);assertEquals(backing,a.values[1],0);assertEquals(monitor,a.values[11],0);assertEquals(local,a.values[13],0);
         assertEquals(music,manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC));assertEquals(voice,manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL));
         float reverb=a.values[2],echo=a.values[4];a.chooseTab(4);a.chooseTab(0);
-        assertEquals(Math.round(reverb*100),a.liveScreen.reverbVolume.getProgress());assertEquals(Math.round(echo*100),a.liveScreen.echoVolume.getProgress());
+        assertEquals(reverb,LiveConsoleTest.knobValue(a.liveScreen.reverbVolume),.001);assertEquals(echo,LiveConsoleTest.knobValue(a.liveScreen.echoVolume),.001);
         assertTrue(RecordingManager.active);assertTrue(RecordingManager.micOnly);
     }
     @Test public void youtubeRecordingUsesMicOnlyAndNativeSourcesKeepNormalMixAndSync() {
