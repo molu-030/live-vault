@@ -138,18 +138,36 @@ final class ComposerScreen {
 
     void stat(LinearLayout row, String label, String value, Runnable click) {
         LinearLayout tile = a.column();
-        tile.setPadding(a.dp(12), a.dp(10), a.dp(10), a.dp(10));
-        tile.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
+        tile.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
+        tile.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 10));
         tile.addView(caption(label));
-        TextView text = a.text(value + "  ▾", 15, MainActivity.TEXT);
+        TextView text = a.text(value + " ▾", 13, MainActivity.TEXT);
         text.setTypeface(StudioTheme.bold(a));
+        text.setSingleLine();
+        text.setEllipsize(TextUtils.TruncateAt.END);
         tile.addView(text);
-        tile.setMinimumHeight(a.dp(65));
+        tile.setMinimumHeight(a.dp(52));
         tile.setOnClickListener(v -> click.run());
         tile.setFocusable(true);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-        if (row.getChildCount() > 0) lp.leftMargin = a.dp(7);
+        if (row.getChildCount() > 0) lp.leftMargin = a.dp(6);
         row.addView(tile, lp);
+    }
+
+    static String trackEmoji(TrackConfig t) {
+        if (t.drums()) return "🥁";
+        switch (t.family()) {
+            case 0: return "🎹";
+            case 1: return "🔔";
+            case 2: return "🎹";
+            case 3: return "🎸";
+            case 4: return "🎻";
+            case 5: case 6: return "🎻";
+            case 7: return "🎺";
+            case 8: case 9: return "🎷";
+            case 10: case 11: case 12: return "🎛️";
+            default: return "🎵";
+        }
     }
 
     String chordName(ComposerProject.Chord c) {
@@ -180,12 +198,12 @@ final class ComposerScreen {
         }
 
         LinearLayout hero = StudioTheme.card(a);
-        hero.setBackground(StudioTheme.background(a, Color.rgb(16, 20, 15), 7));
-        hero.setPadding(a.dp(18), a.dp(17), a.dp(18), a.dp(16));
+        hero.setBackground(StudioTheme.background(a, Color.rgb(16, 20, 15), 14));
+        hero.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(14));
         LinearLayout top = a.row();
         LinearLayout name = a.column();
         name.addView(caption(tr("내 반주 프로젝트", "BACKING PROJECT")));
-        TextView projectName = a.text(p.name, 23, MainActivity.TEXT);
+        TextView projectName = a.text(p.name, 21, MainActivity.TEXT);
         projectName.setTypeface(StudioTheme.bold(a));
         projectName.setSingleLine();
         projectName.setEllipsize(TextUtils.TruncateAt.END);
@@ -196,34 +214,39 @@ final class ComposerScreen {
         TextView summary = caption(tr("작곡 초안 · ", "Composition draft · ") + p.parts.size()
                 + tr("개 파트 · ", " parts · ") + p.totalBars() + tr("마디", " bars")
                 + " · " + new String[]{"4/4", "3/4", "6/8"}[p.meter]);
-        summary.setPadding(0, a.dp(7), 0, a.dp(15));
+        summary.setPadding(0, a.dp(4), 0, a.dp(8));
         hero.addView(summary);
-        lcdStatus = a.text("", 14, Color.rgb(225, 228, 196));
+
+        lcdStatus = a.text("", 13, Color.rgb(225, 228, 196));
         lcdStatus.setTypeface(StudioTheme.bold(a));
-        lcdStatus.setPadding(0, 0, 0, a.dp(10));
-        hero.addView(lcdStatus);
+        lcdStatus.setBackground(StudioTheme.background(a, Color.rgb(24, 30, 22), 8));
+        lcdStatus.setPadding(a.dp(10), a.dp(6), a.dp(10), a.dp(6));
+        LinearLayout.LayoutParams lcdLp = new LinearLayout.LayoutParams(-1, -2);
+        lcdLp.bottomMargin = a.dp(10);
+        hero.addView(lcdStatus, lcdLp);
 
         LinearLayout stats = a.row();
         stat(stats, tr("키", "KEY"), MusicTheory.ROOTS[p.key], () ->
                 choose(tr("키 · 모든 코드와 프레이즈 전조", "Key · transpose chords and phrases"), MusicTheory.ROOTS, p.key, k ->
                         edit(x -> x.transpose(k), false)));
-        stat(stats, tr("템포", "TEMPO"), p.bpm + " BPM", this::tempo);
-        hero.addView(stats);
-
-        LinearLayout scaleRow = a.row();
-        LinearLayout.LayoutParams scaleSpacing = new LinearLayout.LayoutParams(-1, -2);
-        scaleSpacing.topMargin = a.dp(7);
-        stat(scaleRow, tr("스케일", "SCALE"), scales()[p.scale], () ->
+        stat(stats, tr("템포", "TEMPO"), p.bpm + " · " + new String[]{"4/4", "3/4", "6/8"}[p.meter], this::tempo);
+        stat(stats, tr("스케일", "SCALE"), scales()[p.scale], () ->
                 choose(tr("스케일", "Scale"), scales(), p.scale, k ->
                         edit(x -> x.scale(k), false)));
-        hero.addView(scaleRow, scaleSpacing);
-        a.add(hero);
+        hero.addView(stats);
 
-        StudioButton export = StudioTheme.styled(a, tr("AI용 내보내기", "Export for AI"), StudioButton.STANDARD, this::exportProject);
+        LinearLayout aiBar = a.row();
+        LinearLayout.LayoutParams aiBarLp = new LinearLayout.LayoutParams(-1, -2);
+        aiBarLp.topMargin = a.dp(10);
+        StudioButton export = StudioTheme.styled(a, tr("✨ AI용 내보내기", "Export for AI"), StudioButton.CHIP, this::exportProject);
         StudioTheme.selected(export, true);
-        a.add(export);
-        a.add(caption(tr("프로젝트를 내보내 AI와 수정한 뒤 수정본을 불러오세요.", "Export your project, revise it with an AI, then import the revision.")));
-        a.add(StudioTheme.styled(a, tr("AI 수정본 불러오기", "Import AI revision"), StudioButton.OUTLINE, () -> a.exchange.showImport()));
+        StudioButton aiImport = StudioTheme.styled(a, tr("📥 AI 수정본 불러오기", "Import AI revision"), StudioButton.CHIP, () -> a.exchange.showImport());
+        a.weighted(aiBar, export, 44);
+        LinearLayout.LayoutParams expLp = (LinearLayout.LayoutParams) export.getLayoutParams();
+        expLp.rightMargin = a.dp(8);
+        a.weighted(aiBar, aiImport, 44);
+        hero.addView(aiBar, aiBarLp);
+        a.add(hero);
 
         section(tr("파트", "Parts"), p.parts.size() + " / 8");
         HorizontalScrollView scroll = new HorizontalScrollView(a);
@@ -246,8 +269,8 @@ final class ComposerScreen {
         a.add(scroll);
 
         LinearLayout partActions = a.row();
-        partActions.addView(action(tr("파트 편집", "Edit part"), this::partMenu), new LinearLayout.LayoutParams(0, -2, 1));
-        partActions.addView(action(tr("연주 느낌", "Feel"), this::performance));
+        partActions.addView(action(tr("⚙️ 파트 편집", "⚙️ Edit part"), this::partMenu), new LinearLayout.LayoutParams(0, -2, 1));
+        partActions.addView(action(tr("🎛️ 연주 느낌", "🎛️ Feel"), this::performance));
         a.add(partActions);
 
         section(tr("코드 진행", "Chord progression"), part.label + " · " + part.bars + tr("마디", " bars"));
@@ -266,9 +289,9 @@ final class ComposerScreen {
             for (int c = 0; c < 2 && b + c < part.bars; c++) {
                 int bar = b + c;
                 LinearLayout card = a.column();
-                card.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
-                card.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 14));
-                card.setMinimumHeight(a.dp(116));
+                card.setPadding(a.dp(12), a.dp(9), a.dp(12), a.dp(9));
+                card.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12));
+                card.setMinimumHeight(a.dp(74));
                 card.setOnClickListener(v -> chord(bar, 0));
                 card.setFocusable(true);
                 StringBuilder accessible = new StringBuilder(tr("마디 ", "Bar ") + (bar + 1));
@@ -276,28 +299,54 @@ final class ComposerScreen {
                     accessible.append(" · ").append(chordName(item)).append(" · ").append(chordDegree(item, p));
                 }
                 card.setContentDescription(accessible.toString());
-                card.addView(caption(String.format(Locale.US, "%02d", bar + 1)));
-                LinearLayout chordLine = a.column();
-                for (int j = 0; j < part.chords.get(bar).size(); j++) {
-                    ComposerProject.Chord ch = part.chords.get(bar).get(j);
-                    if (j > 0) {
-                        View divider = new View(a);
-                        divider.setBackgroundColor(StudioTheme.BORDER);
-                        LinearLayout.LayoutParams d = new LinearLayout.LayoutParams(-1, a.dp(1));
-                        d.topMargin = a.dp(6);
-                        d.bottomMargin = a.dp(6);
-                        chordLine.addView(divider, d);
-                    }
-                    LinearLayout ctext = a.column();
-                    TextView root = a.text(chordName(ch), part.chords.get(bar).size() > 1 ? 18 : 23, MainActivity.TEXT);
-                    root.setTypeface(StudioTheme.bold(a));
-                    ctext.addView(root);
-                    ctext.addView(caption(chordDegree(ch, p)));
-                    chordLine.addView(ctext, new LinearLayout.LayoutParams(-1, -2));
+
+                LinearLayout cardHeader = a.row();
+                cardHeader.setGravity(Gravity.CENTER_VERTICAL);
+                cardHeader.addView(caption(String.format(Locale.US, "BAR %02d", bar + 1)), new LinearLayout.LayoutParams(0, -2, 1));
+                if (part.chords.get(bar).size() == 1) {
+                    ComposerProject.Chord ch0 = part.chords.get(bar).get(0);
+                    TextView degreeBadge = a.text(chordDegree(ch0, p), 11, MainActivity.LIME);
+                    degreeBadge.setTypeface(StudioTheme.bold(a));
+                    degreeBadge.setPadding(a.dp(6), a.dp(1), a.dp(6), a.dp(1));
+                    degreeBadge.setBackground(StudioTheme.background(a, 0x229dff00, 6));
+                    cardHeader.addView(degreeBadge);
                 }
-                LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-                cp.topMargin = a.dp(9);
-                card.addView(chordLine, cp);
+                card.addView(cardHeader);
+
+                if (part.chords.get(bar).size() == 1) {
+                    ComposerProject.Chord ch = part.chords.get(bar).get(0);
+                    TextView root = a.text(chordName(ch), 20, MainActivity.TEXT);
+                    root.setTypeface(StudioTheme.bold(a));
+                    root.setSingleLine();
+                    root.setEllipsize(TextUtils.TruncateAt.END);
+                    LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
+                    rp.topMargin = a.dp(4);
+                    card.addView(root, rp);
+                } else {
+                    LinearLayout splitRow = a.row();
+                    splitRow.setGravity(Gravity.CENTER_VERTICAL);
+                    LinearLayout.LayoutParams srp = new LinearLayout.LayoutParams(-1, -2);
+                    srp.topMargin = a.dp(4);
+                    for (int j = 0; j < part.chords.get(bar).size(); j++) {
+                        if (j > 0) {
+                            TextView slash = a.text(" · ", 14, MainActivity.MUTED);
+                            slash.setPadding(a.dp(2), 0, a.dp(2), 0);
+                            splitRow.addView(slash);
+                        }
+                        ComposerProject.Chord ch = part.chords.get(bar).get(j);
+                        LinearLayout col = a.column();
+                        TextView cName = a.text(chordName(ch), 16, MainActivity.TEXT);
+                        cName.setTypeface(StudioTheme.bold(a));
+                        cName.setSingleLine();
+                        cName.setEllipsize(TextUtils.TruncateAt.END);
+                        col.addView(cName);
+                        TextView deg = a.text(chordDegree(ch, p), 11, MainActivity.MUTED);
+                        col.addView(deg);
+                        splitRow.addView(col, new LinearLayout.LayoutParams(0, -2, 1));
+                    }
+                    card.addView(splitRow, srp);
+                }
+
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
                 if (c > 0) lp.leftMargin = a.dp(8);
                 row.addView(card, lp);
@@ -327,11 +376,17 @@ final class ComposerScreen {
             int n = i;
             TrackConfig t = part.tracks.get(i);
             LinearLayout row = a.row();
-            row.setPadding(a.dp(12), a.dp(9), a.dp(9), a.dp(9));
+            row.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
             row.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12));
-            TextView icon = a.text(t.drums() ? "◉" : t.family() == 4 ? "♩" : t.family() == 3 ? "♫" : "♪", 20, MainActivity.LIME);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+
+            TextView icon = a.text(trackEmoji(t), 18, MainActivity.TEXT);
             icon.setGravity(Gravity.CENTER);
-            row.addView(icon, new LinearLayout.LayoutParams(a.dp(38), a.dp(44)));
+            icon.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 10));
+            LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(a.dp(38), a.dp(38));
+            ip.rightMargin = a.dp(10);
+            row.addView(icon, ip);
+
             LinearLayout details = a.column();
             TextView nameText = a.text(t.name, 15, t.muted ? MainActivity.MUTED : MainActivity.TEXT);
             nameText.setTypeface(StudioTheme.bold(a));
@@ -339,21 +394,55 @@ final class ComposerScreen {
             nameText.setEllipsize(TextUtils.TruncateAt.END);
             details.addView(nameText);
             String[] patterns = InstrumentCatalog.patternLabels(a, t);
+            String patLabel = patterns[Math.min(t.pattern, patterns.length - 1)];
             details.addView(caption((t.drums() ? tr("드럼 키트 ", "Drum kit ") + t.program : InstrumentCatalog.GM[t.program])
-                    + " · " + patterns[Math.min(t.pattern, patterns.length - 1)]));
+                    + " · " + patLabel + " · " + Math.round(t.volume * 100) + "%"));
             details.setOnClickListener(v -> track(n));
             details.setFocusable(false);
             row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
-            TextView mute = action(t.muted ? tr("뮤트됨", "Muted") : tr("뮤트", "Mute"), () -> {
+
+            TextView mute = a.text("M", 13, t.muted ? Color.rgb(255, 110, 110) : MainActivity.MUTED);
+            mute.setTypeface(StudioTheme.bold(a));
+            mute.setGravity(Gravity.CENTER);
+            mute.setBackground(StudioTheme.background(a, t.muted ? 0x33ff5555 : StudioTheme.RAISED, 8));
+            mute.setOnClickListener(v -> {
                 edit(x -> t.muted = !t.muted, false);
                 liveTrack(n);
             });
-            mute.setTextColor(t.muted ? MainActivity.LIME : MainActivity.MUTED);
-            row.addView(mute);
-            TextView levels = action(tr(" 믹스 ", " Mix "), () -> trackLevels(n));
-            levels.setContentDescription(tr("볼륨 · 팬", "Volume & pan"));
-            row.addView(levels);
-            row.addView(action(" ⋯", () -> track(n)));
+            mute.setFocusable(true);
+            mute.setContentDescription(t.muted ? tr("뮤트 해제", "Unmute") : tr("뮤트", "Mute"));
+            LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
+            mp.rightMargin = a.dp(6);
+            row.addView(mute, mp);
+
+            boolean isSolo = (solo == n);
+            TextView soloBtn = a.text("S", 13, isSolo ? MainActivity.LIME : MainActivity.MUTED);
+            soloBtn.setTypeface(StudioTheme.bold(a));
+            soloBtn.setGravity(Gravity.CENTER);
+            soloBtn.setBackground(StudioTheme.background(a, isSolo ? 0x339dff00 : StudioTheme.RAISED, 8));
+            soloBtn.setOnClickListener(v -> {
+                if (s.playing() && liveChannel(t.id) < 0) {
+                    a.toast(tr("재생 중인 파트에서 솔로를 사용해 주세요.", "Use solo on the currently playing part."));
+                    return;
+                }
+                solo = solo == n ? -1 : n;
+                for (int ch = 0; ch < s.part().tracks.size(); ch++) liveTrack(ch);
+                refresh();
+            });
+            soloBtn.setFocusable(true);
+            soloBtn.setContentDescription(isSolo ? tr("솔로 종료", "End solo") : tr("솔로", "Solo"));
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
+            sp.rightMargin = a.dp(6);
+            row.addView(soloBtn, sp);
+
+            TextView more = a.text("⋯", 16, MainActivity.MUTED);
+            more.setGravity(Gravity.CENTER);
+            more.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 8));
+            more.setOnClickListener(v -> track(n));
+            more.setFocusable(true);
+            more.setContentDescription(tr("트랙 설정", "Track options"));
+            row.addView(more, new LinearLayout.LayoutParams(a.dp(36), a.dp(36)));
+
             a.add(row);
         }
         a.add(StudioTheme.styled(a, tr("＋ 악기 추가", "＋ Add instrument"), StudioButton.OUTLINE, () -> instrument(-1, false)));
@@ -834,7 +923,7 @@ final class ComposerScreen {
         if (active < 0 || active >= chordCards.size()) active = -1;
         if (active != highlightedBar) {
             for (int i = 0; i < chordCards.size(); i++) {
-                android.graphics.drawable.GradientDrawable bg = StudioTheme.background(a, StudioTheme.SURFACE, 14);
+                android.graphics.drawable.GradientDrawable bg = StudioTheme.background(a, StudioTheme.SURFACE, 12);
                 if (i == active) bg.setStroke(a.dp(2), MainActivity.LIME);
                 chordCards.get(i).setBackground(bg);
             }
