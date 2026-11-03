@@ -324,8 +324,83 @@ final class LiveScreen {
     StudioKnob effectKnob(LinearLayout parent, String label, int key, float max) {
         StudioKnob knob = new StudioKnob(a, label, 0, max, a.values[key],
                 v -> Math.round(v * 100) + "%", v -> a.set(key, v)).compact();
+        knob.setOnClickListener(v -> adjustEffectDialog(label, key, max, knob));
         parent.addView(knob, new LinearLayout.LayoutParams(0, a.dp(96), 1));
         return knob;
+    }
+
+    void adjustEffectDialog(String title, int key, float max, StudioKnob knob) {
+        float[] val = { a.values[key] };
+        LinearLayout p = a.column();
+        p.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
+
+        TextView display = a.text(Math.round(val[0] * 100) + "%", 26, MainActivity.TEXT);
+        display.setTypeface(StudioTheme.bold(a));
+        display.setGravity(Gravity.CENTER);
+        display.setPadding(0, 0, 0, a.dp(8));
+        p.addView(display);
+
+        LinearLayout presets = a.row();
+        presets.setGravity(Gravity.CENTER);
+        float[] presetVals = { 0f, 0.25f * max, 0.5f * max, 0.75f * max, max };
+        String[] presetLabels = { "0%", "25%", "50%", "75%", "MAX" };
+        for (int i = 0; i < presetVals.length; i++) {
+            final float pv = presetVals[i];
+            Button chip = StudioTheme.styled(a, presetLabels[i], StudioButton.CHIP, () -> {
+                val[0] = pv;
+                a.set(key, pv);
+                knob.sync(pv);
+                display.setText(Math.round(pv * 100) + "%");
+            });
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, a.dp(40), 1);
+            if (i > 0) clp.leftMargin = a.dp(4);
+            presets.addView(chip, clp);
+        }
+        LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(-1, -2);
+        prLp.bottomMargin = a.dp(14);
+        p.addView(presets, prLp);
+
+        LinearLayout stepRow = a.row();
+        stepRow.setGravity(Gravity.CENTER_VERTICAL);
+        Button minus = StudioTheme.styled(a, "−5%", StudioButton.STANDARD, () -> {
+            val[0] = Math.max(0, val[0] - 0.05f * max);
+            a.set(key, val[0]);
+            knob.sync(val[0]);
+            display.setText(Math.round(val[0] * 100) + "%");
+        });
+        stepRow.addView(minus, new LinearLayout.LayoutParams(a.dp(56), a.dp(48)));
+
+        SeekBar bar = new SeekBar(a);
+        bar.setMax(100);
+        bar.setProgress(Math.round(val[0] / max * 100));
+        bar.setPadding(a.dp(14), 0, a.dp(14), 0);
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                if (fromUser) {
+                    val[0] = progress / 100f * max;
+                    a.set(key, val[0]);
+                    knob.sync(val[0]);
+                    display.setText(Math.round(val[0] * 100) + "%");
+                }
+            }
+            public void onStartTrackingTouch(SeekBar sb) {}
+            public void onStopTrackingTouch(SeekBar sb) {}
+        });
+        stepRow.addView(bar, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button plus = StudioTheme.styled(a, "+5%", StudioButton.STANDARD, () -> {
+            val[0] = Math.min(max, val[0] + 0.05f * max);
+            a.set(key, val[0]);
+            knob.sync(val[0]);
+            display.setText(Math.round(val[0] * 100) + "%");
+        });
+        stepRow.addView(plus, new LinearLayout.LayoutParams(a.dp(56), a.dp(48)));
+        p.addView(stepRow);
+
+        StudioDialogs.form(a, title + tr(" 조절", " Adjust"), p, tr("완료", "Done"), () -> {
+            a.set(key, val[0]);
+            knob.sync(val[0]);
+        }, null);
     }
 
     void openSource(int source) {

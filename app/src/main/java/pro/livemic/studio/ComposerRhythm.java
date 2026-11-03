@@ -21,7 +21,7 @@ final class ComposerRhythm {
 
     static List<Hit> drums(int rhythm, boolean fill, int barIndex, double energy) {
         List<Hit> hits = new ArrayList<>();
-        double length = rhythm >= 6 ? 3 : 4;
+        double length = (rhythm == 6 || rhythm == 7) ? 3 : 4;
 
         // Crash cymbal accent on 1st beat of every 4th bar or song start
         if (barIndex % 4 == 0 && !fill) {
@@ -153,6 +153,10 @@ final class ComposerRhythm {
                 return barIndex % 2 == 1
                         ? new double[]{0, 1.0, 2.0}
                         : new double[]{0, 2.0};
+            case 8: // Hip-hop / Boom bap / Trap
+                return barIndex % 2 == 1
+                        ? new double[]{0, 1.25, 2.5, 3.25}
+                        : new double[]{0, 1.5, 2.75};
             default: // Pop 8-beat
                 return barIndex % 4 == 3
                         ? new double[]{0, 2.0, 3.5}
@@ -167,8 +171,9 @@ final class ComposerRhythm {
             case 3: return new double[]{0, .75, 1.5, 2.5, 3.25};
             case 4: return new double[]{0, .5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5};
             case 5: return new double[]{0, .75, 1.5, 2.5, 3.25};
-            case 6: return new double[]{0, 1.0, 2.0};
-            case 7: return new double[]{0, 1.0, 1.5, 2.5};
+            case 6: return new double[]{0, 1.0, 2.0}; // Waltz
+            case 7: return new double[]{0, 1.0, 1.5, 2.5}; // 6/8 Ballad
+            case 8: return new double[]{0, 1.25, 2.0, 2.75}; // Hip-hop
             default: return new double[]{0, 1.0, 1.5, 2.5, 3.0, 3.5};
         }
     }
