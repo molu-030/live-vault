@@ -78,6 +78,44 @@ public class LiveConsoleTest {
         assertEquals(echo, knobValue(a.liveScreen.echoVolume), .001);
     }
 
+    static SeekBar dialogSlider(View view) {
+        if(view instanceof SeekBar)return (SeekBar)view;
+        if(view instanceof ViewGroup) {
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++){SeekBar bar=dialogSlider(group.getChildAt(i));if(bar!=null)return bar;}
+        }
+        return null;
+    }
+    @Test public void echoPopupUsesActualPercentForChipStepAndAccessibleSliderAndAppliesOnBack() {
+        float mic=a.values[0],backing=a.values[1],reverb=a.values[2];
+        a.liveScreen.echoVolume.performClick();
+        android.app.Dialog dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);assertTrue(dialog.isShowing());
+        View content=dialog.getWindow().getDecorView();SeekBar slider=dialogSlider(content);assertNotNull(slider);
+        assertEquals("Echo slider exposes actual0–80 percent",80,slider.getMax());
+        Button chip=StudioScreenshotTest.findButton(content,"40%");assertNotNull(chip);chip.performClick();
+        assertEquals(.4f,a.values[4],.001);assertEquals(40,slider.getProgress());
+        assertEquals(.4f,knobValue(a.liveScreen.echoVolume),.001);
+        StudioScreenshotTest.findButton(content,"+5%").performClick();
+        assertEquals(.45f,a.values[4],.001);assertEquals(45,slider.getProgress());
+        StudioScreenshotTest.findButton(content,"−5%").performClick();
+        assertEquals(.4f,a.values[4],.001);assertEquals(40,slider.getProgress());
+        Bundle progress=new Bundle();progress.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,65f);
+        assertTrue(slider.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),progress));
+        assertEquals(.65f,a.values[4],.001);assertEquals(.65f,knobValue(a.liveScreen.echoVolume),.001);
+        assertEquals(.65f,a.getPreferences(0).getFloat("p4",-1),.001);
+        a.onBackPressed();assertFalse(dialog.isShowing());
+        assertEquals("Popup applies changes immediately, including native Back",.65f,a.values[4],.001);
+        a.liveScreen.echoVolume.performClick();dialog=org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        content=dialog.getWindow().getDecorView();slider=dialogSlider(content);assertEquals(65,slider.getProgress());
+        StudioScreenshotTest.findButton(content,"80%").performClick();
+        StudioScreenshotTest.findButton(content,"+5%").performClick();
+        assertEquals("Echo remains capped at80 percent",.8f,a.values[4],.001);assertEquals(80,slider.getProgress());
+        StudioScreenshotTest.findButton(content,"Done").performClick();assertFalse(dialog.isShowing());
+        assertEquals(.8f,a.getPreferences(0).getFloat("p4",-1),.001);
+        assertEquals(mic,a.values[0],0);assertEquals(backing,a.values[1],0);assertEquals(reverb,a.values[2],0);
+    }
+
     static void touch(StudioKnob knob, int action, float x, float y) {
         MotionEvent event = MotionEvent.obtain(0, 16, action, x, y, 0);
         try { knob.onTouchEvent(event); } finally { event.recycle(); }

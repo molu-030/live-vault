@@ -73,7 +73,7 @@ public class LiveConsoleScreenshotTest {
                 a.handler.removeCallbacks(a.tick);
                 a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),android.graphics.Insets.of(0,36,0,24)).build());
                 a.chooseTab(0);
-                String prefix="v384-knobs-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
+                String prefix="v386-knobs-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
                 float[] stats=new float[22];
                 stats[2]=-1;
                 StudioScreenshotTest.Audio.supplied=stats;

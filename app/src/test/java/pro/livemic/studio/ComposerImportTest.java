@@ -29,6 +29,23 @@ public class ComposerImportTest {
   ComposerProject p=fixture();ComposerProject restored=ComposerLlmImport.parse(p.json().toString());assertEquals(p.json().toString(),restored.json().toString());
   ByteArrayOutputStream out=new ByteArrayOutputStream();ComposerLlmExport.write(p,"",out);String json=ComposerExportTest.string(ComposerExportTest.unzip(out.toByteArray()).get("project.json"));assertEquals(p.json().toString(),ComposerLlmImport.parse(json).json().toString());
  }
+ @Test public void hipHopAndExpandedPatternsSurviveSaveDuplicateExportAndImport()throws Exception {
+  ComposerProject p=new ComposerProject();ComposerProject.Part part=p.parts.get(0);part.rhythm=8;part.tracks.get(0).pattern=6;part.tracks.get(1).pattern=7;
+  String before=p.json().toString();assertEquals(before,ComposerProject.read(p.json()).json().toString());
+  ComposerProject.Part duplicate=p.duplicate(part);assertEquals(8,duplicate.rhythm);assertEquals(6,duplicate.tracks.get(0).pattern);assertEquals(7,duplicate.tracks.get(1).pattern);
+  ByteArrayOutputStream out=new ByteArrayOutputStream();ComposerLlmExport.write(p,"",out);java.util.Map<String,byte[]> files=ComposerExportTest.unzip(out.toByteArray());
+  String json=ComposerExportTest.string(files.get("project.json"));assertEquals(p.json().toString(),ComposerLlmImport.parse(json).json().toString());
+  assertTrue(ComposerExportTest.string(files.get("arrangement.md")).contains("Hip-hop"));
+  JSONObject schema=new JSONObject(ComposerExportTest.string(files.get("schema.json")));assertEquals(8,schema.getJSONObject("$defs").getJSONObject("part").getJSONObject("properties").getJSONObject("rhythm").getInt("maximum"));
+ }
+ @Test public void importedRhythmsMustFitTheirMeter()throws Exception {
+  for(int meter=0;meter<3;meter++)for(int rhythm=0;rhythm<MusicTheory.RHYTHMS.length;rhythm++){
+   ComposerProject p=new ComposerProject();p.meter=meter;p.parts.get(0).rhythm=rhythm;
+   boolean fits=meter==0?(rhythm<6||rhythm==8):meter==1?rhythm==6:rhythm==7;
+   assertEquals(fits,MusicTheory.rhythmFits(rhythm,meter));
+   if(fits)assertEquals(rhythm,ComposerLlmImport.parse(p.json().toString()).parts.get(0).rhythm);else reject(p.json());
+  }
+ }
  @Test public void legacyRecordedExpressionAndNotesBeyondResizedPartRoundTrip()throws Exception {
   ComposerProject p=fixture();ComposerProject.Part part=p.parts.get(0);VoicePhrase.Note n=part.phrases.get(0).notes.get(0);n.length=.5;n.bend=1200;n.curve.clear();n.curve.add(new double[]{.65,1200,.6});p.resize(part,4);n.beat=24;p.seed=Long.MAX_VALUE;
   ComposerProject parsed=ComposerLlmImport.parse(p.json().toString());assertEquals(p.json().toString(),parsed.json().toString());

@@ -23,6 +23,7 @@ final class YouTubePlayer {
     Boolean lastVisible;
     final String origin;
     WebView web;
+    YouTubeViewport viewport;
     TextView status;
     String id = "";
     boolean selected;
@@ -69,9 +70,9 @@ final class YouTubePlayer {
     void attach(LinearLayout parent) {
         if (!selected) return;
         if (web == null) create();
-        if (web.getParent() != null) ((ViewGroup) web.getParent()).removeView(web);
-        // Viewport meta makes Android dp correspond to CSS px. Never crop the iframe.
-        parent.addView(web, new LinearLayout.LayoutParams(-1, a.dp(220)));
+        if (viewport.getParent() != null) ((ViewGroup) viewport.getParent()).removeView(viewport);
+        // Native measurement and the CSS viewport share the same bounds. Never crop the iframe.
+        parent.addView(viewport, new LinearLayout.LayoutParams(-1, -2));
         status = a.text(a.tr("마이크만 녹음 · 이어폰 권장", "Mic only · Headphones recommended"), 11, MainActivity.MUTED);
         status.setContentDescription(a.tr("YouTube · 마이크만 녹음 · 이어폰 권장", "YouTube · microphone-only recording · headphones recommended"));
         parent.addView(status);
@@ -79,6 +80,8 @@ final class YouTubePlayer {
 
     private void create() {
         web = new WebView(a);
+        viewport = new YouTubeViewport(a);
+        viewport.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
         web.setBackgroundColor(MainActivity.BG);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -133,7 +136,7 @@ final class YouTubePlayer {
         lastVisible = null;
         int gain = Math.round(Math.max(0, Math.min(1, a.values[1])) * 100);
         // All interpolated strings are app-owned constants or a strictly validated video ID.
-        String html = "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='referrer' content='strict-origin-when-cross-origin'><style>html,body{margin:0;background:#111;overflow:hidden}#player{width:100%;height:220px;min-width:200px;min-height:200px}</style></head><body><div id='player'></div><script>var p,port,lastError='',ready=false,allowed=false;function reportError(code){lastError=String(code);if(port)port.postMessage(lastError);}var readyTimer=setTimeout(function(){if(!ready)reportError('timeout');},15000);window.addEventListener('message',function(e){if(e.source===null&&(e.origin==='" + origin + "'||e.origin===''||e.origin==='null')&&e.data==='connect'&&e.ports.length===1){port=e.ports[0];if(lastError)port.postMessage(lastError);}});var gain=" + gain + ";function volume(v){gain=v;if(p&&p.setVolume){p.setVolume(gain);if(gain===0)p.mute();else p.unMute();}}function pause(){allowed=false;if(p&&p.pauseVideo)p.pauseVideo();}function onYouTubeIframeAPIReady(){p=new YT.Player('player',{host:'https://www.youtube-nocookie.com',videoId:'" + id + "',playerVars:{autoplay:0,controls:1,playsinline:1,fs:0,origin:'" + origin + "',widget_referrer:'" + origin + "'},events:{onReady:function(){ready=true;clearTimeout(readyTimer);lastError='';if(port)port.postMessage('ready');volume(gain);if(!allowed)p.pauseVideo();},onStateChange:function(e){if(e.data===1&&!allowed)p.pauseVideo();},onError:function(e){reportError(e.data);}}});}function visible(v){allowed=v;if(!v&&p&&p.pauseVideo)p.pauseVideo();}document.addEventListener('visibilitychange',function(){if(document.hidden)pause();});</script><script src='https://www.youtube.com/iframe_api' onerror=\"reportError('network')\"></script></body></html>";
+        String html = "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><meta name='referrer' content='strict-origin-when-cross-origin'><style>html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}#player{display:block;width:100%;height:100%;border:0}</style></head><body><div id='player'></div><script>var p,port,lastError='',ready=false,allowed=false;function reportError(code){lastError=String(code);if(port)port.postMessage(lastError);}var readyTimer=setTimeout(function(){if(!ready)reportError('timeout');},15000);window.addEventListener('message',function(e){if(e.source===null&&(e.origin==='" + origin + "'||e.origin===''||e.origin==='null')&&e.data==='connect'&&e.ports.length===1){port=e.ports[0];if(lastError)port.postMessage(lastError);}});var gain=" + gain + ";function volume(v){gain=v;if(p&&p.setVolume){p.setVolume(gain);if(gain===0)p.mute();else p.unMute();}}function pause(){allowed=false;if(p&&p.pauseVideo)p.pauseVideo();}function onYouTubeIframeAPIReady(){p=new YT.Player('player',{host:'https://www.youtube-nocookie.com',videoId:'" + id + "',playerVars:{autoplay:0,controls:1,playsinline:1,fs:0,origin:'" + origin + "',widget_referrer:'" + origin + "'},events:{onReady:function(){ready=true;clearTimeout(readyTimer);lastError='';if(port)port.postMessage('ready');volume(gain);if(!allowed)p.pauseVideo();},onStateChange:function(e){if(e.data===1&&!allowed)p.pauseVideo();},onError:function(e){reportError(e.data);}}});}function visible(v){allowed=v;if(!v&&p&&p.pauseVideo)p.pauseVideo();}document.addEventListener('visibilitychange',function(){if(document.hidden)pause();});</script><script src='https://www.youtube.com/iframe_api' onerror=\"reportError('network')\"></script></body></html>";
         // Official iframe error UI stays visible; a top-frame-only message port reports bounded error codes.
         web.loadDataWithBaseURL(origin + "/youtube", html, "text/html", "UTF-8", null);
     }
@@ -154,7 +157,7 @@ final class YouTubePlayer {
     void pause() { lastVisible = false; if (web != null) web.evaluateJavascript("pause()", null); }
     void detach() {
         pause(); status = null;
-        if (web != null && web.getParent() != null) ((ViewGroup) web.getParent()).removeView(web);
+        if (viewport != null && viewport.getParent() != null) ((ViewGroup) viewport.getParent()).removeView(viewport);
     }
     void destroy() {
         detach();

@@ -92,6 +92,57 @@ public class BackingNavigationTest {
         click("To Live");assertEquals(0,a.tab);assertNotNull(chooser(a));
         for(String script:YouTubePlayerTest.OfflineWeb.scripts)assertFalse(script.contains("playVideo"));
     }
+    static android.widget.EditText onlineInput(View view) {
+        if(view instanceof android.widget.EditText) return (android.widget.EditText)view;
+        if(view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group=(android.view.ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++) {
+                android.widget.EditText input=onlineInput(group.getChildAt(i));if(input!=null)return input;
+            }
+        }
+        return null;
+    }
+    @Test public void onlineLoadAndConsentKeepSourceAndHistoryUntilExplicitToLive() {
+        chooser(a).performClick();click("Online");
+        int visits=a.navigation.history.size();
+        YouTubePlayerTest.OfflineWeb.pages.clear();
+        android.view.inputmethod.InputMethodManager inputMethod=(android.view.inputmethod.InputMethodManager)a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE);
+        org.robolectric.shadows.ShadowInputMethodManager keyboard=Shadows.shadowOf(inputMethod);
+        android.widget.EditText invalid=onlineInput(a.page);assertNotNull(invalid);invalid.requestFocus();
+        inputMethod.showSoftInput(invalid,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        assertTrue(keyboard.isSoftInputVisible());invalid.setText("invalid input");click("Select video in app");
+        assertTrue("Invalid URL keeps the keyboard for correction",keyboard.isSoftInputVisible());assertTrue(invalid.hasFocus());
+        assertNull(a.youtube.web);assertEquals(visits,a.navigation.history.size());
+        for(int load=0;load<2;load++) {
+            android.widget.EditText input=onlineInput(a.page);assertNotNull(input);
+            input.requestFocus();inputMethod.showSoftInput(input,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+            assertTrue("Load begins while editing a URL",keyboard.isSoftInputVisible());
+            input.setText(load==0?"https://youtu.be/dQw4w9WgXcQ":"M7lc1UVf-VE");
+            click("Select video in app");
+            if(load==0) {
+                assertFalse(a.youtube.selected);assertNull(a.youtube.web);
+                AlertDialog consent=(AlertDialog)ShadowDialog.getLatestDialog();
+                assertTrue(consent.isShowing());assertEquals(1,a.tab);assertEquals(2,a.sourceTab);
+                assertTrue("Consent decision preserves editing",keyboard.isSoftInputVisible());
+                consent.getButton(AlertDialog.BUTTON_NEGATIVE).performClick();
+                assertTrue("Declining consent preserves editing",keyboard.isSoftInputVisible());assertTrue(input.hasFocus());
+                assertNull(a.youtube.web);click("Select video in app");
+                consent=(AlertDialog)ShadowDialog.getLatestDialog();assertTrue(consent.isShowing());
+                consent.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+            }
+            ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
+            assertTrue(a.youtube.selected);assertEquals(1,a.tab);assertEquals(2,a.sourceTab);
+            assertFalse("Accepted video selection dismisses the real input-method boundary",keyboard.isSoftInputVisible());
+            assertFalse("URL field no longer owns editing focus",input.hasFocus());
+            assertEquals("Loading changes no navigation visit",visits,a.navigation.history.size());
+            assertEquals(load+1,YouTubePlayerTest.OfflineWeb.pages.size());
+            assertNotNull(a.youtube.web.getParent());
+        }
+        click("To Live");assertEquals(0,a.tab);assertTrue(a.youtube.selected);
+        assertEquals(visits+1,a.navigation.history.size());
+        a.onBackPressed();assertEquals(1,a.tab);assertEquals(2,a.sourceTab);assertTrue(a.youtube.selected);
+        a.onBackPressed();assertEquals(1,a.sourceTab);assertFalse(a.youtube.selected);
+    }
     @Test public void recordingAndCountdownLockAllChooserEntrancesWithoutChangingSelection() throws Exception {
         java.lang.reflect.Field field=AudioService.class.getDeclaredField("countdown");field.setAccessible(true);
         RecordingCountdown countdown=(RecordingCountdown)field.get(null);

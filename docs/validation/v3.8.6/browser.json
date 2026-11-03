@@ -1,0 +1,109 @@
+{
+  "passed": true,
+  "source": "app/build/outputs/studio-previews/v386-youtube-embed.html",
+  "report": "private-artifacts/validation-v3.8.6-browser.json",
+  "checks": [
+    "Official privacy host, matching origin, visible controls, no autoplay",
+    "Real iframe fills all five native-sized/tall viewports and shrinks back without body or document overflow",
+    "Application JavaScript applies user volume and mutes zero gain",
+    "Hidden/native-invisible playback pauses; visibility return never auto-resumes",
+    "Top-frame channel reports iframe error 153",
+    "Pre-channel network error buffered; ready timeout reported; late API readiness recovers"
+  ],
+  "layoutMeasurements": [
+    {
+      "phase": "resize",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 200,
+      "viewportWidth": 200,
+      "viewportHeight": 200,
+      "bodyWidth": 200,
+      "bodyHeight": 200,
+      "documentWidth": 200,
+      "documentHeight": 200,
+      "attributeWidth": "640",
+      "attributeHeight": "360"
+    },
+    {
+      "phase": "resize",
+      "x": 0,
+      "y": 0,
+      "width": 308,
+      "height": 200,
+      "viewportWidth": 308,
+      "viewportHeight": 200,
+      "bodyWidth": 308,
+      "bodyHeight": 200,
+      "documentWidth": 308,
+      "documentHeight": 200,
+      "attributeWidth": "640",
+      "attributeHeight": "360"
+    },
+    {
+      "phase": "resize",
+      "x": 0,
+      "y": 0,
+      "width": 348,
+      "height": 200,
+      "viewportWidth": 348,
+      "viewportHeight": 200,
+      "bodyWidth": 348,
+      "bodyHeight": 200,
+      "documentWidth": 348,
+      "documentHeight": 200,
+      "attributeWidth": "640",
+      "attributeHeight": "360"
+    },
+    {
+      "phase": "resize",
+      "x": 0,
+      "y": 0,
+      "width": 600,
+      "height": 338,
+      "viewportWidth": 600,
+      "viewportHeight": 338,
+      "bodyWidth": 600,
+      "bodyHeight": 338,
+      "documentWidth": 600,
+      "documentHeight": 338,
+      "attributeWidth": "640",
+      "attributeHeight": "360"
+    },
+    {
+      "phase": "resize",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 360,
+      "viewportWidth": 200,
+      "viewportHeight": 360,
+      "bodyWidth": 200,
+      "bodyHeight": 360,
+      "documentWidth": 200,
+      "documentHeight": 360,
+      "attributeWidth": "640",
+      "attributeHeight": "360"
+    },
+    {
+      "phase": "resize-back",
+      "x": 0,
+      "y": 0,
+      "width": 200,
+      "height": 200,
+      "viewportWidth": 200,
+      "viewportHeight": 200,
+      "bodyWidth": 200,
+      "bodyHeight": 200,
+      "documentWidth": 200,
+      "documentHeight": 200,
+      "attributeWidth": "640",
+      "attributeHeight": "360"
+    }
+  ],
+  "boundary": "OFFLINE YouTube API stub replacing the app placeholder with a real 640x360-attributed iframe. Actual application HTML/CSS/JavaScript run in Chromium; no YouTube network, decoded video aspect ratio, or Android device playback verified.",
+  "blockedNetworkRequests": [
+    "https://www.youtube.com/iframe_api"
+  ]
+}

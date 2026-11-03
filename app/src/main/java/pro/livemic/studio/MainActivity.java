@@ -1820,6 +1820,12 @@ public class MainActivity extends Activity {
         }
         Runnable select = () -> {
             if (settingsLocked() || recordPermissionPending || pendingAction != 0 || starting || busy || awaitingMicPermission || AudioService.captureActive || (camera != null && camera.recording)) return;
+            // Accepted links leave editing mode so the preview gets the full window height.
+            View focused = getCurrentFocus();
+            android.view.inputmethod.InputMethodManager inputMethod = getSystemService(android.view.inputmethod.InputMethodManager.class);
+            if (inputMethod != null) inputMethod.hideSoftInputFromWindow(
+                    focused != null ? focused.getWindowToken() : getWindow().getDecorView().getWindowToken(), 0);
+            if (focused instanceof EditText) focused.clearFocus();
             // Stop native owners before exposing a third-party player.
             stopPlayer(); composer.stop(); composer.voice(false); harmony.stop(); harmony.live(false);
             NativeAudio.playLocal(false); NativeAudio.set(13, 0); NativeAudio.set(12, 0);
@@ -1827,7 +1833,9 @@ public class MainActivity extends Activity {
             NativeAudio.enablePlaybackCapture(false, 0);
             youtube.pause(); youtube.id = id; youtube.selected = true; AudioService.youtubeSelected = true;
             if (youtube.web != null) youtube.load();
-            navigate(new BackNavigation.Page(0, 2, libraryFilter, 0), false);
+            // Refresh the current preview without changing its destination or Back history.
+            BackNavigation.Page preview = currentPage();
+            navigate(new BackNavigation.Page(preview.tab, 2, preview.filter, preview.scroll), false);
         };
         if (getPreferences(0).getBoolean("youtubeConsent", false)) { select.run(); return; }
         StudioDialogs.alert(this).setTitle(tr("YouTube 플레이어 사용", "Use the YouTube player"))

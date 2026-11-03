@@ -78,14 +78,14 @@ final class LiveScreen {
 
     LinearLayout panel() {
         LinearLayout p = a.column();
-        p.setPadding(a.dp(12), a.dp(a.youtube.selected ? 3 : 4), a.dp(12), a.dp(a.youtube.selected ? 3 : 4));
+        p.setPadding(a.dp(12), a.dp(4), a.dp(12), a.dp(4));
         p.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12, StudioTheme.BORDER));
         return p;
     }
 
     void addPanel(View p) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = a.dp(a.youtube.selected ? 3 : 6);
+        lp.topMargin = a.dp(6);
         a.page.addView(p, lp);
     }
 
@@ -186,13 +186,8 @@ final class LiveScreen {
         // 1. LIVE SESSION LCD DISPLAY & 2x2 I/O CONTROLS
         LinearLayout session = panel();
         display = new LiveSessionDisplay(a);
-        if (!a.youtube.selected) {
-            session.addView(display, new LinearLayout.LayoutParams(-1, a.dp(170)));
-            a.page.flexible(display, 151, 300);
-        } else {
-            session.addView(display, new LinearLayout.LayoutParams(-1, a.dp(86)));
-            display.setLayoutParams(new LinearLayout.LayoutParams(-1, a.dp(86)));
-        }
+        session.addView(display, new LinearLayout.LayoutParams(-1, a.dp(170)));
+        a.page.flexible(display, 151, 300);
 
         // Section label "입출력" & 2x2 Input / Output Controls Grid
         session.addView(heading(tr("입출력", "I/O")), new LinearLayout.LayoutParams(-1, -2));
@@ -212,7 +207,7 @@ final class LiveScreen {
         // Row 2: Input Device (left) | Output Device (right)
         LinearLayout row2 = a.row();
         LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(-1, a.dp(48));
-        row2Lp.topMargin = a.dp(a.youtube.selected ? 2 : 4);
+        row2Lp.topMargin = a.dp(4);
 
         inputButton = button(tr("입력", "Input") + " ▾\n" + compactDevice(a.inputName()), a::selectInput);
         sourceButton = inputButton; // Keep reference for test compatibility
@@ -225,7 +220,7 @@ final class LiveScreen {
         grid.addView(row2, row2Lp);
 
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.topMargin = a.dp(a.youtube.selected ? 2 : 4);
+        cp.topMargin = a.dp(4);
         session.addView(grid, cp);
 
         route = text("", 10, StudioTheme.MUTED);
@@ -233,21 +228,12 @@ final class LiveScreen {
         micVolumeLabel = text("", 11, StudioTheme.MUTED);
         volumeLabel = text("", 11, StudioTheme.MUTED);
 
-        if (a.youtube.selected) {
-            LinearLayout gains = a.row();
-            micVolume = compactGain(gains, tr("마이크", "Mic"), 0, 200, micVolumeLabel);
-            backingVolume = compactGain(gains, tr("반주", "Backing"), 1, 100, volumeLabel);
-            LinearLayout.LayoutParams gp = new LinearLayout.LayoutParams(-1, a.dp(48));
-            gp.topMargin = a.dp(2);
-            session.addView(gains, gp);
-        } else {
-            micVolume = gain(session, tr("마이크", "Mic"), 0, 200, micVolumeLabel);
-        }
+        micVolume = gain(session, tr("마이크", "Mic"), 0, 200, micVolumeLabel);
         a.page.addView(session, new LinearLayout.LayoutParams(-1, -2));
 
         // 2. ACCOMPANIMENT PANEL (Clean Backing Surface)
         LinearLayout accompaniment = panel();
-        if (!a.youtube.selected) accompaniment.addView(heading(tr("🎵 반주", "🎵 ACCOMPANIMENT")), new LinearLayout.LayoutParams(-1, -2));
+        accompaniment.addView(heading(tr("🎵 반주", "🎵 ACCOMPANIMENT")), new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout player = a.row();
         backingPlayButton = button("▶", this::toggleBackingPlay);
@@ -271,10 +257,10 @@ final class LiveScreen {
         player.addView(track, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
         Button chooseBacking = button(tr("반주 선택 ▾", "Choose backing ▾"), a::chooseBacking);
-        if (!a.youtube.selected) player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
+        player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
 
-        if (!a.youtube.selected) accompaniment.addView(player);
-        if (!a.youtube.selected) backingVolume = gain(accompaniment, tr("반주", "Backing"), 1, 100, volumeLabel);
+        accompaniment.addView(player);
+        backingVolume = gain(accompaniment, tr("반주", "Backing"), 1, 100, volumeLabel);
         if (a.youtube.selected) a.youtube.attach(accompaniment);
         addPanel(accompaniment);
 
@@ -287,24 +273,11 @@ final class LiveScreen {
         detailsButton.setTextSize(10.5f);
         detailsButton.setPadding(a.dp(2), 0, a.dp(2), 0);
 
-        if (a.youtube.selected) {
-            LinearLayout row = a.row();
-            row.addView(knobs, new LinearLayout.LayoutParams(0, a.dp(96), 1));
-            LinearLayout actions = a.column();
-            actions.addView(chooseBacking, new LinearLayout.LayoutParams(-1, a.dp(48)));
-            actions.addView(detailsButton, new LinearLayout.LayoutParams(-1, a.dp(48)));
-            LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(a.dp(76), a.dp(96));
-            dp.leftMargin = a.dp(6);
-            dp.gravity = Gravity.CENTER_VERTICAL;
-            row.addView(actions, dp);
-            fx.addView(row);
-        } else {
-            LinearLayout fh = a.row();
-            fh.addView(heading(tr("✨ 보컬 효과", "✨ VOCAL FX")), new LinearLayout.LayoutParams(0, a.dp(48), 1));
-            fh.addView(detailsButton, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
-            fx.addView(fh);
-            fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(96)));
-        }
+        LinearLayout fh = a.row();
+        fh.addView(heading(tr("✨ 보컬 효과", "✨ VOCAL FX")), new LinearLayout.LayoutParams(0, a.dp(48), 1));
+        fh.addView(detailsButton, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
+        fx.addView(fh);
+        fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(96)));
         addPanel(fx);
 
         // 4. ACTION DOCK
@@ -340,18 +313,33 @@ final class LiveScreen {
         display.setPadding(0, 0, 0, a.dp(8));
         p.addView(display);
 
+        int maxPercent = Math.round(max * 100);
+        SeekBar bar = new SeekBar(a);
+        bar.setMax(maxPercent);
+        bar.setProgress(Math.round(val[0] * 100));
+        bar.setPadding(a.dp(14), 0, a.dp(14), 0);
+        java.util.function.IntConsumer applyPercent = percent -> {
+            int bounded = Math.max(0, Math.min(maxPercent, percent));
+            val[0] = bounded / 100f;
+            a.set(key, val[0]);
+            knob.sync(val[0]);
+            display.setText(bounded + "%");
+            bar.setProgress(bounded);
+        };
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                if (fromUser) applyPercent.accept(progress);
+            }
+            public void onStartTrackingTouch(SeekBar sb) {}
+            public void onStopTrackingTouch(SeekBar sb) {}
+        });
+
         LinearLayout presets = a.row();
         presets.setGravity(Gravity.CENTER);
-        float[] presetVals = { 0f, 0.25f * max, 0.5f * max, 0.75f * max, max };
-        String[] presetLabels = { "0%", "25%", "50%", "75%", "MAX" };
-        for (int i = 0; i < presetVals.length; i++) {
-            final float pv = presetVals[i];
-            Button chip = StudioTheme.styled(a, presetLabels[i], StudioButton.CHIP, () -> {
-                val[0] = pv;
-                a.set(key, pv);
-                knob.sync(pv);
-                display.setText(Math.round(pv * 100) + "%");
-            });
+        for (int i = 0; i <= 4; i++) {
+            final int percent = Math.round(maxPercent * i / 4f);
+            Button chip = StudioTheme.styled(a, percent + "%", StudioButton.CHIP,
+                    () -> applyPercent.accept(percent));
             LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, a.dp(40), 1);
             if (i > 0) clp.leftMargin = a.dp(4);
             presets.addView(chip, clp);
@@ -362,38 +350,13 @@ final class LiveScreen {
 
         LinearLayout stepRow = a.row();
         stepRow.setGravity(Gravity.CENTER_VERTICAL);
-        Button minus = StudioTheme.styled(a, "−5%", StudioButton.STANDARD, () -> {
-            val[0] = Math.max(0, val[0] - 0.05f * max);
-            a.set(key, val[0]);
-            knob.sync(val[0]);
-            display.setText(Math.round(val[0] * 100) + "%");
-        });
+        Button minus = StudioTheme.styled(a, "−5%", StudioButton.STANDARD,
+                () -> applyPercent.accept(Math.round(val[0] * 100) - 5));
         stepRow.addView(minus, new LinearLayout.LayoutParams(a.dp(56), a.dp(48)));
-
-        SeekBar bar = new SeekBar(a);
-        bar.setMax(100);
-        bar.setProgress(Math.round(val[0] / max * 100));
-        bar.setPadding(a.dp(14), 0, a.dp(14), 0);
-        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
-                if (fromUser) {
-                    val[0] = progress / 100f * max;
-                    a.set(key, val[0]);
-                    knob.sync(val[0]);
-                    display.setText(Math.round(val[0] * 100) + "%");
-                }
-            }
-            public void onStartTrackingTouch(SeekBar sb) {}
-            public void onStopTrackingTouch(SeekBar sb) {}
-        });
         stepRow.addView(bar, new LinearLayout.LayoutParams(0, -2, 1));
 
-        Button plus = StudioTheme.styled(a, "+5%", StudioButton.STANDARD, () -> {
-            val[0] = Math.min(max, val[0] + 0.05f * max);
-            a.set(key, val[0]);
-            knob.sync(val[0]);
-            display.setText(Math.round(val[0] * 100) + "%");
-        });
+        Button plus = StudioTheme.styled(a, "+5%", StudioButton.STANDARD,
+                () -> applyPercent.accept(Math.round(val[0] * 100) + 5));
         stepRow.addView(plus, new LinearLayout.LayoutParams(a.dp(56), a.dp(48)));
         p.addView(stepRow);
 

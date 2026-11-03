@@ -19,6 +19,16 @@ import static org.junit.Assert.*;
 public class YouTubePlayerTest {
     @Implements(WebView.class)
     public static class OfflineWeb extends ShadowWebView {
+        @RealObject WebView realWeb;
+        // Chromium is absent offline. Give its boundary normal View geometry; the
+        // actual attached parent tree still determines all scrolling and clipping.
+        @Implementation protected boolean setFrame(int left,int top,int right,int bottom) {
+            return org.robolectric.shadow.api.Shadow.directlyOn(realWeb,android.view.View.class,"setFrame",
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class,left),
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class,top),
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class,right),
+                    org.robolectric.util.ReflectionHelpers.ClassParameter.from(int.class,bottom));
+        }
         static final List<String> pages = new ArrayList<>(), scripts = new ArrayList<>();
         @Implementation protected void loadDataWithBaseURL(String base, String data, String mime, String encoding, String history) { pages.add(data); }
         @Implementation protected void evaluateJavascript(String script, ValueCallback<String> callback) { scripts.add(script); }
@@ -124,6 +134,9 @@ public class YouTubePlayerTest {
         LinearLayout slot=new LinearLayout(a); a.page.addView(slot);player.attach(slot);
         assertEquals(1,OfflineWeb.pages.size());
         assertTrue(OfflineWeb.pages.get(0).contains("autoplay:0"));
+        String html=OfflineWeb.pages.get(0);
+        assertTrue("Iframe CSS follows its measured native viewport",html.contains("height:100%"));
+        assertFalse("No fixed iframe height can crop a wider native player",html.contains("height:220px"));
         assertTrue(player.web.getSettings().getMediaPlaybackRequiresUserGesture());
         OfflineWeb.scripts.clear();player.detach();assertTrue(OfflineWeb.scripts.contains("pause()"));
         player.attach(slot); assertEquals("Reuse paused player without loading another video",1,OfflineWeb.pages.size());
@@ -141,4 +154,54 @@ public class YouTubePlayerTest {
         player.volume(0);assertEquals("volume(0)",OfflineWeb.scripts.get(1));
         assertEquals(mic,a.values[0],0);assertEquals(music,manager.getStreamVolume(android.media.AudioManager.STREAM_MUSIC));assertEquals(voice,manager.getStreamVolume(android.media.AudioManager.STREAM_VOICE_CALL));player.destroy();
     }
+    /** Window focus is supplied by the test; player clipping uses the real native view tree. */
+    public static class FocusedActivity extends MainActivity {
+        @Override public boolean hasWindowFocus() { return true; }
+    }
+    @Test public void scrollingPartOfActualVideoOutOfViewportDisallowsPlaybackUntilFullyRevealed() {
+        RuntimeEnvironment.setQualifiers("w360dp-h720dp-mdpi");RuntimeEnvironment.setFontScale(1f);
+        MainActivity focused=Robolectric.buildActivity(FocusedActivity.class).setup().get();
+        try {
+            focused.handler.removeCallbacks(focused.tick);focused.activityVisible=true;
+            focused.getPreferences(0).edit().putBoolean("youtubeConsent",true).commit();
+            focused.selectYouTube("dQw4w9WgXcQ");
+            android.view.View decor=focused.getWindow().getDecorView();
+            StudioScreenshotTest.redraw(decor);
+            decor.measure(android.view.View.MeasureSpec.makeMeasureSpec(360,android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(720,android.view.View.MeasureSpec.EXACTLY));
+            decor.layout(0,0,360,720);
+            YouTubeScreenshotTest.reveal(focused,focused.youtube.web);
+            android.graphics.Rect rect=new android.graphics.Rect();
+            assertTrue("Attached video has a visible native rect; root="+focused.root.getWidth()+"x"+focused.root.getHeight()+" video="+StudioScreenshotTest.bounds(focused,focused.youtube.web)+" viewport="+focused.youtube.viewport.getWidth()+"x"+focused.youtube.viewport.getHeight()+" minimum="+focused.youtube.viewport.minimum+" visibility="+focused.youtube.web.getVisibility(),focused.youtube.web.getGlobalVisibleRect(rect));
+            assertEquals(focused.youtube.web.getWidth(),rect.width());assertEquals(focused.youtube.web.getHeight(),rect.height());
+            focused.youtube.lastVisible=null;OfflineWeb.scripts.clear();focused.youtube.checkVisibility();
+            assertTrue("Fully revealed native player can accept a user play gesture",OfflineWeb.scripts.contains("visible(true)"));
+            assertTrue("Revealing the lower backing video requires body scrolling",focused.pageScroll.getScrollY()>0);
+            OfflineWeb.scripts.clear();focused.pageScroll.scrollTo(0,0);
+            assertTrue("Fixture actually clips part of the video",!focused.youtube.web.getGlobalVisibleRect(rect)||rect.height()<focused.youtube.web.getHeight());
+            focused.youtube.checkVisibility();
+            assertTrue("Partially clipped video is disallowed",OfflineWeb.scripts.contains("visible(false)"));
+            OfflineWeb.scripts.clear();YouTubeScreenshotTest.reveal(focused,focused.youtube.web);
+            focused.youtube.checkVisibility();
+            assertTrue(OfflineWeb.scripts.contains("visible(true)"));
+            for(String script:OfflineWeb.scripts)assertFalse("Revealing video never autoplays",script.contains("playVideo"));
+        } finally {focused.handler.removeCallbacks(focused.tick);focused.youtube.destroy();focused.io.shutdown();}
+    }
+    @Test public void nativePlayerAdaptsToWidePortraitAndBelowMinimumWindows() {
+        YouTubePlayer player=new YouTubePlayer(a);player.selected=true;player.id="dQw4w9WgXcQ";
+        LinearLayout slot=new LinearLayout(a);player.attach(slot);
+        for(int width:new int[]{160,200,312,360,412,600}) {
+            int pixels=a.dp(width);
+            slot.measure(android.view.View.MeasureSpec.makeMeasureSpec(pixels,android.view.View.MeasureSpec.EXACTLY),
+                    android.view.View.MeasureSpec.makeMeasureSpec(0,android.view.View.MeasureSpec.UNSPECIFIED));
+            slot.layout(0,0,pixels,slot.getMeasuredHeight());
+            assertEquals(pixels,player.viewport.getWidth());
+            assertEquals(Math.max(a.dp(200),(int)Math.ceil(pixels*9d/16d)),player.viewport.getHeight());
+            assertEquals("WebView has the exact native viewport width",player.viewport.getWidth(),player.web.getMeasuredWidth());
+            assertEquals("WebView has the exact native viewport height",player.viewport.getHeight(),player.web.getMeasuredHeight());
+            assertEquals("Below minimum size uses a native fallback",width<200?android.view.View.INVISIBLE:android.view.View.VISIBLE,player.web.getVisibility());
+        }
+        player.destroy();
+    }
+
 }

@@ -23,7 +23,7 @@ final class MusicTheory {
     static double barBeats(int meter){return meter==0?4:3;}
     static double quarterBpm(int bpm,int meter){return meter==2?bpm*1.5:bpm;}
     static double split(int meter){return meter==0?2:meter==1?2:1.5;}
-    static boolean rhythmFits(int rhythm,int meter){return meter==0?(rhythm<6||rhythm==8):meter==1?rhythm==6:rhythm==7;}
+    static boolean rhythmFits(int rhythm,int meter){return rhythm>=0&&rhythm<RHYTHMS.length&&(meter==0?(rhythm<6||rhythm==8):meter==1?rhythm==6:meter==2&&rhythm==7);}
     static int fit(int midi,int lo,int hi){while(midi<lo)midi+=12;while(midi>hi)midi-=12;return midi;}
     /** Compact inversion with minimal movement from the preceding chord. */
     static int[] voicing(int root,int quality,int[] previous,int lo,int hi){

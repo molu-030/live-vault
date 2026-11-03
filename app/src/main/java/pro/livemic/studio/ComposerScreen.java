@@ -1317,10 +1317,6 @@ final class ComposerScreen {
             workingPhrase.notes.add(n);
             workingPhrase.notes.sort((n1, n2) -> Double.compare(n1.beat, n2.beat));
 
-            if (s.ready) {
-                NativeComposer.voice(true, t.program, 0, 0, false, false, 0, -1, false, false, 0.85f, 0.007f);
-            }
-
             curBeat[0] += stepLen[0];
             if (curBeat[0] >= beatsPerBar) {
                 curBeat[0] = 0;

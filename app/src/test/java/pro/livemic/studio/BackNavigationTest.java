@@ -124,7 +124,8 @@ public class BackNavigationTest {
     @Test public void returningThroughOnlineSourceClearsYouTubeOnlyWhenFilesRestored() {
         a.chooseTab(1); a.chooseSource(2);
         a.getPreferences(0).edit().putBoolean("youtubeConsent", true).commit();
-        a.selectYouTube("dQw4w9WgXcQ"); assertEquals(0, a.tab); assertTrue(a.youtube.selected);
+        a.selectYouTube("dQw4w9WgXcQ"); assertEquals(1, a.tab); assertTrue(a.youtube.selected);
+        StudioScreenshotTest.findButtonContaining(a.page,"To Live").performClick(); assertEquals(0,a.tab);
         a.onBackPressed(); assertEquals(1, a.tab); assertEquals(2, a.sourceTab); assertTrue(a.youtube.selected);
         a.onBackPressed(); assertEquals(1, a.sourceTab); assertFalse(a.youtube.selected);
         assertFalse(AudioService.youtubeSelected);
@@ -138,6 +139,7 @@ public class BackNavigationTest {
                 a.navigation.history.clear(); a.chooseTab(0); a.chooseTab(1); a.chooseSource(2);
                 a.getPreferences(0).edit().putBoolean("youtubeConsent", true).commit();
                 a.selectYouTube("dQw4w9WgXcQ");
+                assertEquals(1,a.tab); StudioScreenshotTest.findButtonContaining(a.page,"To Live").performClick();
                 assertEquals(0, a.tab); assertTrue(a.youtube.selected);
                 RecordingManager.active = recording;
                 if (!recording) countdown.arm(10, android.os.SystemClock.elapsedRealtime());
