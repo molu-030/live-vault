@@ -789,9 +789,9 @@ public class AudioService extends Service {
         if (ExitCoordinator.isExitRequested()) NativeComposer.transport(0);
         composerRequested = harmonyRequested = false;
         if (composer != null) {
-            composer.voice(false);
             if (composer.capturing && !composer.worker.isShutdown()) composer.poll();
             if (composer.capturing) composer.cancelPhrase();
+            composer.voice(false);
         }
         suspendedOutput = preservePausedTransport;
         if (preservePausedTransport) NativeAudio.suspend();

@@ -56,7 +56,7 @@ public class ComposerEditorTest {
   s.selectedPart=0;screen.refresh();StudioScreenshotTest.Composer.trackCalls.clear();screen.trackLevels(0);levels=ShadowDialog.getLatestDialog();setFader(fader(levels.getWindow().getDecorView()),.35f);assertEquals(java.util.Arrays.asList(0),StudioScreenshotTest.Composer.trackCalls);levels.cancel();st[1]=0;
  }
  @Test public void switchingPartAndProjectClearsSoloWithoutMixWrites() throws Exception {
-  s.project.duplicate(s.part());screen.refresh();screen.solo=0;StudioScreenshotTest.Composer.trackCalls.clear();StudioScreenshotTest.Composer.clearSoloCalls=0;Button part=StudioScreenshotTest.findButtonContaining(a.page,"B  ·");assertNotNull(part);part.performClick();assertEquals(-1,screen.solo);assertTrue(StudioScreenshotTest.Composer.clearSoloCalls>0);assertTrue(StudioScreenshotTest.Composer.trackCalls.isEmpty());
+  s.project.duplicate(s.part());screen.refresh();screen.solo=0;StudioScreenshotTest.Composer.trackCalls.clear();StudioScreenshotTest.Composer.clearSoloCalls=0;Button part=StudioScreenshotTest.findButton(a.page,"›");assertNotNull(part);part.performClick();assertEquals(-1,screen.solo);assertTrue(StudioScreenshotTest.Composer.clearSoloCalls>0);assertTrue(StudioScreenshotTest.Composer.trackCalls.isEmpty());
   screen.solo=0;StudioScreenshotTest.Composer.clearSoloCalls=0;s.open(new ComposerProject());screen.refresh();assertEquals(-1,screen.solo);assertTrue(StudioScreenshotTest.Composer.clearSoloCalls>0);assertTrue(StudioScreenshotTest.Composer.trackCalls.isEmpty());
  }
  @Test public void lcdShowsPlayingPartAndSecondSplitChord() throws Exception {
@@ -68,7 +68,7 @@ public class ComposerEditorTest {
   s.play();s.worker.submit(()->{}).get();assertTrue("worker compiled and posted start",StudioScreenshotTest.Composer.publishCalls>published);assertFalse(AudioService.composerRequested);s.stop();ShadowLooper.idleMainLooper();assertFalse(AudioService.composerRequested);assertFalse(StudioScreenshotTest.Composer.transportCalls.contains(1));assertTrue(StudioScreenshotTest.Composer.transportCalls.contains(0));
  }
  @Test public void queuedCountInCannotRestartAfterCancel() throws Exception {
-  s.stop();s.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();s.state()[1]=0;s.voiceOn=true;AudioService.active=true;AudioService.composerRequested=false;StudioScreenshotTest.Composer.transportCalls.clear();StudioScreenshotTest.Composer.recordCalls.clear();int published=StudioScreenshotTest.Composer.publishCalls;
+  s.stop();s.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();StudioScreenshotTest.Composer.current[1]=0;s.state()[1]=0;s.voiceOn=true;AudioService.active=true;AudioService.composerRequested=false;StudioScreenshotTest.Composer.transportCalls.clear();StudioScreenshotTest.Composer.recordCalls.clear();int published=StudioScreenshotTest.Composer.publishCalls;
   s.recordPhrase();assertTrue(s.capturing);s.worker.submit(()->{}).get();assertTrue("worker compiled and posted count-in",StudioScreenshotTest.Composer.publishCalls>published);s.cancelPhrase();ShadowLooper.idleMainLooper();assertFalse(s.capturing);assertFalse(AudioService.composerRequested);assertFalse(StudioScreenshotTest.Composer.transportCalls.contains(3));assertFalse(StudioScreenshotTest.Composer.recordCalls.contains(true));assertTrue(StudioScreenshotTest.Composer.recordCalls.contains(false));s.voiceOn=false;AudioService.active=false;
  }
  @Test public void corruptHistoryPreservesBothStacksAndCurrentProject() throws Exception {

@@ -172,6 +172,23 @@ public class ExitFlowTest {
         assertEquals(1,a.composer.part().phrases.size());assertEquals(60,a.composer.part().phrases.get(0).notes.get(0).midi);
         awaitExit();ComposerProject saved=a.composer.store.draft();
         assertNotNull(saved);assertEquals(1,saved.parts.get(0).phrases.size());assertEquals(60,saved.parts.get(0).phrases.get(0).notes.get(0).midi);
+        String recordedTrackId=saved.parts.get(0).phrases.get(0).trackId;
+        TrackConfig recordedTrack=null;for(TrackConfig track:saved.parts.get(0).tracks)if(track.id.equals(recordedTrackId))recordedTrack=track;
+        assertNotNull(recordedTrack);assertEquals("microphone",recordedTrack.phraseSource);
+    }
+    @Test public void serviceDestructionPersistsAlreadyCompletedPhraseBeforeDisablingVoice() throws Exception {
+        org.robolectric.android.controller.ServiceController<AudioService> service=Robolectric.buildService(AudioService.class).create();
+        preparePhraseCapture();
+        StudioScreenshotTest.Composer.performance=new double[]{4,1,60,90,0,.8,0,0,5,0,60,0,0,.7,0,0};
+        StudioScreenshotTest.Composer.current[8]=3;
+        service.destroy();
+        assertFalse(a.composer.capturing);assertFalse(a.composer.voiceOn);
+        assertEquals(1,a.composer.part().phrases.size());
+        a.composer.worker.submit(()->{}).get(5,TimeUnit.SECONDS);
+        ComposerProject saved=a.composer.store.draft();assertNotNull(saved);
+        VoicePhrase phrase=saved.parts.get(0).phrases.get(0);assertEquals(60,phrase.notes.get(0).midi);
+        TrackConfig target=null;for(TrackConfig track:saved.parts.get(0).tracks)if(track.id.equals(phrase.trackId))target=track;
+        assertNotNull(target);assertEquals("microphone",target.phraseSource);
     }
     @Test public void exitCancelsIncompletePhraseAndKeepsPreviousProject() throws Exception {
         String before=a.composer.project.json().toString();

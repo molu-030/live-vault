@@ -1,8 +1,10 @@
-# Live Vault 3.8.3 — Android native preview
+# Live Vault 3.8.8 — Android native preview
 
-**3.8.3-preview / versionCode 21**은 반주 선택 진입을 복구한 개인용 체크포인트입니다. 라이브의 **반주 선택 ▾** 또는 **☰ → 반주**에서 **내 파일 · 작곡기 · 온라인**을 엽니다. 반주가 없는 상태에서 재생을 눌러도 선택 화면이 열립니다. [복구와 검증](docs/LIVE_VAULT_V3_8_3_BACKING_RESTORE.md). 이전 [하울링 보호 검수](docs/LIVE_VAULT_V3_8_2_FEEDBACK_REVIEW.md)와 [3.8.1 변경](docs/LIVE_VAULT_V3_8_1_UI.md)은 이력으로 유지합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
+**3.8.8-preview / versionCode 26**은 작곡기 누락을 수정한 개인용 체크포인트입니다. **대표 24 + 드럼**, 키트 즐겨찾기, 파트 화살표·전체 목록, 실제 악기 패턴과 건반/목소리 프레이즈 보존을 보완했습니다. [누락 재검수·화면·검증 범위](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md). [종료 확인·유휴 전력 개선](docs/LIVE_VAULT_V3_8_7_EXIT_AND_POWER.md)과 [영상 레이아웃 수정](docs/LIVE_VAULT_V3_8_6_VIDEO_LAYOUT.md)을 포함합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
 
-LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 소스/마이크/모니터 세 버튼, 마이크/반주/리버브/에코 네 슬라이더, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 입출력 장치와 반주 선택은 **소스 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
+라이브의 **반주 선택 ▾** 또는 **☰ → 반주**에서 **내 파일 · 작곡기 · 온라인**을 엽니다. 반주가 없는 상태에서 재생을 눌러도 선택 화면이 열립니다. [반주 진입 복구](docs/LIVE_VAULT_V3_8_3_BACKING_RESTORE.md)와 [하울링 보호 검수](docs/LIVE_VAULT_V3_8_2_FEEDBACK_REVIEW.md)는 이력으로 유지합니다.
+
+LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 소스/마이크/모니터 세 버튼, 마이크/반주/리버브/에코 조절기, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 입출력 장치와 반주 선택은 **소스 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
 
 반주 → 온라인에서 YouTube 주소/동영상 ID를 선택하고 공식 플레이어에서 직접 재생합니다. 같은 반주 음량 조절기로 플레이어 음량을 바꾸며 시스템 전체 음량과 마이크 게인은 유지합니다. YouTube 선택 시에는 마이크만 녹음하고, 화면을 벗어나면 동영상을 일시정지합니다. 플레이어 화면은 OFFLINE fixture로 구분하며 실제 기기의 YouTube·오디오·장치·터치 접근성·지연 검증과 배포 전 정책 검토는 남아 있습니다. 개인용 오버레이/APK와 비공개 전달 URL은 공개 저장소에 포함하지 않습니다. 이전 [3.7 검증](docs/LIVE_VAULT_V3_7_VALIDATION.md)과 [렌더 72장](docs/screenshots/v3.7/)은 이력으로 유지합니다.
 
@@ -14,13 +16,13 @@ LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 �
 
 ## 미리보기 APK
 
-기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.8.3 반주 복구](docs/LIVE_VAULT_V3_8_3_BACKING_RESTORE.md)를 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
+기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.8.8 작곡기 재검수](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md)를 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
 
 ## AI로 반주 수정하기
 
-1. 작곡기에서 **AI용 내보내기**를 열고 선택적으로 원하는 수정 내용을 적은 뒤 ZIP을 저장합니다.
+1. 작곡기에서 **AI 내보내기**를 열고 선택적으로 원하는 수정 내용을 적은 뒤 ZIP을 저장합니다.
 2. ZIP을 ChatGPT 등 AI에 첨부하고 완전한 프로젝트 JSON을 요청합니다. ZIP에는 오디오가 들어 있지 않습니다.
-3. AI의 응답을 UTF-8 `.json` 파일로 저장하고 작곡기의 프로젝트 메뉴에서 **AI 수정본 불러오기**를 선택합니다. 미리보기를 확인한 뒤 새 복사본으로 엽니다. 기존 프로젝트는 보관함에 저장됩니다.
+3. AI의 응답을 UTF-8 `.json` 파일로 저장하고 작곡기의 **JSON 불러오기** 또는 프로젝트 메뉴의 **AI 수정본 불러오기**를 선택합니다. 미리보기를 확인한 뒤 새 복사본으로 엽니다. 기존 프로젝트는 보관함에 저장됩니다.
 
 가져오기는 최대 8 MiB의 일반 JSON을 받습니다. 파일을 읽는 중 화면이 재생성되면 다시 선택해 주세요.
 

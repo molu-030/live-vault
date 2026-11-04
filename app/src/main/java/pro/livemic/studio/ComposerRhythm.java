@@ -129,6 +129,35 @@ final class ComposerRhythm {
         return hits;
     }
 
+    /** Track articulation over the part groove; pattern zero preserves legacy events. */
+    static List<Hit> drums(int rhythm, boolean fill, int barIndex, double energy, int pattern) {
+        List<Hit> base=drums(rhythm,fill,barIndex,energy);
+        if(pattern<=0||pattern>4)return base;
+        double length=rhythm==6||rhythm==7?3:4;
+        List<Hit> hits=new ArrayList<>();
+        for(Hit h:base){
+            boolean cymbal=h.note==42||h.note==44||h.note==46||h.note==49||h.note==51;
+            // The closing fill retains its timing, toms and dynamics in every kit pattern.
+            if(fill&&h.beat>=length-1){hits.add(h);continue;}
+            if(pattern==1){
+                if(cymbal){if(h.note==49||Math.abs(h.beat-Math.rint(h.beat))>1e-6)continue;hits.add(new Hit(h.beat,42,h.gain*.72));}
+                else hits.add(new Hit(h.beat,h.note,h.gain*.8));
+            }else if(pattern==3){hits.add(new Hit(h.beat,cymbal?51:h.note,h.gain));}
+            else if(pattern==4){
+                if(h.note==36){if(h.beat==0)hits.add(new Hit(h.beat,36,h.gain*.75));}
+                else if(h.note==38||h.note==37) {if(h.gain>=.4)hits.add(new Hit(h.beat,37,h.gain*.65));}
+            }else hits.add(h);
+        }
+        if(pattern==2){
+            // Driving eighth-note kick pulse, retaining the groove's syncopated kicks.
+            for(double at=0;at<(fill?length-1:length);at+=.5){
+                boolean exists=false;for(Hit h:hits)if(h.note==36&&Math.abs(h.beat-at)<1e-6){exists=true;break;}
+                if(!exists)hits.add(new Hit(at,36,.70+energy*.15));
+            }
+        }
+        return hits;
+    }
+
     static double[] kicks(int rhythm, int barIndex) {
         switch (rhythm) {
             case 1: // Pop 16-beat

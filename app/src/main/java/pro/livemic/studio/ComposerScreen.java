@@ -238,9 +238,11 @@ final class ComposerScreen {
         LinearLayout aiBar = a.row();
         LinearLayout.LayoutParams aiBarLp = new LinearLayout.LayoutParams(-1, -2);
         aiBarLp.topMargin = a.dp(10);
-        StudioButton export = StudioTheme.styled(a, tr("✨ AI용 내보내기", "Export for AI"), StudioButton.CHIP, this::exportProject);
+        StudioButton export = StudioTheme.styled(a, tr("AI 내보내기", "AI export"), StudioButton.CHIP, this::exportProject);
+        export.setContentDescription(tr("AI 편집용 프로젝트 JSON 내보내기", "Export project JSON for AI editing"));
         StudioTheme.selected(export, true);
-        StudioButton aiImport = StudioTheme.styled(a, tr("📥 AI 수정본 불러오기", "Import AI revision"), StudioButton.CHIP, () -> a.exchange.showImport());
+        StudioButton aiImport = StudioTheme.styled(a, tr("JSON 불러오기", "Import JSON"), StudioButton.CHIP, () -> a.exchange.showImport());
+        aiImport.setContentDescription(tr("수정한 프로젝트 JSON 불러오기", "Import revised project JSON"));
         a.weighted(aiBar, export, 44);
         LinearLayout.LayoutParams expLp = (LinearLayout.LayoutParams) export.getLayoutParams();
         expLp.rightMargin = a.dp(8);
@@ -249,24 +251,24 @@ final class ComposerScreen {
         a.add(hero);
 
         section(tr("파트", "Parts"), p.parts.size() + " / 8");
-        HorizontalScrollView scroll = new HorizontalScrollView(a);
-        scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout parts = a.row();
-        for (int i = 0; i < p.parts.size(); i++) {
-            int n = i;
-            ComposerProject.Part item = p.parts.get(i);
-            StudioButton chip = StudioTheme.styled(a, item.label + "  ·  " + item.bars + tr("마디", " bars"), StudioButton.CHIP, () -> {
-                clearSolo();
-                s.selectedPart = n;
-                refresh();
-            });
-            StudioTheme.selected(chip, i == s.selectedPart);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(48));
-            lp.rightMargin = a.dp(8);
-            parts.addView(chip, lp);
-        }
-        scroll.addView(parts);
-        a.add(scroll);
+        Button previous = a.button("‹", () -> selectPart(s.selectedPart - 1));
+        previous.setTextSize(24);
+        previous.setContentDescription(tr("이전 파트", "Previous part"));
+        previous.setEnabled(!s.capturing && s.selectedPart > 0);
+        parts.addView(previous, new LinearLayout.LayoutParams(a.dp(52), a.dp(64)));
+        Button currentPart = a.button(part.label + " · " + part.bars + tr("마디", " bars")
+                + "\n" + (s.selectedPart + 1) + " / " + p.parts.size() + tr(" · 전체 파트 ▾", " · All parts ▾"), this::choosePart);
+        currentPart.setSingleLine(false);
+        currentPart.setMaxLines(2);
+        currentPart.setEnabled(!s.capturing);
+        parts.addView(currentPart, new LinearLayout.LayoutParams(0, a.dp(64), 1));
+        Button next = a.button("›", () -> selectPart(s.selectedPart + 1));
+        next.setTextSize(24);
+        next.setContentDescription(tr("다음 파트", "Next part"));
+        next.setEnabled(!s.capturing && s.selectedPart < p.parts.size() - 1);
+        parts.addView(next, new LinearLayout.LayoutParams(a.dp(52), a.dp(64)));
+        a.add(parts);
 
         LinearLayout partActions = a.row();
         partActions.addView(action(tr("⚙️ 파트 편집", "⚙️ Edit part"), this::partMenu), new LinearLayout.LayoutParams(0, -2, 1));
@@ -454,31 +456,29 @@ final class ComposerScreen {
         a.add(StudioTheme.styled(a, tr("＋ 악기 추가", "＋ Add instrument"), StudioButton.OUTLINE, () -> instrument(-1, false)));
 
         section(tr("곡 순서", "Song order"), p.totalBars() + " / 256 " + tr("마디", "bars"));
-        HorizontalScrollView orderScroll = new HorizontalScrollView(a);
-        orderScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout orderRow = a.row();
         for (int i = 0; i < p.order.size(); i++) {
             int n = i;
             ComposerProject.Order o = p.order.get(i);
-            StudioButton chip = StudioTheme.styled(a, (i + 1) + "  " + p.part(o.part).label + " ×" + o.repeats + "  ⋯", StudioButton.CHIP, () -> order(n));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, a.dp(48));
-            lp.rightMargin = a.dp(8);
-            orderRow.addView(chip, lp);
+            Button entry = a.button((i + 1) + "  ·  " + p.part(o.part).label + " ×" + o.repeats + "  ⋯", () -> order(n));
+            entry.setContentDescription(tr("곡 순서 ", "Song order ") + (i + 1) + ": " + p.part(o.part).label
+                    + " ×" + o.repeats + tr(" · 반복 및 순서 편집", " · Edit repeats and order"));
+            a.add(entry);
         }
-        orderRow.addView(StudioTheme.styled(a, "＋", StudioButton.CHIP, () -> {
+        a.add(StudioTheme.styled(a, tr("＋ 순서에 파트 추가", "＋ Add part to order"), StudioButton.OUTLINE, () -> {
             String[] labels = new String[p.parts.size()];
             for (int i = 0; i < labels.length; i++) labels[i] = p.parts.get(i).label;
             choose(tr("추가할 파트", "Add a part"), labels, -1, k ->
                     edit(x -> x.order.add(new ComposerProject.Order(x.parts.get(k).id, 1)), true));
-        }), new LinearLayout.LayoutParams(a.dp(52), a.dp(48)));
-        orderScroll.addView(orderRow);
-        a.add(orderScroll);
+        }));
 
         LinearLayout links = a.row();
         links.addView(action(tr("저장된 프로젝트 열기 ›", "Saved projects ›"), () -> {
             a.libraryFilter = 1;
             a.chooseTab(4);
         }), new LinearLayout.LayoutParams(0, -2, 1));
+        ((LinearLayout.LayoutParams) links.getChildAt(0).getLayoutParams()).rightMargin = a.dp(8);
+        links.addView(action(tr("목소리로 연주 ›", "Play with voice ›"), () -> a.chooseTab(8)),
+                new LinearLayout.LayoutParams(0, -2, 1));
         a.add(links);
         dock(false);
         if (!s.ready) a.note(tr("오프라인 샘플 음원을 준비하고 있습니다…", "Preparing offline sounds…"));
@@ -584,6 +584,23 @@ final class ComposerScreen {
             part.humanize = values[1];
             part.fill = fill[0];
         }, false), null);
+    }
+
+    void selectPart(int index) {
+        if (s.capturing || index < 0 || index >= s.project.parts.size() || index == s.selectedPart) return;
+        clearSolo();
+        s.selectedPart = index;
+        refresh();
+    }
+
+    void choosePart() {
+        if (s.capturing) return;
+        String[] labels = new String[s.project.parts.size()];
+        for (int i = 0; i < labels.length; i++) {
+            ComposerProject.Part part = s.project.parts.get(i);
+            labels[i] = part.label + " · " + part.bars + tr("마디", " bars") + " · " + (i + 1) + " / " + labels.length;
+        }
+        choose(tr("파트 선택", "Choose part"), labels, s.selectedPart, this::selectPart);
     }
 
     void partMenu() {
@@ -988,6 +1005,45 @@ final class ComposerScreen {
         }
     }
 
+    void instrumentRow(LinearLayout list, String label, int bank, int program,
+                       Set<String> favorites, Runnable[] fill, Runnable select) {
+        String id = InstrumentFavorites.key(bank, program);
+        boolean favorite = favorites.contains(id);
+        LinearLayout row = a.row();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        String primary, secondary;
+        if (bank == 128) {
+            int divider = label.lastIndexOf(" · ");
+            primary = divider < 0 ? label : label.substring(0, divider);
+            secondary = tr("드럼 키트", "Drum kit");
+        } else {
+            primary = AppLanguage.english(a) ? InstrumentCatalog.GM[program] : InstrumentCatalog.KO[program];
+            secondary = AppLanguage.english(a) ? InstrumentCatalog.categories(a)[program / 8] : InstrumentCatalog.GM[program];
+        }
+        SpannableString styled = new SpannableString(primary + "\n" + secondary);
+        styled.setSpan(new android.text.style.RelativeSizeSpan(.85f), primary.length() + 1, styled.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        styled.setSpan(new android.text.style.ForegroundColorSpan(MainActivity.MUTED), primary.length() + 1, styled.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        Button item = a.button(label, select);
+        item.setText(styled);
+        item.setContentDescription(label);
+        item.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        item.setPadding(a.dp(12), a.dp(8), a.dp(8), a.dp(8));
+        item.setMinHeight(a.dp(56));
+        row.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
+        Button star = a.button(favorite ? "★" : "☆", () -> {
+            if (favorites.contains(id)) favorites.remove(id);
+            else favorites.add(id);
+            InstrumentFavorites.save(a.getPreferences(0), favorites);
+            fill[0].run();
+        });
+        star.setTextSize(20);
+        star.setTextColor(favorite ? StudioTheme.ACCENT : MainActivity.MUTED);
+        star.setContentDescription((favorite ? tr("즐겨찾기에서 제거: ", "Remove favorite: ")
+                : tr("즐겨찾기에 추가: ", "Add favorite: ")) + label);
+        row.addView(star, new LinearLayout.LayoutParams(a.dp(52), a.dp(52)));
+        list.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+
     void instrument(int track, boolean voice) {
         ComposerProject context = s.project;
         int revision = s.revision;
@@ -1007,7 +1063,7 @@ final class ComposerScreen {
         panel.addView(search);
         final int[] category = {0};
         List<String> cats = new ArrayList<>(Arrays.asList(
-                tr("대표 24음색", "Featured 24"),
+                tr("대표 24 + 드럼", "Featured 24 + Drums"),
                 tr("🎹 건반 / 피아노", "🎹 Piano & Keyboards"),
                 tr("🎸 기타 / 베이스", "🎸 Guitar & Bass"),
                 tr("🥁 드럼 키트", "🥁 Drum kits"),
@@ -1015,6 +1071,13 @@ final class ComposerScreen {
                 tr("🎛️ 신스 / FX", "🎛️ Synth & FX"),
                 tr("전체 GM 128", "All GM 128"),
                 tr("★ 즐겨찾기", "★ Favorites")));
+        // Keep stable category IDs when the voice picker omits the drum category.
+        List<Integer> categoryIds = new ArrayList<>(Arrays.asList(0, 1, 2, 3, 4, 5, 6, 7));
+        if (voice) {
+            cats.remove(3);
+            categoryIds.remove(Integer.valueOf(3));
+            cats.set(0, tr("대표 24음색", "Featured 24"));
+        }
         Button categoryButton = a.button(tr("카테고리: ", "Category: ") + cats.get(0) + " ▾", () ->
                 choose(tr("악기 카테고리", "Instrument category"), cats.toArray(new String[0]), category[0], n -> category[0] = n));
         panel.addView(categoryButton);
@@ -1023,24 +1086,29 @@ final class ComposerScreen {
         scroll.addView(list);
         panel.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         panel.addView(a.button(tr("닫기", "Close"), dialog::dismiss));
-        Set<String> favorites = new HashSet<>(a.getPreferences(0).getStringSet("gmFavorites", Collections.emptySet()));
+        Set<String> favorites = InstrumentFavorites.read(a.getPreferences(0));
         Runnable[] fill = new Runnable[1];
         fill[0] = () -> {
             list.removeAllViews();
             String query = search.getText().toString().toLowerCase(Locale.ROOT);
-            int cat = category[0];
-            if (!voice && cat == 3) {
+            int cat = categoryIds.get(category[0]);
+            if (!voice && (cat == 0 || cat == 3 || cat == 7)) {
                 String[] kits = NativeComposer.drumKits();
+                String featuredKit = kits.length == 0 ? null : kits[0];
+                for (String kit : kits) if (kit.startsWith("0 · ")) featuredKit = kit;
                 for (String kit : kits) {
-                    int program = Integer.parseInt(kit.split(" · ")[0]);
-                    list.addView(a.button(kit, () -> {
+                    int program = Integer.parseInt(kit.split(" · ", 2)[0]);
+                    if (cat == 0 && !kit.equals(featuredKit)) continue;
+                    if (cat == 7 && !favorites.contains(InstrumentFavorites.key(128, program))) continue;
+                    if (!query.isEmpty() && !(kit + " " + tr("드럼 키트", "Drum kits")).toLowerCase(Locale.ROOT).contains(query)) continue;
+                    instrumentRow(list, kit + " · " + tr("드럼 키트", "Drum kit"), 128, program, favorites, fill, () -> {
                         if (current(context, revision, partId)) selectInstrument(track, false, program, 128);
                         else stale();
                         dialog.dismiss();
-                    }));
+                    });
                 }
-                return;
             }
+            if (cat == 3) return;
             for (int n = 0; n < 128; n++) {
                 int program = n;
                 if (voice && n >= 112) continue;
@@ -1054,35 +1122,16 @@ final class ComposerScreen {
                 else if (cat == 4) matchCat = (fam >= 5 && fam <= 9);
                 else if (cat == 5) matchCat = (fam >= 10);
                 else if (cat == 6) matchCat = true;
-                else if (cat == 7) matchCat = favorites.contains("" + n);
-                if (query.isEmpty() && !matchCat) continue;
+                else if (cat == 7) matchCat = favorites.contains(InstrumentFavorites.key(0, n));
+                if (!matchCat) continue;
                 String label = InstrumentCatalog.displayName(a, n), family = InstrumentCatalog.categories(a)[n / 8];
                 if (!query.isEmpty() && !(label + " " + family + " " + InstrumentCatalog.GM[n]).toLowerCase(Locale.ROOT).contains(query)) continue;
 
-                boolean isFav = favorites.contains("" + program);
-                LinearLayout itemRow = a.row();
-                itemRow.setGravity(Gravity.CENTER_VERTICAL);
-                Button item = a.button((isFav ? "★ " : "") + label + " · " + family, () -> {
+                instrumentRow(list, label + " · " + family, 0, program, favorites, fill, () -> {
                     if (current(context, revision, partId)) selectInstrument(track, voice, program, 0);
                     else stale();
                     dialog.dismiss();
                 });
-                itemRow.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
-
-                TextView starBtn = a.text(isFav ? "★" : "☆", 18, isFav ? Color.rgb(255, 215, 0) : MainActivity.MUTED);
-                starBtn.setGravity(Gravity.CENTER);
-                starBtn.setPadding(a.dp(12), a.dp(8), a.dp(12), a.dp(8));
-                starBtn.setOnClickListener(v -> {
-                    String id = "" + program;
-                    if (favorites.contains(id)) favorites.remove(id);
-                    else favorites.add(id);
-                    a.getPreferences(0).edit().putStringSet("gmFavorites", favorites).apply();
-                    if (fill[0] != null) fill[0].run();
-                });
-                starBtn.setFocusable(true);
-                starBtn.setContentDescription(tr("즐겨찾기 토글", "Toggle favorite"));
-                itemRow.addView(starBtn, new LinearLayout.LayoutParams(a.dp(44), a.dp(44)));
-                list.addView(itemRow, new LinearLayout.LayoutParams(-1, -2));
             }
         };
         categoryButton.setOnClickListener(v -> choose(tr("악기 카테고리", "Instrument category"), cats.toArray(new String[0]), category[0], n -> {
@@ -1256,12 +1305,12 @@ final class ComposerScreen {
         toolbar1.addView(prevBar, new LinearLayout.LayoutParams(a.dp(44), a.dp(38)));
         toolbar1.addView(nextBar, new LinearLayout.LayoutParams(a.dp(44), a.dp(38)));
 
-        Button octBtn = StudioTheme.styled(a, "옥타브: C" + baseOctave[0], StudioButton.CHIP, () -> {});
+        Button octBtn = StudioTheme.styled(a, tr("옥타브: C", "Oct: C") + baseOctave[0], StudioButton.CHIP, () -> {});
         LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(-2, a.dp(38));
         olp.leftMargin = a.dp(6);
         toolbar1.addView(octBtn, olp);
 
-        Button lenBtn = StudioTheme.styled(a, "길이: 1박", StudioButton.CHIP, () -> {});
+        Button lenBtn = StudioTheme.styled(a, tr("길이: 1박", "Len: 1 beat"), StudioButton.CHIP, () -> {});
         LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(-2, a.dp(38));
         llp.leftMargin = a.dp(6);
         toolbar1.addView(lenBtn, llp);
@@ -1427,8 +1476,10 @@ final class ComposerScreen {
                 if (!workingPhrase.notes.isEmpty()) {
                     currentPart.phrases.add(workingPhrase);
                     t.voice = true;
+                    t.phraseSource = "keyboard";
                 } else {
                     t.voice = false;
+                    t.phraseSource = "";
                 }
             }, false);
             dialog.dismiss();
