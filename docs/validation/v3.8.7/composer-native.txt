@@ -1,0 +1,6 @@
+PASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence
+PASS: clearing solo preserves volume, pan and mute
+PASS: 44100Hz immediate mute ends at next part
+PASS: 48000Hz immediate mute ends at next part
+PASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence
+PASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence

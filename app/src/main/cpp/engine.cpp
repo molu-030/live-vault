@@ -724,6 +724,9 @@ JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_start(JNIEnv*
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_stop(JNIEnv*, jclass) {
     engine.stop();
 }
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_suspend(JNIEnv*, jclass) {
+    engine.stop(true);
+}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_set(JNIEnv*, jclass, jint k, jfloat v) {
     if (k >= 0 && k < 20 && std::isfinite(v)) engine.params[k] = v;
 }

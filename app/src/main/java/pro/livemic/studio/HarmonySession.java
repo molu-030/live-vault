@@ -11,7 +11,7 @@ import java.util.concurrent.*;
 /** Application-owned vocal loop session. Disk and native file operations run on one worker. */
 final class HarmonySession {
     private static HarmonySession instance;
-    static synchronized HarmonySession get(Context c){if(instance==null)instance=new HarmonySession(c.getApplicationContext());return instance;}
+    static synchronized HarmonySession get(Context c){if(instance==null||instance.worker.isShutdown())instance=new HarmonySession(c.getApplicationContext());return instance;}
     final Context context;final File dir;final ExecutorService worker=Executors.newSingleThreadExecutor();final Handler main=new Handler(Looper.getMainLooper());
     int bpm=90,meter=0,bars=4,key=0,scale=0,preset=0,revision=0;boolean auto=false,liveOn=false;float wet=.45f,dry=1,spread=.65f;
     final float[] volume={1,1,1,1},pan={0,0,0,0};final boolean[] muted=new boolean[4];final String[] files=new String[4],previous=new String[4],names={"1성부","2성부","3성부","4성부"};
@@ -22,24 +22,39 @@ final class HarmonySession {
         if(bpm<40||bpm>240||meter<0||meter>2||(bars!=4&&bars!=8)||key<0||key>=MusicTheory.ROOTS.length||scale<0||scale>=MusicTheory.SCALES.length||preset<0||preset>3||!Float.isFinite(wet)||wet<0||wet>1||!Float.isFinite(dry)||dry<0||dry>1||!Float.isFinite(spread)||spread<0||spread>1)throw new IOException(AppLanguage.text(context,"저장 설정 범위 오류","Saved settings are out of range"));for(int i=0;i<4;i++)if(!Float.isFinite(volume[i])||volume[i]<0||volume[i]>1||!Float.isFinite(pan[i])||pan[i]<-1||pan[i]>1)throw new IOException(AppLanguage.text(context,"성부 설정 범위 오류","Part settings are out of range"));
         if(!NativeHarmony.prepare(bpm,meter,bars))throw new IOException(AppLanguage.text(context,"루프 준비 실패","Could not prepare loop"));for(int i=0;i<4;i++){if(files[i]!=null&&!NativeHarmony.loadLayer(i,safe(files[i]).getAbsolutePath()))throw new IOException((i+1)+AppLanguage.text(context,"성부 불러오기 실패","Could not load part"));NativeHarmony.layer(i,volume[i],pan[i],muted[i]);}cleanup(json());main.post(()->{ready=true;busy=false;configure();revision++;});
     }catch(Exception e){main.post(()->{busy=false;error=AppLanguage.text(context,"보컬 화음 준비 실패: ","Could not prepare vocal harmonies: ")+e.getMessage();revision++;});}}
+    void drainForExit(Runnable done) {
+        poll(); // Persist any layer completed just before confirmation.
+        stopNative();
+        liveOn = false;
+        NativeHarmony.configure(false,key,scale,preset,wet,dry,spread);
+        NativeHarmony.monitor(false);
+        worker.execute(() -> main.post(() -> {
+            flushMetadata();
+            worker.execute(() -> main.post(() -> {
+                stopNative();
+                worker.shutdown();
+                done.run();
+            }));
+        }));
+    }
     JSONObject json()throws JSONException{JSONObject j=new JSONObject().put("version",1).put("bpm",bpm).put("meter",meter).put("bars",bars).put("key",key).put("scale",scale).put("preset",preset).put("auto",auto).put("wet",wet).put("dry",dry).put("spread",spread);JSONArray layers=new JSONArray();for(int i=0;i<4;i++)layers.put(new JSONObject().put("name",names[i]).put("file",files[i]).put("previous",previous[i]).put("volume",volume[i]).put("pan",pan[i]).put("muted",muted[i]));return j.put("layers",layers);}
     void write(JSONObject j)throws Exception{AtomicFile f=new AtomicFile(new File(dir,"session.json"));FileOutputStream out=f.startWrite();try{out.write(j.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));f.finishWrite(out);}catch(Exception e){f.failWrite(out);throw e;}cleanup(j);}
     void cleanup(JSONObject metadata){try{java.util.Set<String> referenced=new java.util.HashSet<>();JSONArray layers=metadata.getJSONArray("layers");for(int i=0;i<layers.length();i++){JSONObject layer=layers.getJSONObject(i);for(String key:new String[]{"file","previous"}){String name=layer.optString(key,null);if(name!=null)referenced.add(name);}}File[] entries=dir.listFiles();if(entries!=null)for(File entry:entries){String name=entry.getName();if(name.matches("[a-zA-Z0-9_-]+\\.wav")&&!referenced.contains(name)&&entry.isFile())entry.delete();}}catch(Exception e){android.util.Log.w("VocalHarmony","성부 파일 정리를 건너뜁니다",e);}}
     void persist(){if(busy){metadataDirty=true;return;}try{JSONObject snapshot=json();worker.execute(()->{try{write(snapshot);}catch(Exception e){main.post(()->{error=AppLanguage.text(context,"설정 저장 실패: ","Could not save settings: ")+e.getMessage();revision++;});}});}catch(Exception e){error=e.getMessage();}}
-    void configure(){if(ready)NativeHarmony.configure(liveOn&&auto,key,scale,preset,wet,dry,spread);}
+    void configure(){if(ready&&!ExitCoordinator.isExitRequested())NativeHarmony.configure(liveOn&&auto,key,scale,preset,wet,dry,spread);}
     void changed(){configure();persist();revision++;}
-    void live(boolean on){if(on&&!YouTubePlayer.beforeNativePlayback())return;if(on){ComposerSession.get(context).voice(false);}else NativeHarmony.cancel();liveOn=on;configure();if(on)NativeHarmony.monitor(AudioService.canMonitor(context));revision++;}
+    void live(boolean on){if(on&&ExitCoordinator.isExitRequested())return;if(on&&!YouTubePlayer.beforeNativePlayback())return;if(on){ComposerSession.get(context).voice(false);}else NativeHarmony.cancel();liveOn=on;configure();if(on)NativeHarmony.monitor(AudioService.canMonitor(context));revision++;}
     void monitor(boolean on){NativeHarmony.monitor(on);}
     boolean locked(){if(!ready||busy){error=AppLanguage.text(context,"저장 또는 준비가 끝날 때까지 기다려 주세요.","Wait until saving or preparation finishes.");return true;}if(state[4]>=0||state[5]>=0){error=AppLanguage.text(context,"성부 녹음을 마친 뒤 변경하세요.","Finish recording the part before changing this.");return true;}return false;}
     void loopSettings(int b,int m,int n){if(locked())return;for(String f:files)if(f!=null){error=AppLanguage.text(context,"성부를 비운 뒤 변경하세요.","Clear the parts before changing this.");return;}stop();busy=true;revision++;worker.execute(()->{boolean ok=NativeHarmony.prepare(b,m,n);main.post(()->{busy=false;if(ok){bpm=b;meter=m;bars=n;for(int i=0;i<4;i++)previous[i]=null;configure();persist();}else error=AppLanguage.text(context,"루프 준비 실패","Could not prepare loop");flushMetadata();revision++;});});}
-    void play(){if(!YouTubePlayer.beforeNativePlayback())return;if(!ready||busy){error=AppLanguage.text(context,"루프를 준비하고 있습니다.","Preparing loop.");return;}AudioService.harmonyRequested=true;context.startForegroundService(new Intent(context,AudioService.class).setAction(AudioService.PLAYBACK));NativeHarmony.transport(1);revision++;}
-    void pause(){NativeHarmony.transport(2);revision++;}
+    void play(){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!ready||busy){error=AppLanguage.text(context,"루프를 준비하고 있습니다.","Preparing loop.");return;}AudioService.harmonyRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));NativeHarmony.transport(1);revision++;}
+    void pause(){NativeHarmony.transport(2);AudioService.harmonyRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.HARMONY_STOP));revision++;}
     void stopNative(){NativeHarmony.cancel();NativeHarmony.transport(0);AudioService.harmonyRequested=false;revision++;}
-    void stop(){stopNative();if(AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).setAction(AudioService.HARMONY_STOP));}
-    void arm(int slot){if(!YouTubePlayer.beforeNativePlayback())return;if(locked())return;if(!liveOn||!AudioService.active){error=AppLanguage.text(context,"마이크를 먼저 켜세요.","Turn on the mic first.");return;}AudioService.harmonyRequested=true;context.startForegroundService(new Intent(context,AudioService.class).setAction(AudioService.PLAYBACK));if(!NativeHarmony.arm(slot)){AudioService.harmonyRequested=false;error=AppLanguage.text(context,"성부 녹음을 시작하지 못했습니다.","Could not start recording the part.");return;}state=NativeHarmony.state();revision++;}
+    void stop(){stopNative();if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.HARMONY_STOP));}
+    void arm(int slot){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(locked())return;if(!liveOn||!AudioService.active){error=AppLanguage.text(context,"마이크를 먼저 켜세요.","Turn on the mic first.");return;}AudioService.harmonyRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));if(!NativeHarmony.arm(slot)){AudioService.harmonyRequested=false;error=AppLanguage.text(context,"성부 녹음을 시작하지 못했습니다.","Could not start recording the part.");return;}state=NativeHarmony.state();revision++;}
     void cancel(){NativeHarmony.cancel();state=NativeHarmony.state();revision++;message=AppLanguage.text(context,"녹음을 취소했습니다. 이전 성부는 유지됩니다.","Recording cancelled. The previous part was kept.");}
     void levels(int slot){NativeHarmony.layer(slot,volume[slot],pan[slot],muted[slot]);persist();revision++;}
-    void releaseIfStopped(){if(AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).setAction(AudioService.HARMONY_STOP));}
+    void releaseIfStopped(){if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.HARMONY_STOP));}
     void flushMetadata(){if(metadataDirty){metadataDirty=false;persist();}}
     JSONObject transaction(int slot,String file,String prior)throws JSONException{JSONObject snapshot=json();snapshot.getJSONArray("layers").getJSONObject(slot).put("file",file==null?JSONObject.NULL:file).put("previous",prior==null?JSONObject.NULL:prior);return snapshot;}
     void clear(int slot){if(locked())return;String old=files[slot];if(old==null)return;try{JSONObject snapshot=transaction(slot,null,old);busy=true;revision++;worker.execute(()->{try{write(snapshot);main.post(()->{NativeHarmony.clear(slot);previous[slot]=old;files[slot]=null;busy=false;flushMetadata();revision++;});}catch(Exception e){main.post(()->{busy=false;flushMetadata();error=AppLanguage.text(context,"성부 삭제 실패: ","Could not delete part: ")+e.getMessage();revision++;});}});}catch(Exception e){error=e.getMessage();}}

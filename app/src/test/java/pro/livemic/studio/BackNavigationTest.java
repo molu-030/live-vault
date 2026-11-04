@@ -45,7 +45,7 @@ public class BackNavigationTest {
         RecordingManager.active=false;RecordingManager.paused=false;StudioScreenshotTest.Audio.supplied=null;
         AppLanguage.set(RuntimeEnvironment.getApplication(),false);
     }
-    @Test public void visitsReturnThroughPreviousPagesAndRootBackMinimizes() {
+    @Test public void visitsReturnThroughPreviousPagesAndRootBackConfirmsExit() {
         for (int page : new int[]{1, 7, 8, 9, 4, 6}) a.chooseTab(page);
         for (int page : new int[]{4, 9, 8, 7, 1, 0}) {
             a.onBackPressed(); assertEquals(page, a.tab);
@@ -53,6 +53,10 @@ public class BackNavigationTest {
         assertTrue(a.navigation.history.isEmpty());
         a.onBackPressed();
         assertFalse(a.isFinishing());
+        assertTrue(ShadowDialog.getLatestDialog().isShowing());
+        assertFalse(ExitCoordinator.isExitRequested());
+        a.onBackPressed();
+        assertFalse(ShadowDialog.getLatestDialog().isShowing());
         assertTrue(a.navigation.history.isEmpty());
     }
 

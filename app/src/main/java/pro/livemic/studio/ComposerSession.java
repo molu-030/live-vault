@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 /** Service-owned project and transactional performance capture. No UI timer triggers audio. */
 final class ComposerSession {
     private static ComposerSession instance;
-    static synchronized ComposerSession get(Context c){if(instance==null)instance=new ComposerSession(c.getApplicationContext());return instance;}
+    static synchronized ComposerSession get(Context c){if(instance==null||instance.worker.isShutdown())instance=new ComposerSession(c.getApplicationContext());return instance;}
     final Context context;final ComposerStore store;final ExecutorService worker=Executors.newSingleThreadExecutor();final Handler main=new Handler(Looper.getMainLooper());
     ComposerProject project=new ComposerProject();int selectedPart=0,revision=0;volatile boolean ready=false;boolean voiceOn=false,capturing=false;String error="",message="";
     private int playbackRequest=0;private VoicePhrase pendingPhrase;private VoicePhrase.Note pendingNote;private int recordingPart=0;private String recordingBefore;private double[] state={0,0,0,0,32,-1,-1,0,0,0};
@@ -20,6 +20,24 @@ final class ComposerSession {
         File sf=new File(c.getFilesDir(),"generaluser-gs-1.44.sf2");if(sf.length()!=31279314L){android.util.AtomicFile atomic=new android.util.AtomicFile(sf);FileOutputStream out=atomic.startWrite();try(InputStream in=c.getAssets().open("soundfonts/generaluser-gs-1.44.sf2")){byte[] b=new byte[65536];int n;while((n=in.read(b))>0)out.write(b,0,n);atomic.finishWrite(out);}catch(Exception e){atomic.failWrite(out);throw e;}}
         if(!NativeComposer.loadSoundFont(sf.getAbsolutePath()))throw new IOException(AppLanguage.text(context,"음원 초기화 실패","Sound initialization failed"));ComposerProject restored=draft;main.post(()->{project=restored;ready=true;revision++;publish(-1);});
     }catch(Exception e){main.post(()->{error=AppLanguage.text(context,"작곡기 준비 실패: ","Composer setup failed: ")+displayError(e.getMessage());revision++;});}});}
+    void drainForExit(Runnable done) {
+        playbackRequest++;
+        if (capturing) poll(); // Keep a phrase already completed by native audio.
+        if (capturing) cancelPhrase(); // Unfinished capture keeps the previous phrase.
+        NativeComposer.record(false);
+        NativeComposer.transport(0);
+        voiceOn = false;
+        applyVoice();
+        AudioService.composerRequested = false;
+        // First marker lets earlier main-thread completions enqueue their final writes.
+        worker.execute(() -> main.post(() -> worker.execute(() -> main.post(() -> {
+            NativeComposer.transport(0);
+            voiceOn = false;
+            applyVoice();
+            worker.shutdown();
+            done.run();
+        }))));
+    }
     double[] state(){return state;}
     boolean playing(){return state[1]>.5;}
     ComposerProject.Part part(){selectedPart=Math.max(0,Math.min(selectedPart,project.parts.size()-1));return project.parts.get(selectedPart);}
@@ -45,20 +63,20 @@ final class ComposerSession {
     void edit(Consumer<ComposerProject> change,boolean structure){if(capturing){error=AppLanguage.text(context,"프레이즈 기록을 마친 뒤 편집하세요.","Finish recording the phrase before editing.");return;}if(structure&&playing()){error=AppLanguage.text(context,"일시정지 후 파트 구성을 편집하세요.","Pause playback before editing parts.");return;}
         try{String before=project.json().toString();try{change.accept(project);project.validate();}catch(Exception e){project=ComposerProject.read(new JSONObject(before));throw e;}store.checkpoint(ComposerProject.read(new JSONObject(before)));revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
     void persist(){try{ComposerProject snapshot=ComposerProject.read(project.json());worker.execute(()->{try{store.write(snapshot,true);}catch(Exception e){main.post(()->error=AppLanguage.text(context,"초안 저장 실패: ","Could not save draft: ")+displayError(e.getMessage()));}});}catch(JSONException e){error=displayError(e.getMessage());}}
-    void publish(int selected){if(!ready)return;try{ComposerProject snapshot=ComposerProject.read(project.json());worker.execute(()->{try{ComposerTransport.Plan plan=new ComposerTransport().compile(snapshot,selected);if(!NativeComposer.publish(plan.events,plan.beats,plan.bar,plan.bpm,plan.key,plan.scale))throw new IOException(AppLanguage.text(context,"재생 계획 큐가 가득 찼습니다.","Playback plan queue is full."));}catch(Exception e){main.post(()->error=AppLanguage.text(context,"반주 준비 실패: ","Could not prepare backing: ")+displayError(e.getMessage()));}});}catch(Exception e){error=displayError(e.getMessage());}}
-    void play(){if(!YouTubePlayer.beforeNativePlayback())return;if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}int request=++playbackRequest;publish(-1);worker.execute(()->main.post(()->{if(request!=playbackRequest)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).setAction(AudioService.PLAYBACK));NativeAudio.playLocal(false);NativeComposer.transport(1);}));}
-    void pause(){playbackRequest++;NativeComposer.transport(2);}
-    void stop(){playbackRequest++;if(capturing)cancelPhrase();NativeComposer.transport(0);AudioService.composerRequested=false;if(AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).setAction(AudioService.COMPOSER_STOP));}
-    void voice(boolean on){if(on&&!YouTubePlayer.beforeNativePlayback())return;voiceOn=on;applyVoice();revision++;}
+    void publish(int selected){if(ExitCoordinator.isExitRequested()||worker.isShutdown()||!ready)return;try{ComposerProject snapshot=ComposerProject.read(project.json());worker.execute(()->{try{ComposerTransport.Plan plan=new ComposerTransport().compile(snapshot,selected);if(!NativeComposer.publish(plan.events,plan.beats,plan.bar,plan.bpm,plan.key,plan.scale))throw new IOException(AppLanguage.text(context,"재생 계획 큐가 가득 찼습니다.","Playback plan queue is full."));}catch(Exception e){main.post(()->error=AppLanguage.text(context,"반주 준비 실패: ","Could not prepare backing: ")+displayError(e.getMessage()));}});}catch(Exception e){error=displayError(e.getMessage());}}
+    void play(){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}int request=++playbackRequest;publish(-1);worker.execute(()->main.post(()->{if(ExitCoordinator.isExitRequested()||request!=playbackRequest)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));NativeAudio.playLocal(false);NativeComposer.transport(1);}));}
+    void pause(){playbackRequest++;NativeComposer.transport(2);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
+    void stop(){playbackRequest++;if(capturing)cancelPhrase();NativeComposer.transport(0);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
+    void voice(boolean on){if(on&&ExitCoordinator.isExitRequested())return;if(on&&!YouTubePlayer.beforeNativePlayback())return;voiceOn=on;applyVoice();revision++;}
     void applyVoice(){VoiceInstrumentSettings s=project.voice;NativeComposer.voice(voiceOn,s.program,s.mode,s.octave,s.autoRange,s.snap,s.response,s.quality,s.rhythm,s.mixVoice,s.confidence,s.gate);}
     void history(boolean redo){if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 실행 취소하세요.","Finish recording before undoing.");return;}try{project=store.history(project,redo);revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
     void save(){try{ComposerProject copy=ComposerProject.read(project.json());worker.execute(()->{try{store.write(copy,false);main.post(()->{message=AppLanguage.text(context,"내 반주에 저장했습니다.","Saved to My Backings.");revision++;});}catch(Exception e){main.post(()->error=AppLanguage.text(context,"저장 실패: ","Save failed: ")+displayError(e.getMessage()));}});}catch(Exception e){error=displayError(e.getMessage());}}
     void open(ComposerProject p){if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 프로젝트를 여세요.","Finish recording before opening a project.");return;}stop();voice(false);project=p;selectedPart=0;store.undo.clear();store.redo.clear();persist();publish(-1);revision++;}
     void duplicate(){edit(p->{p.id=UUID.randomUUID().toString();p.name+=" 복제";},true);save();}
-    void recordPhrase(){if(!YouTubePlayer.beforeNativePlayback())return;if(!voiceOn||!AudioService.active){error=AppLanguage.text(context,"목소리 악기를 먼저 켜세요.","Turn on the voice instrument first.");return;}if(capturing){cancelPhrase();return;}try{
+    void recordPhrase(){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!voiceOn||!AudioService.active){error=AppLanguage.text(context,"목소리 악기를 먼저 켜세요.","Turn on the voice instrument first.");return;}if(capturing){cancelPhrase();return;}try{
         boolean exists=false;for(TrackConfig t:part().tracks)if(t.voice)exists=true;if(!exists&&part().tracks.size()>=8){error=AppLanguage.text(context,"프레이즈를 기록할 트랙 공간이 없습니다. 악기 트랙을 줄여주세요.","No track space remains for the phrase. Reduce the number of instrument tracks.");return;}
         boolean wasPlaying=playing();recordingPart=wasPlaying?(int)state[2]:selectedPart;recordingBefore=project.json().toString();pendingPhrase=new VoicePhrase();pendingPhrase.chordMode=project.voice.mode==1;pendingNote=null;capturing=true;NativeComposer.drain();
-        if(!wasPlaying){int request=++playbackRequest;publish(selectedPart);worker.execute(()->main.post(()->{if(request!=playbackRequest||!capturing)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).setAction(AudioService.PLAYBACK));NativeComposer.transport(3);NativeComposer.record(true);}));}
+        if(!wasPlaying){int request=++playbackRequest;publish(selectedPart);worker.execute(()->main.post(()->{if(ExitCoordinator.isExitRequested()||request!=playbackRequest||!capturing)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));NativeComposer.transport(3);NativeComposer.record(true);}));}
         else NativeComposer.record(true);revision++;
     }catch(Exception e){error=displayError(e.getMessage());}}
     void cancelPhrase(){playbackRequest++;NativeComposer.record(false);NativeComposer.drain();pendingPhrase=null;pendingNote=null;capturing=false;revision++;message=AppLanguage.text(context,"재기록을 취소했습니다. 이전 프레이즈를 유지합니다.","Recording cancelled. The previous phrase was kept.");}

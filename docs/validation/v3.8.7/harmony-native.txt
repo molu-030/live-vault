@@ -1,0 +1,2 @@
+44100 Hz: third 3097.89 fifth 3033.09 input 6.84
+48000 Hz: third 3369.10 fifth 3318.08 input 7.61

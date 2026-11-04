@@ -28,17 +28,18 @@ public class StudioScreenshotTest {
  @Implements(value=NativeAudio.class,isInAndroidSdk=false)
  public static class Audio {
   static double lastSeek=-1;static final java.util.List<Boolean> localPlayCalls=new java.util.ArrayList<>();static float[] supplied;static final java.util.List<float[]> changes=new java.util.ArrayList<>();
-  static final java.util.List<Boolean> rerouteMic=new java.util.ArrayList<>();static final java.util.ArrayDeque<Boolean> rerouteResults=new java.util.ArrayDeque<>();static int microphoneStarts,playbackStarts,inputSessions;static final java.util.List<Integer> burstCalls=new java.util.ArrayList<>();
+  static final java.util.List<Boolean> rerouteMic=new java.util.ArrayList<>();static final java.util.ArrayDeque<Boolean> rerouteResults=new java.util.ArrayDeque<>();static int microphoneStarts,playbackStarts,inputSessions,statsCalls,stopCalls,suspendCalls;static final java.util.List<Integer> burstCalls=new java.util.ArrayList<>();
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static void set(int k,float v){changes.add(new float[]{k,v});}
-  @Implementation protected static float[] stats(){if(supplied!=null)return supplied.clone();float[] f=new float[22];f[2]=-1;f[6]=48000;return f;}
+  @Implementation protected static float[] stats(){statsCalls++;if(supplied!=null)return supplied.clone();float[] f=new float[22];f[2]=-1;f[6]=48000;return f;}
   @Implementation protected static float[] roll(){return new float[0];}
   @Implementation protected static double[] localPlaybackInfo(){return new double[]{0,6};}
   @Implementation protected static void seekLocal(double seconds){lastSeek=seconds;}
   @Implementation protected static void playLocal(boolean playing){localPlayCalls.add(playing);}
   @Implementation protected static boolean loadLocalFile(String p,int r,int c){return true;}
   @Implementation protected static void guideTone(float f){}
-  @Implementation protected static void stop(){}
+  @Implementation protected static void stop(){stopCalls++;}
+  @Implementation protected static void suspend(){suspendCalls++;}
   @Implementation protected static boolean startPlayback(int out,int mode){playbackStarts++;return true;}
   @Implementation protected static boolean start(int input,int output,int mode){microphoneStarts++;return true;}
   @Implementation protected static boolean reroute(int input,int output,int mode,boolean microphone){rerouteMic.add(microphone);return rerouteResults.isEmpty()||rerouteResults.removeFirst();}
@@ -88,11 +89,12 @@ public class StudioScreenshotTest {
  public static class Harmony {
   static double[] current={0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};
   static boolean failSave=false,loadedWhilePlaying=false;
+  static final java.util.List<Integer> transportCalls=new java.util.ArrayList<>();
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static boolean prepare(int bpm,int meter,int bars){current[2]=60.0/bpm*bars*(meter==1?3:4);return true;}
   @Implementation protected static void configure(boolean enabled,int key,int scale,int preset,float wet,float dry,float spread){}
   @Implementation protected static void monitor(boolean enabled){}
-  @Implementation protected static void transport(int command){current[0]=command==1?1:0;}
+  @Implementation protected static void transport(int command){transportCalls.add(command);current[0]=command==1?1:0;if(command==0)current[1]=0;}
   @Implementation protected static boolean arm(int slot){current[4]=slot;return true;}
   @Implementation protected static void cancel(){current[4]=-1;current[5]=-1;}
   @Implementation protected static void layer(int slot,float volume,float pan,boolean muted){}
@@ -152,7 +154,7 @@ public class StudioScreenshotTest {
   for(int width:new int[]{360,412}){
    int physicalHeight=width==360?800:915,height=physicalHeight-72;
    RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");
-   MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.activityVisible=false;
+   MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.activityVisible=true;
    assertEquals("Top navigation has three items",3,a.nav.getChildCount());
    seed(a);a.selectedFile="보컬 연습 01.wav";a.preset(1);a.set(0,.8f);a.handler.removeCallbacks(a.tick);
    a.getResources().getDisplayMetrics().density=1;a.getResources().getDisplayMetrics().scaledDensity=1;a.getResources().getDisplayMetrics().widthPixels=width;a.getResources().getDisplayMetrics().heightPixels=height;

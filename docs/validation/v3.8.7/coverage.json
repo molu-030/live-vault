@@ -1,0 +1,21 @@
+{
+  "fullRun": {
+    "tests": 173,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "finalChangedScopeRun": {
+    "tests": 31,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "distinctLatestCases": {
+    "tests": 175,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "note": "Full 173-case suite passed; after adding the completed-phrase guard, changed exit/service scope31 passed, including2 new cases. Not a single175-case full-suite run."
+}

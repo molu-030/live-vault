@@ -114,6 +114,10 @@ public class MainActivity extends Activity {
     BackNavigation.Page renderedPage;
     final ArrayList<Object> backWindows = new ArrayList<>();
     private ModernBack modernBack;
+    boolean exitInProgress = false, exitCompleted = false, exitResourcesStopped = false;
+    volatile String exitSaveError = "";
+    AlertDialog exitDialog, exitProgress;
+    String composerErrorBeforeExit = "", harmonyErrorBeforeExit = "";
 
     PopupWindow drawerPopup;
     int drawerLeft, drawerTop;
@@ -140,6 +144,11 @@ public class MainActivity extends Activity {
     @Override
     public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (!ExitCoordinator.beginLaunch()) {
+            exitCompleted = true;
+            finish(); // Another activity is still saving; do not remove its task.
+            return;
+        }
         if (state != null) {
             selectedLiveEffect = Math.max(0, Math.min(5, state.getInt("selectedLiveEffect", 0)));
         }
@@ -152,7 +161,7 @@ public class MainActivity extends Activity {
         harmonyScreen = new HarmonyScreen(this, harmony);
         store = new TakeStore(this);
         recent = new RecentBackings(this);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        updateScreenAwake(false);
 
         selectedPreset = getPreferences(0).getInt("preset", -1);
         recordDelay = getPreferences(0).getInt("recordDelay", 0);
@@ -189,6 +198,7 @@ public class MainActivity extends Activity {
         super.onSaveInstanceState(out);
         out.putInt("selectedLiveEffect", selectedLiveEffect);
         navigation.save(out, currentPage());
+        if (exchange == null) return;
         exchange.saveState(out);
         if (recordingRequestStage != 0) {
             out.putInt("recordingRequestStage", recordingRequestStage);
@@ -438,6 +448,7 @@ public class MainActivity extends Activity {
     }
 
     private void navigate(BackNavigation.Page destination, boolean back) {
+        if (exiting()) return;
         BackNavigation.Page origin = currentPage();
         if (destination.tab == 1 && destination.source != sourceTab && settingsLocked()) {
             toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.", "Finish recording or the countdown before changing sources."));
@@ -502,11 +513,95 @@ public class MainActivity extends Activity {
     }
 
     @Override public void onBackPressed() {
+        if (exitInProgress) return;
         if (closeTopBackWindow()) return;
         BackNavigation.Page previous = navigation.previous();
         if (previous != null) navigate(previous, true);
         else if (tab != 0) navigate(new BackNavigation.Page(0, sourceTab, libraryFilter, 0), true);
-        else moveTaskToBack(true);
+        else confirmExit();
+    }
+
+    void confirmExit() {
+        if (exitInProgress || (exitDialog != null && exitDialog.isShowing())) return;
+        exitDialog = StudioDialogs.alert(this)
+                .setTitle(tr("앱을 종료할까요?", "Exit Live Vault?"))
+                .setMessage(tr("녹음 중인 오디오와 영상을 저장한 뒤 마이크와 재생을 모두 끄고 종료합니다. 미완성 프레이즈와 화음은 이전 녹음을 유지합니다.",
+                        "Save active audio and video, then turn off the microphone and all playback and exit. Unfinished phrases and harmony parts keep the previous recording."))
+                .setNegativeButton(tr("취소", "Cancel"), null)
+                .setPositiveButton(tr("종료", "Exit"), (dialog, which) -> exitApp())
+                .show();
+    }
+
+    boolean exiting() { return exitInProgress || exitCompleted || ExitCoordinator.isExitRequested(); }
+
+    void exitApp() {
+        if (exitInProgress || exitCompleted) return;
+        if (exitResourcesStopped) { finishExitTask(); return; }
+        exitInProgress = true;
+        ExitCoordinator.requestExit();
+        exitSaveError = "";
+        composerErrorBeforeExit = composer.error;
+        harmonyErrorBeforeExit = harmony.error;
+        exitProgress = StudioDialogs.alert(this)
+                .setTitle(tr("저장 후 종료 중", "Saving and exiting"))
+                .setMessage(tr("저장이 끝날 때까지 기다려 주세요.", "Please wait until saving finishes."))
+                .setCancelable(false).show();
+        pendingAction = 0;
+        clearRecordingRequest();
+        awaitingMicPermission = pendingMonitor = starting = false;
+        handler.removeCallbacksAndMessages(null);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (drawerPopup != null) drawerPopup.dismiss();
+        youtube.destroy();
+        AudioService.youtubeSelected = false;
+        stopPlayer();
+        if (testActive) finishSyncTest(false);
+        if (camera != null && camera.recording) stopVideo();
+        videoPreparing = false;
+        if (camera != null) { camera.release(); camera = null; }
+        if (composer.capturing) composer.poll();
+        if (composer.capturing) composer.cancelPhrase();
+        harmony.poll(); // Queue a layer that completed just before capture stopped.
+        // Close recording writers and release live streams immediately. Disk export/mux
+        // can take time, and must not keep the microphone or countdown running.
+        AudioService.requestAppExit(this, error -> {
+            if (error != null && !error.isEmpty()) exitSaveError += error + "\n";
+            // Document-provider exports survive recreation; finish their authorized writes too.
+            ComposerExchange.afterPendingExports(exportError -> {
+                if (!exportError.isEmpty()) exitSaveError += exportError;
+                // This marker follows queued decode/export/mux jobs and their UI completions.
+                io.execute(() -> handler.post(() -> composer.drainForExit(() ->
+                    harmony.drainForExit(() -> {
+                        exitResourcesStopped = true;
+                        if (!composer.error.isEmpty() && !composer.error.equals(composerErrorBeforeExit)) exitSaveError += composer.error + "\n";
+                        if (!harmony.error.isEmpty() && !harmony.error.equals(harmonyErrorBeforeExit)) exitSaveError += harmony.error + "\n";
+                        completeExit();
+                    }))));
+            });
+        });
+    }
+
+    void completeExit() {
+        if (exitProgress != null) exitProgress.dismiss();
+        if (!exitSaveError.isEmpty()) {
+            exitInProgress = false;
+            StudioDialogs.alert(this)
+                    .setTitle(tr("저장 결과를 확인해 주세요", "Check the saved files"))
+                    .setMessage(exitSaveError + tr("\n저장 가능한 파일은 앱 보관함에 남아 있으며, 결합하지 못한 원본 영상은 앱 저장 폴더에 보관됩니다. 오류를 확인한 뒤 종료하세요.",
+                            "\nAvailable saved files remain in the library; unmerged original video files remain in app storage. Review the error before exiting."))
+                    .setPositiveButton(tr("확인 후 종료", "Close after review"), (d, w) -> finishExitTask())
+                    .setCancelable(false).show();
+            return;
+        }
+        finishExitTask();
+    }
+
+    void finishExitTask() {
+        ExitCoordinator.completeExit();
+        exitCompleted = true;
+        exitInProgress = false;
+        io.shutdown();
+        finishAndRemoveTask();
     }
 
     /** Kept behind the SDK guard so API 28 never resolves android.window classes. */
@@ -603,7 +698,7 @@ public class MainActivity extends Activity {
             getPreferences(0).edit().putFloat("p" + k, v).apply();
         }
         if (k == 19 && AudioService.active) {
-            startService(new Intent(this, AudioService.class).setAction(AudioService.EFFECTS));
+            startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.EFFECTS));
         }
     }
 
@@ -738,7 +833,8 @@ public class MainActivity extends Activity {
                 tr("녹음 설정", "Recording settings"),
                 tr("보컬 연습", "Vocal practice"),
                 tr("보컬 화음", "Vocal harmony"),
-                tr("도움말", "Help")
+                tr("도움말", "Help"),
+                tr("종료", "Exit")
         };
         String[] subtitles = {
                 tr("보컬 효과 · 실시간 모니터링 · 녹음", "Vocal FX · live monitoring · recording"),
@@ -749,9 +845,10 @@ public class MainActivity extends Activity {
                 tr("예약 녹음 · 저장 옵션", "Recording timer · storage"),
                 tr("스케일 · 피치 · MIDI", "Scales · pitch · MIDI"),
                 tr("목소리 화음과 루프", "Vocal harmonies and loops"),
-                tr("사용 방법 · 앱 정보", "Guide · about")
+                tr("사용 방법 · 앱 정보", "Guide · about"),
+                tr("저장 후 마이크와 재생 모두 끄기", "Save and turn off microphone and playback")
         };
-        String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help"};
+        String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help", "close"};
 
         for (int i = 0; i < names.length; i++) {
             final int k = i;
@@ -793,6 +890,7 @@ public class MainActivity extends Activity {
                 else if (k == 5) recordingOptions();
                 else if (k == 6) chooseTab(5);
                 else if (k == 7) chooseTab(9);
+                else if (k == 9) confirmExit();
                 else {
                     AlertDialog dialog = StudioDialogs.darkAlert(this)
                             .setTitle("Live Vault")
@@ -899,7 +997,7 @@ public class MainActivity extends Activity {
         echoSw.setOnCheckedChangeListener((b, on) -> {
             AudioRouting.setEchoCancellationPreferred(this, on);
             if (AudioService.active) {
-                startService(new Intent(this, AudioService.class).setAction(AudioService.EFFECTS));
+                startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.EFFECTS));
             }
         });
         add(echoSw);
@@ -913,7 +1011,7 @@ public class MainActivity extends Activity {
         agcSw.setOnCheckedChangeListener((b, on) -> {
             AudioRouting.setAutoGainPreferred(this, on);
             if (AudioService.active) {
-                startService(new Intent(this, AudioService.class).setAction(AudioService.EFFECTS));
+                startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.EFFECTS));
             }
         });
         add(agcSw);
@@ -1375,7 +1473,7 @@ public class MainActivity extends Activity {
                         AudioRouting.chooseOutput(this, id);
                     }
                     if (AudioService.active || AudioService.playbackActive) {
-                        startService(new Intent(this, AudioService.class).setAction(AudioService.ROUTE).putExtra("device", inputDevice));
+                        startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.ROUTE).putExtra("device", inputDevice));
                     }
                     showTab();
                 }
@@ -1472,6 +1570,7 @@ public class MainActivity extends Activity {
     }
 
     void requestRecording() {
+        if (exiting()) return;
         pendingCapture = !youtube.selected && captureOtherApps && CaptureSupport.available();
         captureOtherApps = false;
         continueRecording();
@@ -1484,6 +1583,7 @@ public class MainActivity extends Activity {
     }
 
     void continueRecording() {
+        if (exiting()) return;
         if (youtube.selected) pendingCapture = false;
         try {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -1511,10 +1611,11 @@ public class MainActivity extends Activity {
     }
 
     void scheduleRecording(Intent projection) {
+        if (exiting()) return;
         if (youtube.selected) projection = null;
         clearRecordingRequest();
         pendingMonitor = AudioService.canMonitor(this) || values[11] > .5f;
-        Intent intent = new Intent(this, AudioService.class)
+        Intent intent = new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation())
                 .setAction(AudioService.RECORD)
                 .putExtra("device", inputDevice)
                 .putExtra("delay", recordDelay)
@@ -1741,6 +1842,7 @@ public class MainActivity extends Activity {
     }
 
     void loadBacking(Uri uri, boolean autoplay) {
+        if (exiting()) return;
         if (RecordingManager.active || AudioService.waiting() || busy || videoPreparing) {
             toast(tr("녹음을 마친 뒤 반주를 불러오세요.", "Finish recording before loading a backing."));
             return;
@@ -1753,16 +1855,19 @@ public class MainActivity extends Activity {
             try {
                 MediaTools.Decoded decoded = MediaTools.decode(this, uri);
                 decodedFile = decoded.file;
+                if (exiting()) return;
                 if (!NativeAudio.loadLocalFile(decoded.file.getAbsolutePath(), decoded.rate, decoded.channels)) {
                     throw new IOException(tr("반주를 불러오지 못했습니다.", "Could not load backing."));
                 }
                 recent.remember(uri, name);
                 runOnUiThread(() -> {
+                    if (exiting()) return;
                     selectedFile = name;
                     toast(tr("반주를 불러왔습니다.", "Backing loaded."));
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
+                    if (exiting()) return;
                     selectedFile = "";
                     StudioDialogs.alert(this)
                             .setTitle(tr("파일을 열 수 없어요", "Cannot open file"))
@@ -1778,6 +1883,7 @@ public class MainActivity extends Activity {
                 if (decodedFile != null) decodedFile.delete();
                 runOnUiThread(() -> {
                     busy = false;
+                    if (exiting()) return;
                     if (autoplay && !selectedFile.isEmpty()) ensureMic(4);
                     if (tab == 1 || tab == 0) showTab();
                 });
@@ -1813,6 +1919,7 @@ public class MainActivity extends Activity {
     }
 
     void selectYouTube(String value) {
+        if (exiting()) return;
         String id = YouTubePlayer.videoId(value);
         if (id == null) { toast(tr("올바른 HTTPS YouTube 주소 또는 11자리 동영상 ID를 입력하세요.", "Enter a valid HTTPS YouTube URL or 11-character video ID.")); return; }
         if (settingsLocked() || recordPermissionPending || pendingAction != 0 || AudioService.captureActive || composer.capturing || testActive || starting || busy || awaitingMicPermission || (camera != null && camera.recording)) {
@@ -1945,6 +2052,7 @@ public class MainActivity extends Activity {
         camera = new CameraController(this, texture, new CameraController.Listener() {
             @Override
             public void ready() {
+                if (exiting()) return;
                 if (flipResumeAudio) {
                     RecordingManager.pause(false);
                     videoPaused = false;
@@ -2258,12 +2366,13 @@ public class MainActivity extends Activity {
     }
 
     void toggleMic() {
+        if (exiting()) return;
         if (starting || busy || testActive) return;
         pendingAction = 0;
         if (AudioService.active) {
             if (camera != null && camera.recording) stopVideo();
             else finishAudio();
-            startService(new Intent(this, AudioService.class).setAction(AudioService.STOP));
+            startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.STOP));
             set(11, 0);
             set(13, 0);
             return;
@@ -2280,7 +2389,7 @@ public class MainActivity extends Activity {
         }
         starting = true;
         pendingMonitor = AudioService.canMonitor(this);
-        startForegroundService(new Intent(this, AudioService.class).putExtra("device", inputDevice).putExtra("monitor", pendingMonitor));
+        startForegroundService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).putExtra("device", inputDevice).putExtra("monitor", pendingMonitor));
         handler.postDelayed(() -> starting = false, 1500);
     }
 
@@ -2293,13 +2402,14 @@ public class MainActivity extends Activity {
     }
 
     void ensureMic(int action) {
+        if (exiting()) return;
         if (busy || videoPreparing) return;
         if (action == 4) {
             if (!YouTubePlayer.beforeNativePlayback()) return;
             composer.pause();
             AudioService.composerRequested = false;
             NativeAudio.playLocal(true);
-            startForegroundService(new Intent(this, AudioService.class).setAction(AudioService.PLAYBACK).putExtra("playLocal", true));
+            startForegroundService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK).putExtra("playLocal", true));
             set(13, 0);
             showTab();
             return;
@@ -2318,6 +2428,7 @@ public class MainActivity extends Activity {
     }
 
     void tryPendingAction() {
+        if (exiting()) return;
         if (pendingAction == 0 || !AudioService.active || NativeAudio.stats()[10] < .5 || busy || videoPreparing) return;
         int action = pendingAction;
         if (action == 2 && (camera == null || !camera.ready)) return;
@@ -2377,6 +2488,7 @@ public class MainActivity extends Activity {
     }
 
     void toggleRecord() {
+        if (exiting()) return;
         if (testActive || videoPreparing || busy || starting || recordPermissionPending) return;
         pendingAction = 0;
         if (camera != null && camera.recording) {
@@ -2384,7 +2496,7 @@ public class MainActivity extends Activity {
             return;
         }
         if (AudioService.waiting()) {
-            startService(new Intent(this, AudioService.class).setAction(AudioService.CANCEL));
+            startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.CANCEL));
             return;
         }
         if (RecordingManager.active) {
@@ -2397,7 +2509,7 @@ public class MainActivity extends Activity {
 
     void finishAudio() {
         if (AudioService.active) {
-            startService(new Intent(this, AudioService.class).setAction(AudioService.FINISH));
+            startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.FINISH));
             return;
         }
         try {
@@ -2409,6 +2521,7 @@ public class MainActivity extends Activity {
     }
 
     void toggleVideo() {
+        if (exiting()) return;
         if (videoPreparing || busy) return;
         if (cameraFailed) {
             showTab();
@@ -2426,6 +2539,7 @@ public class MainActivity extends Activity {
     }
 
     void startVideo() {
+        if (exiting()) return;
         youtube.pause();
         if (camera == null || !requireMic()) return;
         stopPlayer();
@@ -2435,7 +2549,7 @@ public class MainActivity extends Activity {
         final CameraController target = camera;
         if (!camera.start(rawVideo, () -> {
             videoPreparing = false;
-            if (camera != target || !target.recording) return;
+            if (exiting() || camera != target || !target.recording) { target.stop(); return; }
             RecordingManager.syncMs = AudioRouting.prefs(this).getInt("sync" + AudioRouting.selected(this), 0);
             if (!RecordingManager.start(this, Math.round(values[15]))) {
                 target.stop();
@@ -2460,11 +2574,15 @@ public class MainActivity extends Activity {
             if (r == null && RecordingManager.lastResult != null && RecordingManager.lastResult.id.equals(videoTakeId)) {
                 r = RecordingManager.lastResult;
             }
-            if (r == null) return;
+            if (r == null) {
+                if (exiting()) exitSaveError += "Video audio could not be finalized; original video retained.\n";
+                return;
+            }
             final RecordingManager.Result saved = r;
             final long voiceDelayUs = Math.max(0, RecordingManager.syncMs) * 1000L;
             File source = rawVideo;
             if (!videoOk) {
+                if (exiting()) exitSaveError += "Video was interrupted; saved audio and original video retained.\n";
                 toast(tr("영상이 너무 짧거나 중단되었습니다. 오디오는 보관함에서 확인하세요.", "The video was too short or interrupted. Find the audio in the library."));
                 return;
             }
@@ -2484,18 +2602,20 @@ public class MainActivity extends Activity {
                     runOnUiThread(() -> toast(tr("MP4 · WAV · MIDI를 저장했습니다.", "MP4 · WAV · MIDI saved.")));
                 } catch (Exception e) {
                     store.file(saved.id, ".mp4").delete();
+                    if (exiting()) exitSaveError += "Video merge failed: " + e.getMessage() + "\n";
                     runOnUiThread(() -> toast(tr("영상 결합 실패. WAV와 MIDI는 보관되어 있습니다: ", "Video merge failed. WAV and MIDI remain in the library: ") + e.getMessage()));
                 } finally {
                     runOnUiThread(() -> {
                         busy = false;
-                        if (tab == 4) showTab();
+                        if (!exiting() && tab == 4) showTab();
                     });
                 }
             });
         } catch (Exception e) {
+            if (exiting()) exitSaveError += "Could not save video: " + e.getMessage() + "\n";
             toast(tr("녹화 저장 실패: ", "Could not save video: ") + e.getMessage());
         } finally {
-            if (tab == 3 && !isFinishing()) showTab();
+            if (!exiting() && tab == 3 && !isFinishing()) showTab();
         }
     }
 
@@ -2513,9 +2633,23 @@ public class MainActivity extends Activity {
         return String.format(Locale.US, "%02d:%02d", s / 60, s % 60);
     }
 
+    long uiTickDelay(boolean running) {
+        return running || (camera != null) || videoPreparing || testActive || pendingAction != 0
+                || starting || (player != null && player.isPlaying()) || AudioService.playbackActive
+                ? 80L : 1000L;
+    }
+
+    void updateScreenAwake(boolean running) {
+        boolean awake = activityVisible && !exiting()
+                && (camera != null || videoPreparing || (running && (tab == 0 || tab == 5 || tab == 9)));
+        if (awake) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
     final Runnable tick = new Runnable() {
         @Override
         public void run() {
+            if (exiting() || !activityVisible) return;
             float[] s = NativeAudio.stats();
             boolean running = AudioService.active && s[10] > .5;
             values[11] = s[21];
@@ -2534,7 +2668,7 @@ public class MainActivity extends Activity {
                 finishAudio();
                 set(11, 0);
                 set(13, 0);
-                if (AudioService.active) stopService(new Intent(MainActivity.this, AudioService.class));
+                if (AudioService.active) stopService(new Intent(MainActivity.this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()));
             }
             wasRunning = running;
 
@@ -2798,11 +2932,13 @@ public class MainActivity extends Activity {
                 if (visual.piano) visual.notes = NativeAudio.roll();
                 visual.invalidate();
             }
-            handler.postDelayed(this, 80);
+            updateScreenAwake(running);
+            if (activityVisible && !exiting()) handler.postDelayed(this, uiTickDelay(running));
         }
     };
 
     void play(File f) {
+        if (exiting()) return;
         if (RecordingManager.active || AudioService.waiting()) {
             toast(tr("예약 또는 녹음을 마친 뒤 재생하세요.", "Finish recording or the countdown before playback."));
             return;
@@ -2918,6 +3054,7 @@ public class MainActivity extends Activity {
     @Override
     public void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (exiting()) return;
         if (exchange.onActivityResult(request, result, data)) return;
         if (request == 30) {
             if (youtube.selected || recordingRequestStage != 2) {
@@ -2965,6 +3102,7 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int request, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(request, permissions, grants);
+        if (exiting()) { pendingAction = 0; clearRecordingRequest(); return; }
         if (request == 12) {
             if (recordingRequestStage != 1) {
                 clearRecordingRequest();
@@ -2995,6 +3133,7 @@ public class MainActivity extends Activity {
     }
 
     void runSyncTest() {
+        if (exiting()) return;
         try {
             File f = new File(getCacheDir(), "sync-test.wav");
             int sync = AudioRouting.prefs(this).getInt("sync" + AudioRouting.selected(this), 0);
@@ -3046,7 +3185,7 @@ public class MainActivity extends Activity {
     final Runnable pendingSource = new Runnable() {
         @Override
         public void run() {
-            if (activityVisible || pendingAction == 0) return;
+            if (exiting() || activityVisible || pendingAction == 0) return;
             if (awaitingMicPermission) {
                 handler.postDelayed(this, 100);
                 return;
@@ -3063,7 +3202,7 @@ public class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (youtube != null) {
+        if (youtube != null && !exiting()) {
             if (!hasFocus) youtube.pause();
             else youtube.checkVisibility();
         }
@@ -3071,6 +3210,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (youtube == null) { super.onPause(); return; }
         youtube.pause();
         if (youtube.web != null) youtube.web.onPause();
         if (testActive) finishSyncTest(false);
@@ -3078,8 +3218,9 @@ public class MainActivity extends Activity {
             AudioService.practice.stop(false);
         }
         activityVisible = false;
+        updateScreenAwake(false);
         handler.removeCallbacks(tick);
-        if (pendingAction == 3 || pendingAction == 4) handler.post(pendingSource);
+        if (!exiting() && (pendingAction == 3 || pendingAction == 4)) handler.post(pendingSource);
         videoPreparing = false;
         if (camera != null) {
             if (camera.recording) stopVideo();
@@ -3092,6 +3233,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (exiting()) return;
         activityVisible = true;
         if (youtube.web != null) { youtube.web.onResume(); youtube.checkVisibility(); }
         handler.removeCallbacks(pendingSource);
@@ -3104,6 +3246,12 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (modernBack != null) modernBack.unregister();
         backWindows.clear();
+        if (youtube == null) {
+            handler.removeCallbacksAndMessages(null);
+            io.shutdown();
+            super.onDestroy();
+            return;
+        }
         boolean ownsYouTube = YouTubePlayer.current == youtube;
         youtube.destroy();
         if (ownsYouTube) AudioService.youtubeSelected = false;
