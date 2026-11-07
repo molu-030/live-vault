@@ -7,6 +7,7 @@ import android.app.Dialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -73,6 +74,9 @@ public class MainActivity extends Activity {
     final float[] values = {1, .55f, .27f, 2.2f, .14f, 280, .25f, 0, 0, 1, 1, 0, 0, 0, 0, 78, 0, 0, 0, 1};
 
     StudioRootLayout root;
+    private boolean expandedLandscape;
+    private LinearLayout headerNavigation;
+    private final Runnable adaptWindow = this::adaptToWindow;
     StudioPageLayout page;
     StudioScrollView pageScroll;
     LinearLayout actionDock;
@@ -280,9 +284,71 @@ public class MainActivity extends Activity {
         line.addView(view, lp);
     }
 
+    /** Uses app-window space, never physical display size or keyboard-reduced height. */
+    boolean tabletLandscape() { return expandedLandscape; }
+
+    private boolean expandedWindow() {
+        float density = getResources().getDisplayMetrics().density;
+        float width = getResources().getConfiguration().screenWidthDp;
+        float height = getResources().getConfiguration().screenHeightDp;
+        if (Build.VERSION.SDK_INT >= 30) {
+            android.view.WindowMetrics metrics = getWindowManager().getCurrentWindowMetrics();
+            android.graphics.Rect bounds = metrics.getBounds();
+            android.graphics.Insets safe = metrics.getWindowInsets().getInsetsIgnoringVisibility(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            if (bounds.width() > 0 && bounds.height() > 0) {
+                width = (bounds.width() - safe.left - safe.right) / density;
+                height = (bounds.height() - safe.top - safe.bottom) / density;
+            }
+        }
+        return width >= 840 && Math.min(width, height) >= 600 && width > height;
+    }
+
+    private void scheduleWindowAdaptation() {
+        handler.removeCallbacks(adaptWindow);
+        handler.post(adaptWindow);
+    }
+
+    private void adaptToWindow() {
+        if (root == null || exiting()) return;
+        boolean next = expandedWindow();
+        if (next == expandedLandscape) return;
+        BackNavigation.Page current = currentPage();
+        expandedLandscape = next;
+        updateHeaderNavigation();
+        root.requestLayout();
+        // A recording or preview owns its attached TextureView until normal navigation.
+        // Resizing that view is safe; rebuilding it would close the camera session.
+        if (tab == 3 || videoPreparing) return;
+        showTab();
+        restorePageScroll(current);
+    }
+
+    @Override public void onConfigurationChanged(Configuration config) {
+        super.onConfigurationChanged(config);
+        scheduleWindowAdaptation();
+    }
+
+    private void updateHeaderNavigation() {
+        if (nav == null || headerNavigation == null) return;
+        android.view.ViewGroup parent = (android.view.ViewGroup) nav.getParent();
+        if (parent != null) parent.removeView(nav);
+        if (tabletLandscape()) {
+            nav.setVisibility(View.VISIBLE);
+            headerNavigation.addView(nav, new LinearLayout.LayoutParams(dp(330), dp(48)));
+        } else {
+            nav.setVisibility(View.GONE);
+            root.addView(nav, 1, new LinearLayout.LayoutParams(-1, 0));
+        }
+    }
+
     void build() {
+        expandedLandscape = expandedWindow();
         root = new StudioRootLayout(this);
         root.setBackgroundColor(BG);
+        root.addOnLayoutChangeListener((v, l, t, r, b, oldL, oldT, oldR, oldB) -> {
+            if (r - l != oldR - oldL || b - t != oldB - oldT) scheduleWindowAdaptation();
+        });
         if (Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
         } else {
@@ -341,6 +407,9 @@ public class MainActivity extends Activity {
         brand.setOnClickListener(v -> chooseTab(0));
         header.addView(brand, new LinearLayout.LayoutParams(0, dp(48), 1));
 
+        headerNavigation = row();
+        header.addView(headerNavigation, new LinearLayout.LayoutParams(-2, dp(48)));
+
         StudioButton mute = StudioTheme.styled(this, tr("출력 끄기", "Mute output"), StudioButton.QUIET, () -> {
             set(11, 0);
             toast(tr("내 목소리 출력만 껐습니다. 녹음은 계속됩니다.", "Voice output muted. Recording continues."));
@@ -376,6 +445,7 @@ public class MainActivity extends Activity {
             nav.addView(b, np);
         }
         root.addView(nav, new LinearLayout.LayoutParams(-1, 0));
+        updateHeaderNavigation();
 
         pageScroll = new StudioScrollView(this);
         page = new StudioPageLayout(this);
@@ -638,6 +708,7 @@ public class MainActivity extends Activity {
         takePlayButtons.clear();
         takePlaybackStatus.clear();
         content = page;
+        page.maxContentWidthDp = tabletLandscape() && (tab == 1 || tab == 2 || tab == 4 || tab == 5 || tab == 6 || tab == 9) ? 880 : 0;
         page.flexible(null, 0, 0);
         content.removeAllViews();
         actionDock.removeAllViews();
@@ -3244,6 +3315,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        handler.removeCallbacks(adaptWindow);
         if (modernBack != null) modernBack.unregister();
         backWindows.clear();
         if (youtube == null) {

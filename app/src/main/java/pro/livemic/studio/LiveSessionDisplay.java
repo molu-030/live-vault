@@ -62,6 +62,10 @@ final class LiveSessionDisplay extends View {
         c.drawLine(right-24*d,h-6*d,right,h-6*d,p);c.drawLine(right,h-10*d,right,h-6*d,p);
         long now = SystemClock.uptimeMillis();
         float dt = lastFrame == 0 ? 0 : Math.min(.2f, (now-lastFrame)/1000f); lastFrame = now;
+        if (getContext() instanceof MainActivity && ((MainActivity) getContext()).tabletLandscape()) {
+            drawTablet(c, d, w, h, now, dt);
+            return;
+        }
         boolean ultraCompact = h < 105*d;
         float headerY = ultraCompact ? 17*d : 23*d;
         text(c, "LIVE SESSION", left, headerY, (ultraCompact ? 10 : 11)*d, StudioTheme.OLIVE, Paint.Align.LEFT, false, (right-left)*.47f);
@@ -147,4 +151,78 @@ final class LiveSessionDisplay extends View {
         if(recording) { p.setColor(StudioTheme.DANGER); p.setAlpha((now/650)%2==0?255:90); c.drawCircle(left+3*d,bottom-4*d,3*d,p); p.setAlpha(255); }
         if(animating || recording) postInvalidateDelayed(32);
     }
+    /** A two-column instrument face uses tablet space for the engine's real measurements. */
+    private void drawTablet(Canvas c, float d, float w, float h, long now, float dt) {
+        float left = 22*d, right = w-left, usable = right-left;
+        boolean shortDisplay = h < 245*d;
+        float top = 30*d, bottom = h-22*d;
+        text(c, "LIVE SESSION", left, top, 13*d, StudioTheme.OLIVE, Paint.Align.LEFT, false, usable*.46f);
+        boolean safety = routeStatus.toLowerCase(Locale.ROOT).contains("safety") || routeStatus.contains("보호");
+        text(c, routeStatus, right, top, 12*d, safety ? StudioTheme.DANGER : StudioTheme.OLIVE, Paint.Align.RIGHT, false, usable*.5f);
+        float split = left+usable*.57f;
+        p.setColor(0xff34452a); p.setStrokeWidth(d);
+        c.drawLine(split, 56*d, split, bottom-36*d, p);
+        float meterEnd = split-18*d;
+        float meterTop = shortDisplay ? 67*d : h*.32f;
+        float meterGap = shortDisplay ? 46*d : Math.min(80*d, h*.23f);
+        boolean animating = false;
+        for (int row=0; row<2; row++) {
+            float db = row==0 ? inputDb : outputDb;
+            float target = Math.max(-60, db);
+            shown[row] = Math.max(target, shown[row]-36*dt);
+            if (target >= peaks[row]) { peaks[row] = target; holds[row] = now+850; }
+            else if (now>holds[row]) peaks[row] = Math.max(target, peaks[row]-20*dt);
+            animating |= shown[row]>target+.1f || peaks[row]>target+.1f;
+            float y = meterTop+row*meterGap;
+            text(c, row==0 ? "IN" : "OUT", left, y-10*d, 12*d, StudioTheme.OLIVE, Paint.Align.LEFT, true, 42*d);
+            text(c, dbLabel(db), meterEnd, y-10*d, 15*d, StudioTheme.ACCENT, Paint.Align.RIGHT, true, (meterEnd-left)*.6f);
+            int segments = 28;
+            float gap = 2*d, sw = (meterEnd-left-gap*(segments-1))/segments;
+            for (int i=0; i<segments; i++) {
+                float threshold = -60+(i+1)*60f/segments;
+                boolean lit = shown[row]>=threshold;
+                p.setColor(lit ? (threshold>=-5 ? StudioTheme.DANGER : threshold>=-12.5f ? 0xffd3d96a : StudioTheme.ACCENT) : 0xff243022);
+                float x = left+i*(sw+gap);
+                c.drawRoundRect(x, y, x+sw, y+14*d, d, d, p);
+            }
+            if (peaks[row]>-59.5f) {
+                float x = left+(meterEnd-left)*Math.max(0, Math.min(1, (peaks[row]+60)/60));
+                p.setColor(StudioTheme.TEXT);
+                c.drawRect(Math.min(meterEnd-d, x), y-d, Math.min(meterEnd, x+d), y+15*d, p);
+            }
+            if (!shortDisplay) {
+                text(c, "−60", left, y+31*d, 10*d, StudioTheme.OLIVE, Paint.Align.LEFT, true, 36*d);
+                text(c, "−30", (left+meterEnd)/2, y+31*d, 10*d, StudioTheme.OLIVE, Paint.Align.CENTER, true, 36*d);
+                text(c, "0 dB", meterEnd, y+31*d, 10*d, StudioTheme.OLIVE, Paint.Align.RIGHT, true, 42*d);
+            }
+        }
+        float pitchCenter = (split+right)/2, pitchWidth = right-split-20*d;
+        float pitchY = shortDisplay ? 104*d : h*.48f;
+        text(c, "PITCH", pitchCenter, shortDisplay ? 65*d : pitchY-56*d, 12*d, StudioTheme.OLIVE, Paint.Align.CENTER, false, pitchWidth);
+        text(c, note, pitchCenter, pitchY, (shortDisplay ? 34 : 50)*d, StudioTheme.ACCENT, Paint.Align.CENTER, true, pitchWidth);
+        text(c, frequency>0 ? String.format(Locale.US, "%.0f Hz", frequency) : "— Hz", pitchCenter, pitchY+25*d, 15*d, StudioTheme.OLIVE, Paint.Align.CENTER, true, pitchWidth);
+        if (!shortDisplay) {
+            float span = Math.min(76*d, pitchWidth*.43f), y = pitchY+62*d;
+            p.setColor(0xff4a5c37); p.setStrokeWidth(d);
+            c.drawLine(pitchCenter-span, y, pitchCenter+span, y, p);
+            for (int i=-2; i<=2; i++) {
+                float x = pitchCenter+i*span/2;
+                c.drawLine(x, y-4*d, x, y+4*d, p);
+            }
+            if (frequency>0) {
+                float x = pitchCenter+span*Math.max(-50, Math.min(50, cents))/50;
+                p.setColor(StudioTheme.ACCENT); p.setStrokeWidth(2*d);
+                c.drawLine(x, y-9*d, x, y+5*d, p);
+            }
+            text(c, frequency>0 ? String.format(Locale.US, "%+.0f cents", cents) : "— cents", pitchCenter, y+24*d, 12*d, StudioTheme.OLIVE, Paint.Align.CENTER, true, pitchWidth);
+        }
+        text(c, recordStatus, left+(recording ? 14*d : 0), bottom, 13*d, recording ? StudioTheme.ACCENT : StudioTheme.OLIVE, Paint.Align.LEFT, true, usable*.6f);
+        text(c, recordClock, right, bottom, 24*d, StudioTheme.ACCENT, Paint.Align.RIGHT, true, usable*.35f);
+        if (recording) {
+            p.setColor(StudioTheme.DANGER); p.setAlpha((now/650)%2==0 ? 255 : 90);
+            c.drawCircle(left+3*d, bottom-5*d, 4*d, p); p.setAlpha(255);
+        }
+        if (animating || recording) postInvalidateDelayed(32);
+    }
+
 }

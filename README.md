@@ -1,10 +1,10 @@
-# Live Vault 3.8.8 — Android native preview
+# Live Vault 3.9.0 — Android native preview
 
-**3.8.8-preview / versionCode 26**은 작곡기 누락을 수정한 개인용 체크포인트입니다. **대표 24 + 드럼**, 키트 즐겨찾기, 파트 화살표·전체 목록, 실제 악기 패턴과 건반/목소리 프레이즈 보존을 보완했습니다. [누락 재검수·화면·검증 범위](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md). [종료 확인·유휴 전력 개선](docs/LIVE_VAULT_V3_8_7_EXIT_AND_POWER.md)과 [영상 레이아웃 수정](docs/LIVE_VAULT_V3_8_6_VIDEO_LAYOUT.md)을 포함합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
+**3.9.0-preview / versionCode 27**은 Galaxy Tab S9 Ultra 가로 화면을 지원하는 개인용 체크포인트입니다. 큰 LCD·입출력과 반주·효과를 좌우에 배치하고, 작곡기는 코드와 트랙을 각각 스크롤합니다. 상단 바로가기와 하단 고정 녹음/재생 조작을 제공합니다. [태블릿 배치·화면·검증 범위](docs/LIVE_VAULT_V3_9_0_TABLET.md). **대표 24 + 드럼**, 키트 즐겨찾기, 파트 화살표와 프레이즈 보존을 고친 [3.8.8](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md), [종료·유휴 전력 개선](docs/LIVE_VAULT_V3_8_7_EXIT_AND_POWER.md), [영상 레이아웃 수정](docs/LIVE_VAULT_V3_8_6_VIDEO_LAYOUT.md)을 포함합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
 
 라이브의 **반주 선택 ▾** 또는 **☰ → 반주**에서 **내 파일 · 작곡기 · 온라인**을 엽니다. 반주가 없는 상태에서 재생을 눌러도 선택 화면이 열립니다. [반주 진입 복구](docs/LIVE_VAULT_V3_8_3_BACKING_RESTORE.md)와 [하울링 보호 검수](docs/LIVE_VAULT_V3_8_2_FEEDBACK_REVIEW.md)는 이력으로 유지합니다.
 
-LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 소스/마이크/모니터 세 버튼, 마이크/반주/리버브/에코 조절기, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 입출력 장치와 반주 선택은 **소스 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
+LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 상태를 표시합니다. 메인은 마이크·모니터링·입출력 장치 선택, 마이크/반주/리버브/에코 조절기, 반주 재생과 녹음/영상 하단 조작으로 구성합니다. 상세 효과는 **상세 ▾**, 장치는 **입력/출력 ▾**, 반주는 **반주 선택 ▾**에서 엽니다. 정적 LCD 격자와 고리는 장식이며 가짜 파형은 사용하지 않습니다.
 
 반주 → 온라인에서 YouTube 주소/동영상 ID를 선택하고 공식 플레이어에서 직접 재생합니다. 같은 반주 음량 조절기로 플레이어 음량을 바꾸며 시스템 전체 음량과 마이크 게인은 유지합니다. YouTube 선택 시에는 마이크만 녹음하고, 화면을 벗어나면 동영상을 일시정지합니다. 플레이어 화면은 OFFLINE fixture로 구분하며 실제 기기의 YouTube·오디오·장치·터치 접근성·지연 검증과 배포 전 정책 검토는 남아 있습니다. 개인용 오버레이/APK와 비공개 전달 URL은 공개 저장소에 포함하지 않습니다. 이전 [3.7 검증](docs/LIVE_VAULT_V3_7_VALIDATION.md)과 [렌더 72장](docs/screenshots/v3.7/)은 이력으로 유지합니다.
 
@@ -12,11 +12,11 @@ LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 �
 
 실시간 마이크 모니터링, 보컬 효과, 단선율 MIDI 채보, 반주, 카메라 녹화를 위한 Android 프로젝트입니다.
 
-> **현재 상태: 개발 중인 체크포인트.** Galaxy S26 Ultra의 화면 비율을 기준으로 여백과 크기를 조정하고 녹음·영상·연습의 주 조작 버튼을 하단에 고정했습니다. 실제 창 크기와 시스템 영역을 읽어 배치하므로 해상도/화면 확대 설정에도 대응합니다. 색상과 로고를 유지하고 3개 주요 탐색 버튼을 상단에 배치했습니다. [배치와 검증 범위](docs/GALAXY_S26_ULTRA_LAYOUT.md).
+> **현재 상태: 개발 중인 체크포인트.** Galaxy S26 Ultra용 기존 배치와 S9 Ultra 가로 태블릿 배치를 지원합니다. 실제 창 크기와 시스템 영역으로 배치하고 녹음·영상·연습의 주 조작 버튼을 하단에 고정합니다. 색상과 로고는 유지합니다. [휴대폰 배치](docs/GALAXY_S26_ULTRA_LAYOUT.md) · [태블릿 배치와 검증 범위](docs/LIVE_VAULT_V3_9_0_TABLET.md).
 
 ## 미리보기 APK
 
-기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.8.8 작곡기 재검수](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md)를 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
+기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.9.0 태블릿 지원](docs/LIVE_VAULT_V3_9_0_TABLET.md)을 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
 
 ## AI로 반주 수정하기
 

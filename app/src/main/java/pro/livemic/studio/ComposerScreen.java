@@ -24,6 +24,40 @@ final class ComposerScreen {
     ComposerProject soloProject;
     final List<View> chordCards = new ArrayList<>();
     int highlightedBar = -2;
+    ScrollView leftPane;
+    ScrollView rightPane;
+
+    /** Bounded panes keep long parts and track lists independently reachable. */
+    LinearLayout tabletPanes(String screen) {
+        LinearLayout row = a.row();
+        row.setGravity(Gravity.TOP);
+        leftPane = new ScrollView(a);
+        rightPane = new ScrollView(a);
+        leftPane.setTag("tablet-" + screen + "-left");
+        rightPane.setTag("tablet-" + screen + "-right");
+        leftPane.setFillViewport(true);
+        rightPane.setFillViewport(true);
+        leftPane.setClipToPadding(false);
+        rightPane.setClipToPadding(false);
+        leftPane.setPadding(0, 0, a.dp(4), a.dp(8));
+        rightPane.setPadding(0, 0, a.dp(4), a.dp(8));
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -1, 1);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -1, 1);
+        right.leftMargin = a.dp(24);
+        row.addView(leftPane, left);
+        row.addView(rightPane, right);
+        a.add(row);
+        a.page.flexible(row, 160, 1600);
+        LinearLayout leftContent = a.column();
+        leftPane.addView(leftContent, new ScrollView.LayoutParams(-1, -2));
+        LinearLayout rightContent = a.column();
+        rightPane.addView(rightContent, new ScrollView.LayoutParams(-1, -2));
+        return leftContent;
+    }
+
+    void rightPane() {
+        a.content = (LinearLayout) rightPane.getChildAt(0);
+    }
 
     ComposerScreen(MainActivity a, ComposerSession s) {
         this.a = a;
@@ -32,10 +66,16 @@ final class ComposerScreen {
 
     void refresh() {
         int tab = a.tab, y = a.pageScroll.getScrollY();
+        int leftY = leftPane == null ? 0 : leftPane.getScrollY();
+        int rightY = rightPane == null ? 0 : rightPane.getScrollY();
         a.pageScroll.preserveScroll(y);
         a.showTab();
         a.pageScroll.post(() -> {
-            if (a.tab == tab) a.pageScroll.scrollTo(0, y);
+            if (a.tab == tab) {
+                a.pageScroll.scrollTo(0, y);
+                if (leftPane != null) leftPane.scrollTo(0, leftY);
+                if (rightPane != null) rightPane.scrollTo(0, rightY);
+            }
         });
     }
 
@@ -181,6 +221,7 @@ final class ComposerScreen {
     }
 
     void draw(boolean voice) {
+        leftPane = rightPane = null;
         readout = transportLabel = lcdStatus = null;
         play = phrase = voicePower = null;
         chordCards.clear();
@@ -248,16 +289,36 @@ final class ComposerScreen {
         expLp.rightMargin = a.dp(8);
         a.weighted(aiBar, aiImport, 44);
         hero.addView(aiBar, aiBarLp);
+        boolean tablet = a.tabletLandscape();
+        if (tablet) {
+            hero.removeAllViews();
+            LinearLayout wideHero = a.row();
+            wideHero.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout identity = a.column();
+            identity.addView(top);
+            identity.addView(summary);
+            identity.addView(lcdStatus, lcdLp);
+            LinearLayout controls = a.column();
+            controls.addView(stats);
+            controls.addView(aiBar, aiBarLp);
+            wideHero.addView(identity, new LinearLayout.LayoutParams(0, -2, 1));
+            LinearLayout.LayoutParams controlsLp = new LinearLayout.LayoutParams(0, -2, 1);
+            controlsLp.leftMargin = a.dp(24);
+            wideHero.addView(controls, controlsLp);
+            hero.addView(wideHero);
+        }
         a.add(hero);
+        LinearLayout pageContent = a.content;
+        if (tablet) a.content = tabletPanes("composer");
 
-        section(tr("파트", "Parts"), p.parts.size() + " / 8");
+        if (!tablet) section(tr("파트", "Parts"), p.parts.size() + " / 8");
         LinearLayout parts = a.row();
         Button previous = a.button("‹", () -> selectPart(s.selectedPart - 1));
         previous.setTextSize(24);
         previous.setContentDescription(tr("이전 파트", "Previous part"));
         previous.setEnabled(!s.capturing && s.selectedPart > 0);
         parts.addView(previous, new LinearLayout.LayoutParams(a.dp(52), a.dp(64)));
-        Button currentPart = a.button(part.label + " · " + part.bars + tr("마디", " bars")
+        Button currentPart = a.button((tablet ? tr("파트 ", "Part ") : "") + part.label + " · " + part.bars + tr("마디", " bars")
                 + "\n" + (s.selectedPart + 1) + " / " + p.parts.size() + tr(" · 전체 파트 ▾", " · All parts ▾"), this::choosePart);
         currentPart.setSingleLine(false);
         currentPart.setMaxLines(2);
@@ -357,6 +418,7 @@ final class ComposerScreen {
             a.add(row);
         }
 
+        if (tablet) rightPane();
         section(tr("악기 트랙", "Tracks"), part.tracks.size() + " / 8");
         LinearLayout rhythmRow = a.row();
         rhythmRow.addView(caption(tr("리듬", "RHYTHM")), new LinearLayout.LayoutParams(0, -2, 1));
@@ -480,6 +542,7 @@ final class ComposerScreen {
         links.addView(action(tr("목소리로 연주 ›", "Play with voice ›"), () -> a.chooseTab(8)),
                 new LinearLayout.LayoutParams(0, -2, 1));
         a.add(links);
+        a.content = pageContent;
         dock(false);
         if (!s.ready) a.note(tr("오프라인 샘플 음원을 준비하고 있습니다…", "Preparing offline sounds…"));
     }
@@ -841,13 +904,18 @@ final class ComposerScreen {
     void voice() {
         VoiceInstrumentSettings v = s.project.voice;
         a.add(a.title(tr("목소리로 연주", "Play with voice")));
+        boolean tablet = a.tabletLandscape();
+        LinearLayout pageContent = a.content;
+        if (tablet) a.content = tabletPanes("voice");
         LinearLayout old = a.beginCard();
         readout = a.text(tr("목소리 — → 악기 —", "Voice — → Instrument —"), 24, MainActivity.LIME);
         readout.setGravity(Gravity.CENTER);
-        readout.setMinHeight(a.dp(100));
+        readout.setMinHeight(a.dp(tablet ? 260 : 100));
+        if (tablet) readout.setTextSize(32);
         a.add(readout);
         a.note(tr("입력 음 → 악기 출력 음", "Input note → instrument note"));
         a.endCard(old);
+        if (tablet) rightPane();
 
         a.add(a.button(tr("악기: ", "Instrument: ") + InstrumentCatalog.GM[v.program] + " ▾", () -> instrument(-1, true)));
         a.add(a.button(tr("연주 방식: ", "Playing mode: ") + (v.mode == 0 ? tr("멜로디", "Melody") : tr("코드", "Chord")) + " ▾", () ->
@@ -885,6 +953,7 @@ final class ComposerScreen {
         a.add(a.button(tr("연주 세부 설정 ▾", "Performance settings ▾"), this::voiceSettings));
         a.add(a.button(tr("작곡기로 돌아가기 ›", "Back to composer ›"), () -> a.chooseTab(7)));
         a.note(tr("단선율 입력을 사용합니다. 스케일 맞춤과 원래 목소리 섞기는 기본 꺼짐입니다.", "Uses monophonic input. Scale snap and mixing the original voice are off by default."));
+        a.content = pageContent;
         dock(true);
         poll();
     }
@@ -1157,7 +1226,7 @@ final class ComposerScreen {
             WindowManager.LayoutParams params = window.getAttributes();
             params.dimAmount = 0.82f;
             window.setAttributes(params);
-            window.setLayout(Math.min(a.root.getWidth(), a.dp(520)), Math.max(a.dp(250), (int) (a.root.getHeight() * .82f)));
+            window.setLayout(Math.min(a.root.getWidth(), a.dp(a.tabletLandscape() ? 760 : 520)), Math.max(a.dp(250), (int) (a.root.getHeight() * .82f)));
         }
     }
 
@@ -1496,7 +1565,7 @@ final class ComposerScreen {
         Window window = dialog.getWindow();
         if (window != null) {
             window.setBackgroundDrawableResource(android.R.color.transparent);
-            window.setLayout(Math.min(a.root.getWidth(), a.dp(560)), -2);
+            window.setLayout(Math.min(a.root.getWidth(), a.dp(a.tabletLandscape() ? 720 : 560)), -2);
         }
     }
 

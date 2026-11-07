@@ -17,7 +17,9 @@ final class StudioRootLayout extends LinearLayout {
     @Override protected void onMeasure(int widthSpec,int heightSpec){
         int width=MeasureSpec.getSize(widthSpec)-safeLeft-safeRight;
         int gutter=StudioTheme.dp(getContext(),width/getResources().getDisplayMetrics().density>=400?20:16);
-        gutter=Math.max(gutter,(width-StudioTheme.dp(getContext(),480))/2);
+        boolean expanded=getContext() instanceof MainActivity && ((MainActivity)getContext()).tabletLandscape();
+        if(expanded)gutter=StudioTheme.dp(getContext(),24);
+        gutter=Math.max(gutter,(width-StudioTheme.dp(getContext(),expanded?1600:480))/2);
         int left=safeLeft+gutter,right=safeRight+gutter;
         if(getPaddingLeft()!=left||getPaddingRight()!=right||getPaddingTop()!=safeTop||getPaddingBottom()!=safeBottom)
             setPadding(left,safeTop,right,safeBottom);
@@ -60,6 +62,7 @@ final class StudioScrollView extends ScrollView {
 /** Gives spare space to the waveform/preview; short windows scroll the body only. */
 final class StudioPageLayout extends LinearLayout {
     int viewport;
+    int maxContentWidthDp;
     private View flexible;
     private int minimum,maximum;
     StudioPageLayout(Context context){super(context);setOrientation(VERTICAL);}
@@ -67,6 +70,9 @@ final class StudioPageLayout extends LinearLayout {
         flexible=view;minimum=StudioTheme.dp(getContext(),minDp);maximum=StudioTheme.dp(getContext(),maxDp);
     }
     @Override protected void onMeasure(int widthSpec,int heightSpec){
+        int inset=maxContentWidthDp>0?Math.max(0,(MeasureSpec.getSize(widthSpec)-StudioTheme.dp(getContext(),maxContentWidthDp))/2):0;
+        if(getPaddingLeft()!=inset||getPaddingRight()!=inset)
+            setPadding(inset,getPaddingTop(),inset,getPaddingBottom());
         if(flexible==null||viewport<=0){super.onMeasure(widthSpec,heightSpec);return;}
         super.onMeasure(widthSpec,MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED));
         int fixed=getMeasuredHeight()-flexible.getMeasuredHeight();

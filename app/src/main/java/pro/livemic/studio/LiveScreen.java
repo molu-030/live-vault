@@ -9,6 +9,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
 
@@ -32,7 +33,7 @@ final class LiveScreen {
         b.setStateListAnimator(null);
         b.setElevation(0);
         b.setTypeface(StudioTheme.bold(a));
-        b.setTextSize(10f);
+        b.setTextSize(a.tabletLandscape() ? 14f : 10f);
         b.setLineSpacing(0, 0.90f);
         b.setGravity(Gravity.CENTER);
         b.setIncludeFontPadding(false);
@@ -92,7 +93,7 @@ final class LiveScreen {
     TextView heading(String s) {
         TextView t = new TextView(a);
         t.setText(s);
-        t.setTextSize(10f);
+        t.setTextSize(a.tabletLandscape() ? 12f : 10f);
         t.setTextColor(StudioTheme.MUTED);
         t.setTypeface(StudioTheme.bold(a));
         t.setGravity(Gravity.CENTER_VERTICAL);
@@ -104,22 +105,22 @@ final class LiveScreen {
 
     SeekBar gain(LinearLayout parent, String label, int key, int max, TextView value) {
         LinearLayout row = a.row();
-        value.setTextSize(11f);
+        value.setTextSize(a.tabletLandscape() ? 14f : 11f);
         value.setTypeface(StudioTheme.mono(a));
         value.setMaxLines(1);
         value.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         value.setIncludeFontPadding(false);
         value.setLineSpacing(0, 1f);
-        TextView name = text(label, 11f, StudioTheme.MUTED);
+        TextView name = text(label, a.tabletLandscape() ? 14f : 11f, StudioTheme.MUTED);
         name.setMaxLines(1);
         name.setGravity(Gravity.CENTER_VERTICAL);
         name.setTypeface(StudioTheme.medium(a));
         name.setIncludeFontPadding(false);
         name.setLineSpacing(0, 1f);
-        row.addView(name, new LinearLayout.LayoutParams(a.dp(62), a.dp(48)));
+        row.addView(name, new LinearLayout.LayoutParams(a.dp(a.tabletLandscape() ? 90 : 62), a.dp(48)));
         SeekBar bar = gainBar(label, key, max, value);
         row.addView(bar, new LinearLayout.LayoutParams(0, a.dp(48), 1));
-        row.addView(value, new LinearLayout.LayoutParams(a.dp(46), a.dp(48)));
+        row.addView(value, new LinearLayout.LayoutParams(a.dp(a.tabletLandscape() ? 64 : 46), a.dp(48)));
         parent.addView(row);
         return bar;
     }
@@ -183,11 +184,21 @@ final class LiveScreen {
     }
 
     void draw() {
+        boolean tablet = a.tabletLandscape();
+        LinearLayout tabletRow = tablet ? a.row() : null;
+        LinearLayout tabletRight = tablet ? a.column() : null;
         // 1. LIVE SESSION LCD DISPLAY & 2x2 I/O CONTROLS
         LinearLayout session = panel();
         display = new LiveSessionDisplay(a);
-        session.addView(display, new LinearLayout.LayoutParams(-1, a.dp(170)));
-        a.page.flexible(display, 151, 300);
+        if (tablet) {
+            session.setTag("tablet-live-left");
+            session.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(12));
+            display.setTag("tablet-live-session-display");
+            session.addView(display, new LinearLayout.LayoutParams(-1, 0, 1));
+        } else {
+            session.addView(display, new LinearLayout.LayoutParams(-1, a.dp(170)));
+            a.page.flexible(display, 151, 300);
+        }
 
         // Section label "입출력" & 2x2 Input / Output Controls Grid
         session.addView(heading(tr("입출력", "I/O")), new LinearLayout.LayoutParams(-1, -2));
@@ -229,11 +240,27 @@ final class LiveScreen {
         volumeLabel = text("", 11, StudioTheme.MUTED);
 
         micVolume = gain(session, tr("마이크", "Mic"), 0, 200, micVolumeLabel);
-        a.page.addView(session, new LinearLayout.LayoutParams(-1, -2));
+        if (tablet) {
+            tabletRow.setTag("tablet-live-workspace");
+            tabletRow.addView(session, new LinearLayout.LayoutParams(0, -1, 1.12f));
+            ScrollView rightScroll = new ScrollView(a);
+            rightScroll.setTag("tablet-live-right");
+            rightScroll.setFillViewport(true);
+            rightScroll.setClipToPadding(false);
+            rightScroll.addView(tabletRight, new ScrollView.LayoutParams(-1, -2));
+            LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, -1, 1);
+            rightLp.leftMargin = a.dp(14);
+            tabletRow.addView(rightScroll, rightLp);
+            a.page.addView(tabletRow, new LinearLayout.LayoutParams(-1, a.dp(420)));
+            a.page.flexible(tabletRow, 400, 1600);
+        } else {
+            a.page.addView(session, new LinearLayout.LayoutParams(-1, -2));
+        }
 
         // 2. ACCOMPANIMENT PANEL (Clean Backing Surface)
         LinearLayout accompaniment = panel();
-        accompaniment.addView(heading(tr("🎵 반주", "🎵 ACCOMPANIMENT")), new LinearLayout.LayoutParams(-1, -2));
+        if (tablet) accompaniment.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(12));
+        accompaniment.addView(heading(tablet ? tr("반주", "ACCOMPANIMENT") : tr("🎵 반주", "🎵 ACCOMPANIMENT")), new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout player = a.row();
         backingPlayButton = button("▶", this::toggleBackingPlay);
@@ -243,11 +270,11 @@ final class LiveScreen {
         LinearLayout track = a.column();
         track.setGravity(Gravity.CENTER_VERTICAL);
         track.setPadding(a.dp(10), 0, 0, 0);
-        backing = text("", 12, StudioTheme.TEXT);
+        backing = text("", tablet ? 16 : 12, StudioTheme.TEXT);
         backing.setTypeface(StudioTheme.medium(a));
         backing.setMaxLines(1);
         backing.setEllipsize(TextUtils.TruncateAt.END);
-        backingTime = text("00:00 / 00:00", 10, StudioTheme.OLIVE);
+        backingTime = text("00:00 / 00:00", tablet ? 12 : 10, StudioTheme.OLIVE);
         backingTime.setTypeface(StudioTheme.mono(a));
         track.addView(backing);
         track.addView(backingTime);
@@ -257,12 +284,13 @@ final class LiveScreen {
         player.addView(track, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
         Button chooseBacking = button(tr("반주 선택 ▾", "Choose backing ▾"), a::chooseBacking);
-        player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
+        player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(tablet ? 126 : 80), a.dp(48)));
 
         accompaniment.addView(player);
         backingVolume = gain(accompaniment, tr("반주", "Backing"), 1, 100, volumeLabel);
         if (a.youtube.selected) a.youtube.attach(accompaniment);
-        addPanel(accompaniment);
+        if (tablet) tabletRight.addView(accompaniment, new LinearLayout.LayoutParams(-1, -2));
+        else addPanel(accompaniment);
 
         // Compact rotary controls keep horizontal system Back gestures available.
         LinearLayout fx = panel();
@@ -270,15 +298,27 @@ final class LiveScreen {
         reverbVolume = effectKnob(knobs, tr("리버브", "Reverb"), 2, 1);
         echoVolume = effectKnob(knobs, tr("에코", "Echo"), 4, .8f);
         detailsButton = button(tr("상세 ▾", "Details ▾"), this::effectsDetails);
-        detailsButton.setTextSize(10.5f);
+        detailsButton.setTextSize(tablet ? 14f : 10.5f);
         detailsButton.setPadding(a.dp(2), 0, a.dp(2), 0);
 
         LinearLayout fh = a.row();
-        fh.addView(heading(tr("✨ 보컬 효과", "✨ VOCAL FX")), new LinearLayout.LayoutParams(0, a.dp(48), 1));
-        fh.addView(detailsButton, new LinearLayout.LayoutParams(a.dp(80), a.dp(48)));
+        fh.addView(heading(tablet ? tr("보컬 효과", "VOCAL FX") : tr("✨ 보컬 효과", "✨ VOCAL FX")), new LinearLayout.LayoutParams(0, a.dp(48), 1));
+        fh.addView(detailsButton, new LinearLayout.LayoutParams(a.dp(tablet ? 112 : 80), a.dp(48)));
         fx.addView(fh);
-        fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(96)));
-        addPanel(fx);
+        if (tablet) {
+            // A real base height survives ScrollView's initial unspecified measurement;
+            // weights consume spare viewport height only when fillViewport remeasures.
+            knobs.setMinimumHeight(a.dp(170));
+            fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(170), 1));
+            fx.setMinimumHeight(a.dp(240));
+            fx.setPadding(a.dp(16), a.dp(8), a.dp(16), a.dp(12));
+            LinearLayout.LayoutParams fxLp = new LinearLayout.LayoutParams(-1, -2, 1);
+            fxLp.topMargin = a.dp(12);
+            tabletRight.addView(fx, fxLp);
+        } else {
+            fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(96)));
+            addPanel(fx);
+        }
 
         // 4. ACTION DOCK
         LinearLayout dock = a.row();
@@ -296,9 +336,10 @@ final class LiveScreen {
 
     StudioKnob effectKnob(LinearLayout parent, String label, int key, float max) {
         StudioKnob knob = new StudioKnob(a, label, 0, max, a.values[key],
-                v -> Math.round(v * 100) + "%", v -> a.set(key, v)).compact();
+                v -> Math.round(v * 100) + "%", v -> a.set(key, v));
+        if (!a.tabletLandscape()) knob.compact();
         knob.setOnClickListener(v -> adjustEffectDialog(label, key, max, knob));
-        parent.addView(knob, new LinearLayout.LayoutParams(0, a.dp(96), 1));
+        parent.addView(knob, new LinearLayout.LayoutParams(0, a.tabletLandscape() ? -1 : a.dp(96), 1));
         return knob;
     }
 
