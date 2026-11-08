@@ -2,6 +2,7 @@
 #include "feedback_guard.h"
 #include "record_alignment.h"
 #include "local_seek.h"
+#include "input_resampler.h"
 #include <aaudio/AAudio.h>
 #include <jni.h>
 #include <android/log.h>
@@ -82,6 +83,7 @@ public:
     std::atomic<uint64_t> localCursor{0};
     std::atomic<bool> localBusy{false};
     LocalSeek localSeek;
+    InputResampler inputResampler;
 
     Engine() {
         float defaults[] = {1, .55f, .27f, 2.2f, .14f, 280, .25f, 0, 0, 1, 1, 0, 0, 0, 0, 78, 0, 0, 0, 1};
@@ -264,6 +266,7 @@ public:
             fault = AAUDIO_ERROR_INVALID_FORMAT;
             return false;
         }
+        inputResampler.reset(rate, sr);
         inputChannels = ch;
         inputRate = rate;
         monitorMode = mode;
@@ -391,31 +394,22 @@ public:
             }
             std::fill(inputBuffer.begin() + got, inputBuffer.begin() + n, 0);
         } else {
-            int expected = std::clamp(int(std::llround(double(n) * inputRate / sr)), 1, 4096);
-            int got = AAudioStream_read(mic, rawInputBuffer.data(), expected, 0);
-            if (got < 0) {
-                fault = got;
-                params[11] = 0;
-                running = false;
-                got = 0;
-            }
-            if (got <= 0) {
-                std::fill(inputBuffer.begin(), inputBuffer.begin() + n, 0);
-            } else {
-                for (int i = 0; i < n; i++) {
-                    double srcPos = (got > 1 && n > 1) ? (double(i) * (got - 1) / (n - 1)) : 0.0;
-                    int idx0 = std::clamp(int(srcPos), 0, got - 1);
-                    int idx1 = std::min(idx0 + 1, got - 1);
-                    float frac = float(srcPos - idx0);
-                    float s0 = inputChannels == 2
-                            ? 0.5f * (rawInputBuffer[idx0 * 2] + rawInputBuffer[idx0 * 2 + 1])
-                            : rawInputBuffer[idx0];
-                    float s1 = inputChannels == 2
-                            ? 0.5f * (rawInputBuffer[idx1 * 2] + rawInputBuffer[idx1 * 2 + 1])
-                            : rawInputBuffer[idx1];
-                    inputBuffer[i] = s0 + (s1 - s0) * frac;
+            size_t needed = inputResampler.needed(n);
+            while (needed) {
+                int requested = int(std::min<size_t>(needed, 4096));
+                int got = AAudioStream_read(mic, rawInputBuffer.data(), requested, 0);
+                if (got < 0) {
+                    fault = got;
+                    params[11] = 0;
+                    running = false;
+                    inputResampler.reset(inputRate, sr);
+                    break;
                 }
+                inputResampler.push(rawInputBuffer.data(), size_t(got), inputChannels);
+                if (got < requested) break;
+                needed = inputResampler.needed(n);
             }
+            inputResampler.render(inputBuffer.data(), n);
         }
 
         pitchRing.push(inputBuffer.data(), n);
@@ -578,6 +572,11 @@ public:
         auto out = notes;
         if (hasActive && active.end - active.start >= .06) out.push_back(active);
         return out;
+    }
+
+    size_t noteCount() {
+        std::lock_guard<std::mutex> lock(notesMutex);
+        return notes.size() + (hasActive && active.end - active.start >= .06 ? 1 : 0);
     }
 
     void clearNotes() {
@@ -746,7 +745,7 @@ JNI(jfloatArray) jfloatArray JNICALL Java_pro_livemic_studio_NativeAudio_stats(J
         engine.output ? float(AAudioStream_getXRunCount(engine.output)) : 0,
         engine.running ? 1.f : 0,
         engine.recording ? 1.f : 0,
-        float(engine.snapshot().size()),
+        float(engine.noteCount()),
         engine.overflow || engine.diskError ? 1.f : 0,
         float(engine.fault),
         float(double(engine.frames.load()) / engine.sr),

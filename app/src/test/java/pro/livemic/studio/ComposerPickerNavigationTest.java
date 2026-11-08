@@ -19,11 +19,18 @@ public class ComposerPickerNavigationTest {
     @Before public void setup() throws Exception {
         AppLanguage.set(RuntimeEnvironment.getApplication(),true);
         a=Robolectric.buildActivity(MainActivity.class).setup().get();
-        a.handler.removeCallbacks(a.tick);a.composer.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
-        a.chooseTab(7);s=a.composer;screen=a.composerScreen;
+        s=a.composer;drainComposer();
+        s.project=new ComposerProject();s.selectedPart=0;s.capturing=false;s.voiceOn=false;s.error="";s.message="";s.store.undo.clear();s.store.redo.clear();
+        AudioService.active=false;AudioService.playbackActive=false;AudioService.composerRequested=false;
+        StudioScreenshotTest.Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};StudioScreenshotTest.Composer.performance=new double[0];s.poll();
+        a.chooseTab(7);screen=a.composerScreen;
         a.getPreferences(0).edit().remove("gmFavorites").remove("instrumentFavorites").remove("instrumentFavoritesMigrated").commit();
     }
-    @After public void cleanup(){a.handler.removeCallbacks(a.tick);a.io.shutdown();AppLanguage.set(RuntimeEnvironment.getApplication(),false);}
+    void drainComposer()throws Exception{
+        a.handler.removeCallbacks(a.tick);
+        for(int i=0;i<2;i++){s.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);}
+    }
+    @After public void cleanup()throws Exception{drainComposer();a.io.shutdown();AppLanguage.set(RuntimeEnvironment.getApplication(),false);}
     View root(){
         List<Dialog> shown=ShadowDialog.getShownDialogs();
         for(int i=shown.size()-1;i>=0;i--)if(shown.get(i).isShowing())return shown.get(i).getWindow().getDecorView();
@@ -60,8 +67,9 @@ public class ComposerPickerNavigationTest {
         assertNull(StudioScreenshotTest.findButtonContaining(root(),"0 · Standard"));
     }
     @Test public void drumSearchAndSelectionUseActualKitAndFavoritesFilterStaysMeaningful(){
-        screen.instrument(-1,false);category("Drum kits");search(root()).setText("room");
+        int tracks=s.part().tracks.size();screen.instrument(-1,false);category("Drum kits");search(root()).setText("room");
         assertNull(StudioScreenshotTest.findButtonContaining(root(),"0 · Standard"));button(root(),"8 · Room").performClick();
+        assertEquals("Room selection must add a track; error="+s.error+"; toast="+ShadowToast.getTextOfLatestToast(),tracks+1,s.part().tracks.size());
         TrackConfig drum=s.part().tracks.get(s.part().tracks.size()-1);assertEquals(8,drum.program);assertTrue(drum.drums());
         screen.instrument(-1,false);category("Favorites");search(root()).setText("piano");assertNull(description(root(),"Add favorite:"));
     }

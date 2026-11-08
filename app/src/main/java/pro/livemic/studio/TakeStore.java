@@ -90,6 +90,14 @@ public final class TakeStore {
         return new JSONObject(new String(Files.readAllBytes(file(id, ".json").toPath()), StandardCharsets.UTF_8));
     }
 
+    public void finishVideo(String id, double seconds, String warning, File original) throws Exception {
+        JSONObject meta = read(id);
+        meta.put("seconds", seconds).put("video", true).put("warning", warning);
+        update(id, meta);
+        // A metadata failure must leave both the original and the finished MP4 intact.
+        original.delete();
+    }
+
     public void update(String id, JSONObject j) throws Exception {
         write(id, j);
     }
@@ -133,7 +141,7 @@ public final class TakeStore {
     }
 
     public void delete(String id) {
-        for (String ext : new String[]{".wav", ".mid", ".mp4", ".json", ".video.mp4", ".aac.m4a"}) {
+        for (String ext : new String[]{".wav", ".mid", ".mp4", ".json", ".video.mp4", ".aac.m4a", ".mp4.pending.mp4"}) {
             new File(directory, id + ext).delete();
         }
     }

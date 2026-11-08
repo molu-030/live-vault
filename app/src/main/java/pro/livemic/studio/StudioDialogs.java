@@ -108,7 +108,7 @@ final class StudioDialogs {
     static void form(Activity activity, String title, View content, String action, Runnable save, Runnable cancel) {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        LinearLayout sheet = new LinearLayout(activity);
+        FormSheet sheet = new FormSheet(activity);
         sheet.setOrientation(LinearLayout.VERTICAL);
         int pad = StudioTheme.dp(activity, 20);
         sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
@@ -120,7 +120,9 @@ final class StudioDialogs {
         heading.setTypeface(StudioTheme.bold(activity));
         heading.setPadding(0, StudioTheme.dp(activity, 10), 0, StudioTheme.dp(activity, 16));
         sheet.addView(heading);
-        sheet.addView(content, new LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
+        ScrollView scroll = scrollable(activity, content);
+        sheet.content = scroll;
+        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout buttons = new LinearLayout(activity);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 48));
@@ -139,6 +141,7 @@ final class StudioDialogs {
         dialog.setCanceledOnTouchOutside(true);
         Window window = dialog.getWindow();
         if (window != null) {
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.setGravity(Gravity.BOTTOM);
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
@@ -149,8 +152,42 @@ final class StudioDialogs {
         dialog.show();
         track(activity, dialog);
         if (window != null) {
-            window.setLayout(Math.min(activity.getResources().getDisplayMetrics().widthPixels, StudioTheme.dp(activity, 520)), ViewGroup.LayoutParams.WRAP_CONTENT);
+            Rect available = availableBounds(activity);
+            window.setLayout(Math.min(available.width(), StudioTheme.dp(activity, 520)), ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    /** Keep form actions outside the scrollable body, including with the keyboard open. */
+    private static final class FormSheet extends LinearLayout {
+        final Activity activity;
+        ScrollView content;
+        FormSheet(Activity activity) { super(activity); this.activity = activity; }
+        @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            if (content == null) { super.onMeasure(widthSpec, heightSpec); return; }
+            Rect available = availableBounds(activity);
+            int limit = Math.round(available.height() * .9f);
+            if (View.MeasureSpec.getMode(heightSpec) != View.MeasureSpec.UNSPECIFIED)
+                limit = Math.min(limit, View.MeasureSpec.getSize(heightSpec));
+            // Re-measure the natural body every time so rotation/IME changes can grow it too.
+            ViewGroup.LayoutParams body = content.getLayoutParams();
+            body.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int fixed = getMeasuredHeight() - content.getMeasuredHeight();
+            body.height = Math.min(content.getMeasuredHeight(), Math.max(0, limit - fixed));
+            super.onMeasure(widthSpec, heightSpec);
+        }
+    }
+
+    private static Rect availableBounds(Activity activity) {
+        Rect available = new Rect();
+        activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(available);
+        if (available.width() <= 0 || available.height() <= 0) {
+            View decor = activity.getWindow().getDecorView();
+            int width = decor.getWidth() > 0 ? decor.getWidth() : activity.getResources().getDisplayMetrics().widthPixels;
+            int height = decor.getHeight() > 0 ? decor.getHeight() : activity.getResources().getDisplayMetrics().heightPixels;
+            available.set(0, 0, width, height);
+        }
+        return available;
     }
 
     static ScrollView scrollable(Activity activity, View content) {

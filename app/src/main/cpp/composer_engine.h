@@ -106,8 +106,10 @@ public:
                 if(position<0){double phase=position-std::floor(position);countIn[i]=.1f*std::sin(2*lm::PI*1100*phase*60/tempo)*std::exp(-phase*80);}
             }
             if(mode==1&&rhythm&&playing&&heldRoot>=0&&position>=0){
-                static constexpr double attacks[8][8]={{0,1,1.5,2.5,3,3.5,-1,-1},{0,.75,1.25,1.75,2,2.75,3.25,3.75},{0,2./3,1,1+2./3,2,2+2./3,3,3+2./3},{0,.75,1.5,2.5,3.25,-1,-1,-1},{0,.5,1,1.5,2,2.5,3,3.5},{0,.75,1.5,2.5,3.25,-1,-1,-1},{0,1,2,-1,-1,-1,-1,-1},{0,1.5,2.5,-1,-1,-1,-1,-1}};
-                double local=std::fmod(position,barLength);int attack=-1;for(int j=0;j<8;j++)if(attacks[currentRhythm][j]>=0&&attacks[currentRhythm][j]<=local)attack=j;
+                // Rhythm IDs match MusicTheory: hip-hop is the ninth groove.
+                static constexpr double attacks[9][8]={{0,1,1.5,2.5,3,3.5,-1,-1},{0,.75,1.25,1.75,2,2.75,3.25,3.75},{0,2./3,1,1+2./3,2,2+2./3,3,3+2./3},{0,.75,1.5,2.5,3.25,-1,-1,-1},{0,.5,1,1.5,2,2.5,3,3.5},{0,.75,1.5,2.5,3.25,-1,-1,-1},{0,1,2,-1,-1,-1,-1,-1},{0,1.5,2.5,-1,-1,-1,-1,-1},{0,.75,1.5,2,2.75,3.5,-1,-1}};
+                const int pattern=currentRhythm>=0&&currentRhythm<9?currentRhythm:0;
+                double local=std::fmod(position,barLength);int attack=-1;for(int j=0;j<8;j++)if(attacks[pattern][j]>=0&&attacks[pattern][j]<=local)attack=j;
                 double tick=std::floor(position/barLength)*8+attack;
                 if(deferRhythm){lastRhythm=tick;deferRhythm=false;}
                 else if(tick!=lastRhythm&&attack>=0){lastRhythm=tick;int output=heldRoot;

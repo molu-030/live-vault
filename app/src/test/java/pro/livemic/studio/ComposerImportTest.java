@@ -29,6 +29,15 @@ public class ComposerImportTest {
   ComposerProject p=fixture();ComposerProject restored=ComposerLlmImport.parse(p.json().toString());assertEquals(p.json().toString(),restored.json().toString());
   ByteArrayOutputStream out=new ByteArrayOutputStream();ComposerLlmExport.write(p,"",out);String json=ComposerExportTest.string(ComposerExportTest.unzip(out.toByteArray()).get("project.json"));assertEquals(p.json().toString(),ComposerLlmImport.parse(json).json().toString());
  }
+ @Test public void inactiveRecordedPhraseSurvivesExportAndImport()throws Exception {
+  ComposerProject p=fixture();ComposerProject.Part part=p.parts.get(0);VoicePhrase phrase=part.phrases.get(0);
+  TrackConfig track=null;for(TrackConfig t:part.tracks)if(t.id.equals(phrase.trackId))track=t;
+  assertNotNull(track);track.phraseSource="keyboard";track.pattern=1;track.voice=false;
+  String before=p.json().toString();ByteArrayOutputStream out=new ByteArrayOutputStream();ComposerLlmExport.write(p,"",out);
+  String json=ComposerExportTest.string(ComposerExportTest.unzip(out.toByteArray()).get("project.json"));
+  assertEquals(before,ComposerLlmImport.parse(json).json().toString());
+  JSONObject missing=new JSONObject(json);missing.getJSONArray("parts").getJSONObject(0).getJSONArray("phrases").getJSONObject(0).put("trackId","missing");reject(missing);
+ }
  @Test public void hipHopAndExpandedPatternsSurviveSaveDuplicateExportAndImport()throws Exception {
   ComposerProject p=new ComposerProject();ComposerProject.Part part=p.parts.get(0);part.rhythm=8;part.tracks.get(0).pattern=6;part.tracks.get(1).pattern=7;
   String before=p.json().toString();assertEquals(before,ComposerProject.read(p.json()).json().toString());

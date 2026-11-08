@@ -16,6 +16,9 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
 
 public final class MediaTools {
     public static final class Decoded {
@@ -244,10 +247,11 @@ public final class MediaTools {
 
     public static void makeVideo(File video, File wav, File target, long trimAudioUs, long vocalDelayUs) throws Exception {
         File audio = new File(target.getParentFile(), target.getName() + ".aac.m4a");
-        encodeAac(wav, audio);
+        File pending = new File(target.getParentFile(), target.getName() + ".pending.mp4");
         MediaExtractor v = new MediaExtractor(), a = new MediaExtractor();
         MediaMuxer muxer = null;
         try {
+            encodeAac(wav, audio);
             v.setDataSource(video.getAbsolutePath());
             a.setDataSource(audio.getAbsolutePath());
             int vi = find(v, "video/"), ai = find(a, "audio/");
@@ -256,20 +260,33 @@ public final class MediaTools {
             metadata.setDataSource(video.getAbsolutePath());
             String rotation = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
             metadata.release();
-            muxer = new MediaMuxer(target.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            muxer = new MediaMuxer(pending.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             if (rotation != null) muxer.setOrientationHint(Integer.parseInt(rotation));
             int videoTrack = muxer.addTrack(v.getTrackFormat(vi)), audioTrack = muxer.addTrack(a.getTrackFormat(ai));
             muxer.start();
             copy(v, vi, muxer, videoTrack, -vocalDelayUs);
             copy(a, ai, muxer, audioTrack, -trimAudioUs);
             muxer.stop();
+            muxer.release();
+            muxer = null;
+            publishVideo(pending, target);
         } finally {
             v.release();
             a.release();
             if (muxer != null) muxer.release();
             audio.delete();
+            pending.delete();
         }
-        video.delete();
+        // The caller owns the original until take metadata is committed.
+    }
+
+    static void publishVideo(File pending, File target) throws IOException {
+        if (!pending.isFile() || pending.length() == 0) throw new IOException("Video output is empty");
+        try {
+            Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(pending.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static int find(MediaExtractor e, String prefix) {

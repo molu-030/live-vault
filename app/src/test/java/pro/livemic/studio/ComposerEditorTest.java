@@ -19,8 +19,19 @@ import static org.junit.Assert.*;
 @LooperMode(LooperMode.Mode.PAUSED)
 public class ComposerEditorTest {
  MainActivity a; ComposerSession s; ComposerScreen screen;
- @Before public void setup() throws Exception {AppLanguage.set(RuntimeEnvironment.getApplication(),true);a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.composer.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);a.chooseTab(7);s=a.composer;screen=a.composerScreen;}
- @After public void cleanup(){a.handler.removeCallbacks(a.tick);a.io.shutdown();AppLanguage.set(RuntimeEnvironment.getApplication(),false);}
+ @Before public void setup() throws Exception {
+  AppLanguage.set(RuntimeEnvironment.getApplication(),true);a=Robolectric.buildActivity(MainActivity.class).setup().get();s=a.composer;
+  drainComposer();
+  s.project=new ComposerProject();s.selectedPart=0;s.capturing=false;s.voiceOn=false;s.error="";s.message="";s.store.undo.clear();s.store.redo.clear();
+  AudioService.active=false;AudioService.playbackActive=false;AudioService.composerRequested=false;
+  StudioScreenshotTest.Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};StudioScreenshotTest.Composer.performance=new double[0];s.poll();
+  a.chooseTab(7);screen=a.composerScreen;
+ }
+ void drainComposer()throws Exception {
+  a.handler.removeCallbacks(a.tick);
+  for(int i=0;i<2;i++){s.worker.submit(()->{}).get();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);}
+ }
+ @After public void cleanup()throws Exception{drainComposer();a.io.shutdown();AppLanguage.set(RuntimeEnvironment.getApplication(),false);}
  Button option(Dialog d,String text){Button b=StudioScreenshotTest.findButtonContaining(d.getWindow().getDecorView(),text);assertNotNull(text,b);return b;}
  android.widget.TextView key(View v,String label){
   if(v instanceof android.widget.TextView&&label.contentEquals(((android.widget.TextView)v).getText()))return (android.widget.TextView)v;
@@ -35,6 +46,31 @@ public class ComposerEditorTest {
   screen.openKeyboardInput(0);dialog=ShadowDialog.getLatestDialog();key(dialog.getWindow().getDecorView(),"C").performClick();option(dialog,"Save and apply").performClick();
   VoicePhrase saved=s.part().phrases.get(0);assertNotSame(original,saved);assertEquals(1,original.notes.size());assertEquals(2,saved.notes.size());assertEquals(60,saved.notes.get(0).midi);assertTrue(s.part().tracks.get(0).voice);assertEquals(undo+1,s.store.undo.size());
   s.history(false);assertEquals(before,s.project.json().toString());
+ }
+ @Test public void trackRowsDistinguishPhraseSourcesAndKeepInactivePatternLabels()throws Exception {
+  ComposerProject previous=s.project;int previousPart=s.selectedPart;boolean previousEnglish=AppLanguage.english(a);
+  // ComposerSession is shared across these tests; render a disposable project only.
+  s.project=new ComposerProject();s.selectedPart=0;
+  try {
+  TrackConfig track=s.part().tracks.get(0);track.voice=true;track.pattern=1;
+  VoicePhrase phrase=new VoicePhrase();phrase.trackId=track.id;VoicePhrase.Note note=new VoicePhrase.Note();note.midi=60;note.length=1;note.velocity=90;phrase.notes.add(note);s.part().phrases.add(phrase);
+  String[] sources={"microphone","keyboard",""};
+  for(boolean english:new boolean[]{true,false}){
+   AppLanguage.set(a,english);
+   String[] labels=english?new String[]{"Voice phrase","Custom notes","Recorded phrase"}:new String[]{"목소리 기록","건반 직접 입력","기록한 프레이즈"};
+   for(int i=0;i<sources.length;i++){
+    track.phraseSource=sources[i];track.voice=true;String before=s.project.json().toString();screen.refresh();
+    String prefix=InstrumentCatalog.GM[track.program]+" · ";String suffix=" · "+Math.round(track.volume*100)+"%";
+    String active=prefix+labels[i]+" (1"+(english?" notes)":"음)")+suffix;
+    assertNotNull(active,key(a.page,active));assertEquals(before,s.project.json().toString());
+    track.voice=false;before=s.project.json().toString();screen.refresh();
+    assertNull(key(a.page,active));String inactive=prefix+InstrumentCatalog.patternLabels(a,track)[1]+suffix;
+    assertNotNull(inactive,key(a.page,inactive));assertEquals(before,s.project.json().toString());
+   }
+  }
+  } finally {
+   s.project=previous;s.selectedPart=previousPart;AppLanguage.set(a,previousEnglish);
+  }
  }
  @Test public void staleKeyboardSaveCannotReplaceNewProject()throws Exception {
   screen.openKeyboardInput(0);Dialog dialog=ShadowDialog.getLatestDialog();key(dialog.getWindow().getDecorView(),"C").performClick();s.open(new ComposerProject());String before=s.project.json().toString();option(dialog,"Save and apply").performClick();assertEquals(before,s.project.json().toString());

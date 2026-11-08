@@ -55,7 +55,9 @@ final class ComposerTransport {
             else if(t.family()==3)tones=MusicTheory.guitar(root,Math.max(0,Math.min(10,q)),0);
             else{int[] intervals=MusicTheory.INTERVALS[Math.max(0,Math.min(10,q))];tones=new int[intervals.length];for(int i=0;i<tones.length;i++)tones[i]=root+intervals[i];}
             event(start+n.beat,4,channel,(int)n.bend,n.expression,0,0,0,0);
-            for(double[] point:n.curve)if(n.beat+point[0]<duration)event(start+n.beat+point[0],4,channel,(int)point[1],point[2],0,0,0,0);
+            // A shortened/quantized note can retain later expression points in its saved data.
+            // Exclude its endpoint too: the following note owns expression at that beat.
+            for(double[] point:n.curve)if(point[0]>=0&&point[0]<n.length&&n.beat+point[0]<duration)event(start+n.beat+point[0],4,channel,(int)point[1],point[2],0,0,0,0);
             for(int i=0;i<tones.length;i++){double offset=t.family()==3?i*n.offset:0;if(offset>=n.length)continue;note(start+n.beat+offset,Math.min(n.length-offset,duration-n.beat-offset),channel,tones[i],n.velocity/127.,false);}
         }
     }

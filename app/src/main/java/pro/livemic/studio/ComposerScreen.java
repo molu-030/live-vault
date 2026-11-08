@@ -462,8 +462,13 @@ final class ComposerScreen {
             for (VoicePhrase ph : s.part().phrases) {
                 if (ph.trackId.equals(t.id) && !ph.notes.isEmpty()) { phraseForTrack = ph; break; }
             }
+            String phraseLabel = "microphone".equals(t.phraseSource)
+                    ? tr("목소리 기록", "Voice phrase")
+                    : "keyboard".equals(t.phraseSource)
+                    ? tr("건반 직접 입력", "Custom notes")
+                    : tr("기록한 프레이즈", "Recorded phrase");
             String patLabel = (t.voice && phraseForTrack != null)
-                    ? tr("🎹 건반 직접 입력 (", "🎹 Custom notes (") + phraseForTrack.notes.size() + tr("음)", " notes)")
+                    ? phraseLabel + " (" + phraseForTrack.notes.size() + tr("음)", " notes)")
                     : patterns[Math.min(t.pattern, patterns.length - 1)];
             details.addView(caption((t.drums() ? tr("드럼 키트 ", "Drum kit ") + t.program : InstrumentCatalog.GM[t.program])
                     + " · " + patLabel + " · " + Math.round(t.volume * 100) + "%"));

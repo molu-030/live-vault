@@ -131,7 +131,7 @@ public class MainActivity extends Activity {
     LinearLayout transport;
     TextView trainingReadout;
     PracticePlot practicePlot;
-    boolean practiceOwnsMic = false;
+    boolean practiceOwnsMic = false, practiceWasActive = false;
     boolean practiceRecord = false;
     int practiceRoot = 48, practiceBpm = 60, practiceMode = 0, practicePattern = 0;
 
@@ -142,6 +142,7 @@ public class MainActivity extends Activity {
     CameraController camera;
     TextureView texture;
     File rawVideo, exportFile, playingFile;
+    static final java.util.Set<String> finalizingVideoTakes = java.util.concurrent.ConcurrentHashMap.newKeySet();
     TakeStore store;
     MediaPlayer player;
     final Map<String, StudioButton> takePlayButtons = new HashMap<>();
@@ -157,6 +158,8 @@ public class MainActivity extends Activity {
             return;
         }
         if (state != null) {
+            String pendingExport = state.getString("takeExportFile");
+            if (pendingExport != null) exportFile = new File(pendingExport);
             selectedLiveEffect = Math.max(0, Math.min(5, state.getInt("selectedLiveEffect", 0)));
         }
         youtube = new YouTubePlayer(this);
@@ -204,6 +207,7 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         out.putInt("selectedLiveEffect", selectedLiveEffect);
+        if (exportFile != null) out.putString("takeExportFile", exportFile.getAbsolutePath());
         navigation.save(out, currentPage());
         if (exchange == null) return;
         exchange.saveState(out);
@@ -1217,6 +1221,7 @@ public class MainActivity extends Activity {
     }
 
     void practicePage() {
+        practiceWasActive = AudioService.practice != null && AudioService.practice.active;
         add(title(tr("보컬 연습", "Vocal practice")));
         note(tr("한 음씩 천천히 따라 불러보세요.", "Sing each note slowly."));
         trainingReadout = null;
@@ -2324,6 +2329,7 @@ public class MainActivity extends Activity {
                 });
             }
             StudioButton play = (StudioButton) StudioTheme.icon(this, "play", tr("테이크 재생", "Play take"), () -> {
+                if (takeFinalizing(id)) return;
                 if (video.exists()) openFile(video);
                 else play(audio);
             });
@@ -2384,8 +2390,15 @@ public class MainActivity extends Activity {
         return levels;
     }
 
+    boolean takeFinalizing(String id) {
+        if (!finalizingVideoTakes.contains(id)) return false;
+        toast(tr("이 영상의 저장이 끝날 때까지 기다려 주세요.", "Wait until this video finishes saving."));
+        return true;
+    }
+
     void takeMenu(JSONObject j) {
         String id = j.optString("id");
+        if (takeFinalizing(id)) return;
         File wav = store.file(id, ".wav"), midi = store.file(id, ".mid"), video = store.file(id, ".mp4");
         List<String> names = new ArrayList<>();
         List<Runnable> actions = new ArrayList<>();
@@ -2688,25 +2701,23 @@ public class MainActivity extends Activity {
                 return;
             }
             busy = true;
+            finalizingVideoTakes.add(saved.id);
             long offset = (long) (r.clock * 1e6 - camera.videoStartNanos / 1000.);
             toast(tr("영상을 저장하고 있습니다…", "Saving video…"));
             io.execute(() -> {
                 try {
                     MediaTools.makeVideo(source, store.file(saved.id, ".wav"), store.file(saved.id, ".mp4"), offset, voiceDelayUs);
-                    JSONObject meta = store.read(saved.id);
-                    meta.put("id", saved.id)
-                            .put("name", "Video Take " + saved.id)
-                            .put("seconds", saved.seconds)
-                            .put("video", true)
-                            .put("warning", saved.warning);
-                    store.update(saved.id, meta);
+                    store.finishVideo(saved.id, saved.seconds, saved.warning, source);
                     runOnUiThread(() -> toast(tr("MP4 · WAV · MIDI를 저장했습니다.", "MP4 · WAV · MIDI saved.")));
                 } catch (Exception e) {
-                    store.file(saved.id, ".mp4").delete();
-                    if (exiting()) exitSaveError += "Video merge failed: " + e.getMessage() + "\n";
-                    runOnUiThread(() -> toast(tr("영상 결합 실패. WAV와 MIDI는 보관되어 있습니다: ", "Video merge failed. WAV and MIDI remain in the library: ") + e.getMessage()));
+                    boolean videoSaved = store.file(saved.id, ".mp4").isFile();
+                    if (exiting()) exitSaveError += (videoSaved ? "Video saved; metadata update failed: " : "Video merge failed: ") + e.getMessage() + "\n";
+                    runOnUiThread(() -> toast((videoSaved
+                            ? tr("영상은 저장했지만 보관함 정보 저장에 실패했습니다. 원본도 보관되어 있습니다: ", "Video saved, but library metadata could not be updated. The original is retained: ")
+                            : tr("영상 결합 실패. WAV와 MIDI는 보관되어 있습니다: ", "Video merge failed. WAV and MIDI remain in the library: ")) + e.getMessage()));
                 } finally {
                     runOnUiThread(() -> {
+                        finalizingVideoTakes.remove(saved.id);
                         busy = false;
                         if (!exiting() && tab == 4) showTab();
                     });
@@ -2841,6 +2852,12 @@ public class MainActivity extends Activity {
             }
             if (tab == 5 && trainingReadout != null && AudioService.practice != null) {
                 PracticeSession pr = AudioService.practice;
+                if (practiceWasActive && !pr.active) {
+                    BackNavigation.Page current = currentPage();
+                    showTab();
+                    restorePageScroll(current);
+                }
+                practiceWasActive = pr.active;
                 if (practiceButton != null) {
                     practiceButton.setText(pr.active ? tr("연습 종료 · 결과 저장", "End practice · save results") : tr("연습 시작", "Start practice"));
                     practiceButton.setBackgroundTintList(ColorStateList.valueOf(pr.active ? RED : LIME));
@@ -3178,6 +3195,11 @@ public class MainActivity extends Activity {
             }
             return;
         }
+        if (request == 21 && (result != RESULT_OK || data == null || data.getData() == null)) {
+            exportFile = null;
+            toast(tr("파일 저장을 취소했습니다.", "File save canceled."));
+            return;
+        }
         if (result != RESULT_OK || data == null || data.getData() == null) return;
         Uri uri = data.getData();
         if (request == 20) {
@@ -3189,8 +3211,13 @@ public class MainActivity extends Activity {
             }
             sourceTab = 1;
             loadBacking(uri);
-        } else if (request == 21 && exportFile != null) {
+        } else if (request == 21) {
             File f = exportFile;
+            exportFile = null;
+            if (f == null || !f.isFile()) {
+                toast(tr("원본 파일을 찾을 수 없습니다. 보관함에서 다시 저장해 주세요.", "The source file is missing. Save it again from the library."));
+                return;
+            }
             io.execute(() -> {
                 try (InputStream in = new FileInputStream(f);
                         OutputStream out = getContentResolver().openOutputStream(uri)) {
