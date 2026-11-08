@@ -63,6 +63,47 @@ void benignSignals(int sr){
     require(!f.guard.muted()&&f.guard.count()==0,"breath and broadband noise must not trip");
     for(int frame=0;frame<5;frame++){f.quiet();f.tone(1500,1.f);f.quiet();}
     require(!f.guard.muted()&&f.guard.count()==0,"isolated transient must not count as growing feedback");
+    require(f.guard.gain()==1&&f.guard.attenuationDb()==0,"benign voice, music, noise and transients must not reduce monitor gain");
+}
+void stagedGain(int sr){
+    Fixture f(sr);
+    auto energyRatio=[&](float expected){
+        f.guard.prepare(sr);double leftEnergy=0,rightEnergy=0,leftOriginal=0,rightOriginal=0;
+        // Both probes are well away from the 1500 Hz notch. Their reduction
+        // proves broadband stereo attenuation, independently of the notch.
+        for(int i=0;i<sr/2;i++){
+            float x=.2f*std::sin(2*PI*730*i/sr),y=.17f*std::sin(2*PI*2700*i/sr),left=x,right=y;
+            f.guard.process(left,right);
+            require(std::isfinite(left)&&std::isfinite(right),"gain reduction must produce finite stereo output");
+            if(i>sr/4){leftEnergy+=left*left;rightEnergy+=right*right;leftOriginal+=x*x;rightOriginal+=y*y;}
+        }
+        require(std::abs(leftEnergy/leftOriginal-expected*expected)<.01,"left off-notch energy must follow staged gain");
+        require(std::abs(rightEnergy/rightOriginal-expected*expected)<.01,"right off-notch energy must follow staged gain");
+    };
+    f.growth(1500);
+    require(f.guard.attenuationDb()==4&&std::abs(f.guard.gain()-.63095734f)<1e-6f,"first incident must request 4 dB attenuation");
+    float left=.2f,right=-.2f;f.guard.process(left,right);
+    require(left<.2f&&left>.199f&&right>-.2f&&right<-.199f,"gain reduction must start smoothly without a level jump");
+    energyRatio(f.guard.gain());
+    for(int i=0;i<30;i++)f.quiet();
+    require(f.guard.attenuationDb()==4,"quiet periods must not restore unsafe monitor gain");
+    energyRatio(f.guard.gain());
+    f.growth(1500);
+    require(f.guard.attenuationDb()==8&&!f.guard.muted(),"second incident must reduce gain by 8 dB without muting");
+    energyRatio(f.guard.gain());
+    f.guard.setEnabled(false);left=.2f;right=-.2f;f.guard.process(left,right);
+    require(left==.2f&&right==-.2f&&f.guard.attenuationDb()==8,"safe-route bypass must retain attenuation for speaker return");
+    f.guard.setEnabled(true);f.quiet();energyRatio(f.guard.gain());
+    require(f.guard.attenuationDb()==8,"route toggles must not restore monitor gain");
+    f.guard.init(sr,false,true);f.guard.init(sr,true,true);f.quiet();
+    require(f.guard.attenuationDb()==8,"stream reopens through headphones must retain monitor attenuation");
+    energyRatio(f.guard.gain());
+    f.guard.reset();f.quiet();
+    require(f.guard.attenuationDb()==0&&f.guard.gain()==1,"explicit reset must restore requested monitor gain");
+    energyRatio(1);
+    f.growth(1500);f.guard.init(sr,true);
+    require(f.guard.attenuationDb()==0&&f.guard.gain()==1,"new session must start with unity monitor gain");
+    energyRatio(1);
 }
 void outOfBandTones(int sr){
     for(float hz:{75.f,100.f,120.f,9000.f,12000.f}){
@@ -120,8 +161,8 @@ void invalidInput(){
 int main(){
     for(int sr:{44100,48000}){
         for(float hz:{250.f,400.f,1500.f,6000.f})repeatedGrowth(sr,hz);
-        benignSignals(sr);outOfBandTones(sr);overloadAndRoutes(sr);
+        benignSignals(sr);outOfBandTones(sr);overloadAndRoutes(sr);stagedGain(sr);
     }
     invalidInput();nonfiniteMonitorOutput();
-    std::cout<<"PASS: feedback frequency coverage, repeated incidents, benign audio, stereo latch/reset, routes and invalid inputs\n";
+    std::cout<<"PASS: feedback frequency coverage, staged stereo gain, repeated incidents, benign audio, stereo latch/reset, routes and invalid inputs\n";
 }

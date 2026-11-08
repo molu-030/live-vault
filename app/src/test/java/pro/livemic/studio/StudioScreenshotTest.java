@@ -23,7 +23,7 @@ import static org.junit.Assert.*;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 public class StudioScreenshotTest {
- @Before public void resetComposer()throws Exception{java.lang.reflect.Field f=ComposerSession.class.getDeclaredField("instance");f.setAccessible(true);ComposerSession old=(ComposerSession)f.get(null);if(old!=null)old.worker.shutdownNow();f.set(null,null);AudioService.active=false;AudioService.playbackActive=false;Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};Composer.performance=new double[0];Audio.supplied=null;Audio.changes.clear();}
+ @Before public void resetComposer()throws Exception{java.lang.reflect.Field f=ComposerSession.class.getDeclaredField("instance");f.setAccessible(true);ComposerSession old=(ComposerSession)f.get(null);if(old!=null)old.worker.shutdownNow();f.set(null,null);AudioService.active=false;AudioService.playbackActive=false;Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};Composer.performance=new double[0];Audio.supplied=null;Audio.feedbackReductionDb=0;Audio.changes.clear();}
  @org.robolectric.annotation.internal.DoNotInstrument
  @Implements(value=NativeAudio.class,isInAndroidSdk=false)
  public static class Audio {
@@ -47,6 +47,8 @@ public class StudioScreenshotTest {
   @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
   @Implementation protected static int inputSession(){inputSessions++;return 0;}
   static int actualOutputDevice,feedbackResets;
+  static float feedbackReductionDb;
+  @Implementation protected static float feedbackReductionDb(){return feedbackReductionDb;}
   static final java.util.List<Boolean> feedbackProtectionCalls=new java.util.ArrayList<>();
   static final java.util.List<Float> monitorLevelCalls=new java.util.ArrayList<>();
   @Implementation protected static int outputDevice(){return actualOutputDevice;}

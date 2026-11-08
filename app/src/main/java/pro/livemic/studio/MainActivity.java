@@ -83,6 +83,9 @@ public class MainActivity extends Activity {
     LinearLayout content, nav;
     Button practiceButton, micButton, monitorButton, recButton, videoButton, pauseButton, flipButton, recordOptions;
     TextView status, pitch, timer, cameraTimer, levelText;
+    private Switch deviceEchoSwitch;
+    private TextView protectionStatusLabel;
+    private AlertDialog protectionDialog;
     StudioVisual visual;
 
     int sourceTab = 1, genre = 0, selectedPreset = -1, pendingAction = 0;
@@ -1060,7 +1063,8 @@ public class MainActivity extends Activity {
         toggle(tr("소음 완화", "Noise reduction"), 19);
 
         Switch echoSw = new Switch(this);
-        echoSw.setText(tr("에코 제거", "Echo cancellation"));
+        deviceEchoSwitch = echoSw;
+        echoSw.setText(tr("기기 에코 제거(AEC)", "Device Echo cancellation (AEC)") + " · " + deviceEchoStatus());
         echoSw.setTextColor(TEXT);
         echoSw.setTextSize(14);
         echoSw.setPadding(0, dp(10), 0, dp(10));
@@ -1072,6 +1076,7 @@ public class MainActivity extends Activity {
             }
         });
         add(echoSw);
+
 
         Switch agcSw = new Switch(this);
         agcSw.setText(tr("자동 입력 레벨", "Auto gain control"));
@@ -1400,6 +1405,28 @@ public class MainActivity extends Activity {
         return AudioRouting.outputLabel(this);
     }
 
+    String deviceEchoStatus() {
+        if (!AudioRouting.echoCancellationPreferred(this)) return tr("꺼짐", "Off");
+        if (!AudioService.active) return tr("마이크 켜면 확인", "Check when mic is on");
+        AudioRouting.EchoStatus status = AudioService.echoStatus;
+        if (status == AudioRouting.EchoStatus.ACTIVE) return tr("활성", "Active");
+        if (status == AudioRouting.EchoStatus.OFF) return tr("꺼짐", "Off");
+        if (status == AudioRouting.EchoStatus.ERROR) return tr("오류", "Error");
+        return tr("사용 불가", "Unavailable");
+    }
+
+    String feedbackReductionLabel() {
+        float db = NativeAudio.feedbackReductionDb();
+        return Float.isFinite(db) && db > 0
+                ? tr("보호감쇠 -", "Protection -") + Math.round(db) + "dB" : "";
+    }
+
+    String protectionStatus() {
+        String reduction = AudioService.active ? feedbackReductionLabel() : "";
+        return tr("기기 에코 제거(AEC): ", "Device echo cancellation (AEC): ")
+                + deviceEchoStatus() + (reduction.isEmpty() ? "" : " · " + reduction);
+    }
+
     void monitoringOptions() {
         LinearLayout panel = column();
         panel.setPadding(dp(16), dp(8), dp(16), 0);
@@ -1495,19 +1522,22 @@ public class MainActivity extends Activity {
             });
             reset.setEnabled(AudioService.active);
             panel.addView(reset);
-
-            TextView protection = text(
-                    tr("피드백을 감지하면 필터를 적용하고 필요 시 마이크 출력만 음소거합니다. 녹음은 계속됩니다.\n기기 에코 제거: ", "Feedback triggers filters and, if needed, mutes microphone output only. Recording continues.\nDevice echo cancellation: ")
-                            + (AudioService.active
-                            ? (AudioService.echoCancellation ? tr("활성", "Active") : tr("미지원", "Unsupported"))
-                            : tr("마이크를 켜면 확인", "Available when microphone is on")),
-                    12,
-                    MUTED
-            );
-            protection.setPadding(0, dp(12), 0, dp(8));
-            panel.addView(protection);
         }
+        TextView protection = text(protectionStatus(), 12, MUTED);
+        protection.setPadding(0, dp(12), 0, dp(8));
+        panel.addView(protection);
+        panel.addView(text(tr(
+                "기기 AEC는 스피커에서 돌아오는 소리를 추정해 마이크 에코를 줄이며, 음악 효과 에코·리버브와 별개입니다. 활성 상태도 하울링 방지를 보장하지 않으며, 미지원 시에도 상승하는 톤 감지 → 노치 필터·보호감쇠 → 필요 시 마이크 출력 음소거 보호를 사용합니다.\n보호 해제는 18% 출력으로 재시작하며 녹음은 계속됩니다.",
+                "Device AEC estimates returning speaker sound to reduce microphone echo, separately from Echo and Reverb effects; Active does not guarantee howling prevention. If AEC is unsupported, rising-tone detection still applies notch filters and gain reduction, then mutes microphone output if needed.\nReset restarts at 18% output; recording continues."), 12, MUTED));
         StudioDialogs.showDark(this, dialog);
+        protectionDialog = dialog;
+        protectionStatusLabel = protection;
+        dialog.setOnDismissListener(ignored -> {
+            if (protectionDialog == dialog) {
+                protectionDialog = null;
+                protectionStatusLabel = null;
+            }
+        });
     }
 
     void outputMode() {
@@ -2721,6 +2751,14 @@ public class MainActivity extends Activity {
         @Override
         public void run() {
             if (exiting() || !activityVisible) return;
+            if (deviceEchoSwitch != null) {
+                if (deviceEchoSwitch.isAttachedToWindow()) {
+                    deviceEchoSwitch.setText(tr("기기 에코 제거(AEC)", "Device Echo cancellation (AEC)") + " · " + deviceEchoStatus());
+                } else deviceEchoSwitch = null;
+            }
+            if (protectionStatusLabel != null && protectionDialog != null && protectionDialog.isShowing()) {
+                protectionStatusLabel.setText(protectionStatus());
+            }
             float[] s = NativeAudio.stats();
             boolean running = AudioService.active && s[10] > .5;
             values[11] = s[21];

@@ -886,6 +886,9 @@ JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_feedbackProtection(JN
     // level. Route changes must not override a chosen gain or a safety latch.
     if (!risky && changed && !wasMuted && !engine.monitorLevelChosen.load()) engine.monitorLevel = 1.f;
 }
+JNI(jfloat) jfloat JNICALL Java_pro_livemic_studio_NativeAudio_feedbackReductionDb(JNIEnv*, jclass) {
+    return engine.feedback.isEnabled() ? engine.feedback.attenuationDb() : 0.f;
+}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_monitorLevel(JNIEnv*, jclass, jfloat level) {
     if (!std::isfinite(level)) return;
     engine.monitorLevelChosen = true;

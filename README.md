@@ -1,6 +1,6 @@
-# Live Vault 3.9.1 — Android native preview
+# Live Vault 3.9.2 — Android native preview
 
-**3.9.1-preview / versionCode 28**은 노브 숫자 표시의 별도 배경·테두리를 없애고 큰 노브의 숫자 크기를 조정한 개인용 체크포인트입니다. [디자인 검수와 화면](docs/LIVE_VAULT_V3_9_1_DESIGN_REVIEW.md). Galaxy Tab S9 Ultra 가로 화면을 지원합니다. 큰 LCD·입출력과 반주·효과를 좌우에 배치하고, 작곡기는 코드와 트랙을 각각 스크롤합니다. 상단 바로가기와 하단 고정 녹음/재생 조작을 제공합니다. [태블릿 배치·화면·검증 범위](docs/LIVE_VAULT_V3_9_0_TABLET.md). **대표 24 + 드럼**, 키트 즐겨찾기, 파트 화살표와 프레이즈 보존을 고친 [3.8.8](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md), [종료·유휴 전력 개선](docs/LIVE_VAULT_V3_8_7_EXIT_AND_POWER.md), [영상 레이아웃 수정](docs/LIVE_VAULT_V3_8_6_VIDEO_LAYOUT.md)을 포함합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
+**3.9.2-preview / versionCode 29**은 기기 AEC 실제 상태 확인과 스피커 하울링의 단계적 모니터 감쇠를 보강한 개인용 체크포인트입니다. [스피커 보호와 검증 범위](docs/LIVE_VAULT_V3_9_2_SPEAKER_PROTECTION.md). 노브 숫자 표시와 태블릿 배치를 포함합니다. [디자인 검수와 화면](docs/LIVE_VAULT_V3_9_1_DESIGN_REVIEW.md). Galaxy Tab S9 Ultra 가로 화면을 지원합니다. 큰 LCD·입출력과 반주·효과를 좌우에 배치하고, 작곡기는 코드와 트랙을 각각 스크롤합니다. 상단 바로가기와 하단 고정 녹음/재생 조작을 제공합니다. [태블릿 배치·화면·검증 범위](docs/LIVE_VAULT_V3_9_0_TABLET.md). **대표 24 + 드럼**, 키트 즐겨찾기, 파트 화살표와 프레이즈 보존을 고친 [3.8.8](docs/LIVE_VAULT_V3_8_8_COMPOSER_AUDIT.md), [종료·유휴 전력 개선](docs/LIVE_VAULT_V3_8_7_EXIT_AND_POWER.md), [영상 레이아웃 수정](docs/LIVE_VAULT_V3_8_6_VIDEO_LAYOUT.md)을 포함합니다. 이번 산출물은 **personal 전용**이며 공개 standard APK는 기존 **3.6.0-preview / versionCode 16** 파일을 유지합니다.
 
 라이브의 **반주 선택 ▾** 또는 **☰ → 반주**에서 **내 파일 · 작곡기 · 온라인**을 엽니다. 반주가 없는 상태에서 재생을 눌러도 선택 화면이 열립니다. [반주 진입 복구](docs/LIVE_VAULT_V3_8_3_BACKING_RESTORE.md)와 [하울링 보호 검수](docs/LIVE_VAULT_V3_8_2_FEEDBACK_REVIEW.md)는 이력으로 유지합니다.
 
@@ -16,7 +16,7 @@ LIVE SESSION LCD에 실제 IN/OUT dB·음 이름·Hz·cents·녹음 시간과 �
 
 ## 미리보기 APK
 
-기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.9.1 디자인 검수](docs/LIVE_VAULT_V3_9_1_DESIGN_REVIEW.md)을 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
+기존 standard APK의 버전·실제 해시는 [산출물 안내](artifacts/README.md), 이번 개인용 체크포인트의 범위는 [3.9.2 스피커 보호](docs/LIVE_VAULT_V3_9_2_SPEAKER_PROTECTION.md)을 확인하세요. 이전 버전의 명세와 검증 기록은 당시 이력으로 유지합니다.
 
 ## AI로 반주 수정하기
 

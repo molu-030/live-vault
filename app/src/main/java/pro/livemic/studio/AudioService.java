@@ -47,6 +47,7 @@ public class AudioService extends Service {
     public static float captureLevel = 0;
     public static String routeLabel = "이어폰";
     public static boolean echoCancellation = false;
+    public static volatile AudioRouting.EchoStatus echoStatus = AudioRouting.EchoStatus.UNAVAILABLE;
     public static int routeRevision = 0;
     public static int revision = 0;
     private static final RecordingCountdown countdown = new RecordingCountdown();
@@ -92,6 +93,9 @@ public class AudioService extends Service {
                 NativeAudio.stop();
                 active = playbackActive = captureActive = composerRequested = harmonyRequested = false;
                 pendingMicOnly = youtubeSelected = false;
+                echoCancellation = false;
+                echoStatus = AudioRouting.echoCancellationPreferred(context)
+                        ? AudioRouting.EchoStatus.UNAVAILABLE : AudioRouting.EchoStatus.OFF;
                 countdown.cancel();
             }
             done.accept(failure);
@@ -106,6 +110,7 @@ public class AudioService extends Service {
         @Override
         public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
             AudioRouting.refreshFeedbackProtection(AudioService.this);
+            refreshEchoStatus();
         }
 
         @Override
@@ -172,6 +177,7 @@ public class AudioService extends Service {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        refreshEchoStatus();
         manager = (AudioManager) getSystemService(AUDIO_SERVICE);
         if (!ExitCoordinator.isExitRequested()) {
             composer = ComposerSession.get(this);
@@ -398,7 +404,8 @@ public class AudioService extends Service {
             finishRecording("");
             NativeAudio.microphoneOff();
             active = false;
-            echoCancellation = false;
+            if (routing != null) routing.detachEffects();
+            refreshEchoStatus();
             micForeground = false;
             float[] stats = NativeAudio.stats();
             if (stats != null && stats.length > 16 && stats[16] > .5f) {
@@ -478,7 +485,7 @@ public class AudioService extends Service {
                     NativeHarmony.monitor(safe);
                 }
                 routeLabel = routing.label;
-                echoCancellation = wasActive && routing.echoEnabled();
+                refreshEchoStatus();
                 routeRevision++;
                 foreground(false);
             } catch (Exception e) {
@@ -503,7 +510,7 @@ public class AudioService extends Service {
                                 NativeHarmony.monitor(safe);
                             }
                             routeLabel = previous.label;
-                            echoCancellation = wasActive && previous.echoEnabled();
+                            refreshEchoStatus();
                         }
                     } catch (Exception ignored) {
                         restored = false;
@@ -515,7 +522,7 @@ public class AudioService extends Service {
                 } else {
                     active = false;
                     playbackActive = false;
-                    echoCancellation = false;
+                    refreshEchoStatus();
                     stopSelf();
                 }
             }
@@ -558,7 +565,7 @@ public class AudioService extends Service {
                 NativeAudio.set(11, monitor ? 1 : 0);
                 NativeHarmony.monitor(monitor);
                 routeLabel = routing.label;
-                echoCancellation = routing.echoEnabled();
+                refreshEchoStatus();
                 routeRevision++;
             }
             if (requested) {
@@ -590,6 +597,7 @@ public class AudioService extends Service {
                     routing.close();
                     routing = null;
                 }
+                refreshEchoStatus();
                 stopSelf();
             } else {
                 foreground(false);
@@ -607,6 +615,13 @@ public class AudioService extends Service {
             }
         }
         if (routing != null) routing.syncNoiseReduction();
+        refreshEchoStatus();
+    }
+
+    private void refreshEchoStatus() {
+        echoStatus = !AudioRouting.echoCancellationPreferred(this) ? AudioRouting.EchoStatus.OFF
+                : active && routing != null ? routing.echoStatus() : AudioRouting.EchoStatus.UNAVAILABLE;
+        echoCancellation = echoStatus == AudioRouting.EchoStatus.ACTIVE;
     }
 
     private void schedulePlaybackRelease() {
@@ -725,6 +740,7 @@ public class AudioService extends Service {
             long now = SystemClock.elapsedRealtime();
             if (lastRouteCheck == Long.MIN_VALUE || now - lastRouteCheck >= ROUTE_CHECK_MS) {
                 AudioRouting.refreshFeedbackProtection(AudioService.this);
+                refreshEchoStatus();
                 lastRouteCheck = now;
             }
             composer.poll();
@@ -799,7 +815,7 @@ public class AudioService extends Service {
         active = playbackActive = captureActive = false;
         pendingMicOnly = false;
         if (ExitCoordinator.isExitRequested()) youtubeSelected = false;
-        echoCancellation = false;
+        refreshEchoStatus();
         releaseAwake();
         stopForeground(STOP_FOREGROUND_REMOVE);
         return recordingStopFailure;

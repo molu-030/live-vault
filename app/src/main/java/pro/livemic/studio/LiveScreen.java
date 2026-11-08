@@ -534,7 +534,10 @@ final class LiveScreen {
 
         boolean muted = s[17] > .5f, on = !muted && running && s[21] > .5f;
         String monitoring = muted ? tr("보호 음소거", "Safety mute") : on ? tr("모니터 켜짐", "Monitoring on") : tr("모니터 꺼짐", "Monitoring off");
-        route.setText(monitoring);
+        String reduction = running && !muted ? a.feedbackReductionLabel() : "";
+        String lcdMonitoring = reduction.isEmpty() ? monitoring
+                : (muted ? tr("보호 음소거", "Muted") : on ? tr("모니터 켜짐", "Mon on") : tr("모니터 꺼짐", "Mon off")) + " · " + reduction;
+        route.setText(lcdMonitoring);
         monitorToggle.setText(muted ? tr("보호 해제", "Reset safety") : on ? tr("목소리 듣기 켬", "Monitor ON") : tr("목소리 듣기", "Monitor"));
         monitorToggle.setContentDescription(monitoring);
         paint(monitorToggle, on);
@@ -552,7 +555,7 @@ final class LiveScreen {
         String time = rec ? a.formatTime(s[8]) : wait ? String.valueOf(AudioService.remaining()) + "s" : "00:00";
         float hz = running && Float.isFinite(s[0]) && s[0] > 0 ? s[0] : 0;
         display.cents = hz > 0 ? Math.max(-50, Math.min(50, s[1])) : 0;
-        display.update(running ? s[3] : 0, s[4], hz, hz > 0 && Float.isFinite(s[2]) ? a.noteName((int) s[2]) : "—", state, time, rec && !RecordingManager.paused, monitoring);
+        display.update(running ? s[3] : 0, s[4], hz, hz > 0 && Float.isFinite(s[2]) ? a.noteName((int) s[2]) : "—", state, time, rec && !RecordingManager.paused, lcdMonitoring);
 
         boolean composer = s[16] <= .5f && (a.composer.playing() || AudioService.composerRequested);
         boolean playing = a.composer.playing() || s[16] > .5f;

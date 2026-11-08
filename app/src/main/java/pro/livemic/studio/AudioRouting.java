@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.audiofx.AcousticEchoCanceler;
+import android.media.audiofx.AudioEffect;
 import android.media.audiofx.AutomaticGainControl;
 import android.media.audiofx.NoiseSuppressor;
 import android.os.Build;
@@ -20,7 +21,11 @@ public final class AudioRouting implements AutoCloseable {
     private int previousMode;
     private final int savedInput, savedOutput, savedMode, savedBluetooth;
     private boolean changedMode = false, communicationDevice = false;
+    public enum EchoStatus { OFF, UNAVAILABLE, ACTIVE, ERROR }
+
     private AcousticEchoCanceler echo;
+    private int effectsSession;
+    private boolean echoError;
     private NoiseSuppressor noise;
     private AutomaticGainControl automaticGain;
 
@@ -328,15 +333,19 @@ public final class AudioRouting implements AutoCloseable {
 
     public void attachEffects() {
         refreshFeedbackProtection(context);
+        releaseEffects();
         int session = NativeAudio.inputSession();
-        if (session <= 0 && mode == 0) return;
+        effectsSession = session;
+        if (session <= 0) return;
         if (session > 0) {
             try {
                 if (AcousticEchoCanceler.isAvailable()) {
                     echo = AcousticEchoCanceler.create(session);
-                    if (echo != null) echo.setEnabled(echoCancellationPreferred(context));
+                    if (echo == null) echoError = true;
+                    else syncEchoCancellation();
                 }
             } catch (Exception ignored) {
+                echoError = true;
             }
             try {
                 if (NoiseSuppressor.isAvailable()) {
@@ -366,12 +375,7 @@ public final class AudioRouting implements AutoCloseable {
             } catch (Exception ignored) {
             }
         }
-        if (echo != null) {
-            try {
-                echo.setEnabled(echoCancellationPreferred(context));
-            } catch (Exception ignored) {
-            }
-        }
+        syncEchoCancellation();
         if (automaticGain != null) {
             try {
                 automaticGain.setEnabled(autoGainPreferred(context));
@@ -380,24 +384,59 @@ public final class AudioRouting implements AutoCloseable {
         }
     }
 
+    private void syncEchoCancellation() {
+        if (echo == null) return;
+        try {
+            boolean enabled = echoCancellationPreferred(context);
+            echoError = !echo.hasControl()
+                    || echo.setEnabled(enabled) != AudioEffect.SUCCESS
+                    || echo.getEnabled() != enabled;
+        } catch (Exception ignored) {
+            echoError = true;
+        }
+    }
+
+    /** Reports only verified app-managed cancellation on the current input session. */
+    public EchoStatus echoStatus() {
+        if (!echoCancellationPreferred(context)) return EchoStatus.OFF;
+        if (effectsSession <= 0 || NativeAudio.inputSession() != effectsSession) return EchoStatus.UNAVAILABLE;
+        if (echoError) return EchoStatus.ERROR;
+        if (echo == null) return EchoStatus.UNAVAILABLE;
+        try {
+            return echo.hasControl() && echo.getEnabled() ? EchoStatus.ACTIVE : EchoStatus.ERROR;
+        } catch (Exception ignored) {
+            return EchoStatus.ERROR;
+        }
+    }
+
     public boolean echoEnabled() {
-        return (echo != null && echo.getEnabled()) || echoCancellationPreferred(context);
+        return echoStatus() == EchoStatus.ACTIVE;
+    }
+
+    public void detachEffects() {
+        releaseEffects();
+    }
+
+    private void releaseEffects() {
+        if (echo != null) {
+            try { echo.release(); } catch (Exception ignored) { }
+            echo = null;
+        }
+        if (noise != null) {
+            try { noise.release(); } catch (Exception ignored) { }
+            noise = null;
+        }
+        if (automaticGain != null) {
+            try { automaticGain.release(); } catch (Exception ignored) { }
+            automaticGain = null;
+        }
+        effectsSession = 0;
+        echoError = false;
     }
 
     @Override
     public void close() {
-        if (echo != null) {
-            echo.release();
-            echo = null;
-        }
-        if (noise != null) {
-            noise.release();
-            noise = null;
-        }
-        if (automaticGain != null) {
-            automaticGain.release();
-            automaticGain = null;
-        }
+        releaseEffects();
         if (communicationDevice && Build.VERSION.SDK_INT >= 31) {
             try {
                 manager.clearCommunicationDevice();

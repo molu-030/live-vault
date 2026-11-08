@@ -5,6 +5,10 @@ namespace lm {
 // physical separation, a sensible device volume, or the device's acoustic echo canceller.
 class FeedbackGuard {
     std::atomic<bool> enabled{false},tripped{false},resetRequested{false};
+    // Retained across quiet periods and route bypasses. Only an explicit user
+    // reset or a new session may restore monitor gain after feedback.
+    std::atomic<int> attenuationSteps{0};
+    float monitorGain=1,gainSmoothing=.002f;
     std::array<std::atomic<float>,4> frequencies{};
     Biquad filters[2][4];float cached[4]{},blend[4]{};
     std::array<float,1024> bins{},coefficients{};std::array<double,1024> powers{};std::array<float,2048> window{};
@@ -12,9 +16,10 @@ class FeedbackGuard {
     float candidate=0,initialLevel=0;int held=0,loud=0,next=0,incidents=0;double lastIncident=-100;
     void clearDetector(){candidate=initialLevel=0;held=loud=next=incidents=0;lastIncident=-100;for(auto& f:frequencies)f=0;}
 public:
-    void init(int sr,bool on,bool preserveTrip=false){enabled=on;if(!preserveTrip)tripped=false;resetRequested=false;clearDetector();
+    void init(int sr,bool on,bool preserveTrip=false){enabled=on;if(!preserveTrip){tripped=false;attenuationSteps=0;monitorGain=1;}resetRequested=false;clearDetector();
         sampleRate=sr;binCount=0;
         if(sr<8000||sr>384000){enabled=false;return;}
+        gainSmoothing=1-std::exp(-1.f/(.01f*sr));
         // Uniform analysis bins avoid both overlapping low-frequency probes and
         // gaps wider than the window's main lobe at high frequencies.
         for(int k=1;k<1024;k++){
@@ -27,11 +32,13 @@ public:
         for(int i=0;i<4;i++){cached[i]=blend[i]=0;filters[0][i]=Biquad{};filters[1][i]=Biquad{};}
     }
     // Route changes clear detector history on its worker, while retaining an
-    // existing safety latch until the user explicitly resets it.
+    // existing safety latch and attenuation until the user explicitly resets it.
     void setEnabled(bool on){if(enabled.exchange(on)!=on)resetRequested=true;}
     bool isEnabled()const{return enabled;}
-    void reset(){tripped=false;resetRequested=true;}
+    void reset(){tripped=false;attenuationSteps=0;resetRequested=true;}
     bool muted()const{return enabled&&tripped;}
+    float attenuationDb()const{return float(attenuationSteps.load()*4);}
+    float gain()const{int steps=attenuationSteps.load();return steps>=2?.39810717f:steps==1?.63095734f:1.f;}
     int count()const{int n=0;for(auto& f:frequencies)if(f.load()>0)n++;return n;}
     void analyze(const float* input,int n,int sr,double seconds){
         if(!enabled)return;
@@ -76,6 +83,9 @@ public:
             // Re-arm even for an existing notch: another fresh 1.6x rise at the
             // same frequency is an incident, rather than bypassing escalation.
             held=0;
+            // Reduce the whole monitor path as well as notching the detected
+            // tone. Never recover gain automatically when a howl subsides.
+            int steps=attenuationSteps.load();if(steps<2)attenuationSteps=steps+1;
             incidents=seconds-lastIncident<10?incidents+1:1;lastIncident=seconds;
             if(incidents>=3)tripped=true;
         }
@@ -96,6 +106,8 @@ public:
         }
         if(!std::isfinite(left)||!std::isfinite(right))tripped=true;
         if(tripped){left=right=0;return;}
+        monitorGain+=(gain()-monitorGain)*gainSmoothing;
+        left*=monitorGain;right*=monitorGain;
         left=std::clamp(left,-.45f,.45f);right=std::clamp(right,-.45f,.45f);
     }
 };
