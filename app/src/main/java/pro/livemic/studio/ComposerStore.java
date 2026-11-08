@@ -13,6 +13,7 @@ final class ComposerStore {
     private File file(String id){if(!id.matches("[a-zA-Z0-9-]+"))throw new IllegalArgumentException("프로젝트 ID");return new File(directory,id+".json");}
     synchronized void write(ComposerProject p,boolean draft)throws Exception{AtomicFile a=new AtomicFile(draft?new File(directory,"draft.json"):file(p.id));FileOutputStream out=a.startWrite();try{out.write(p.json().toString(2).getBytes(StandardCharsets.UTF_8));a.finishWrite(out);}catch(Exception e){a.failWrite(out);throw e;}}
     synchronized ComposerProject read(File f)throws Exception{return ComposerProject.read(new JSONObject(new String(new AtomicFile(f).readFully(),StandardCharsets.UTF_8)));}
+    synchronized long savedAt(String id,boolean draft){return (draft?new File(directory,"draft.json"):file(id)).lastModified();}
     synchronized ComposerProject draft(){try{return read(new File(directory,"draft.json"));}catch(Exception e){return null;}}
     synchronized List<ComposerProject> list(){List<ComposerProject> out=new ArrayList<>();File[] files=directory.listFiles((d,n)->n.endsWith(".json")&&!n.equals("draft.json"));if(files!=null){Arrays.sort(files,(a,b)->Long.compare(b.lastModified(),a.lastModified()));for(File f:files)try{out.add(read(f));}catch(Exception ignored){}}return out;}
     synchronized void delete(String id){new AtomicFile(file(id)).delete();}

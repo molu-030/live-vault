@@ -175,7 +175,8 @@ class DSP {
     std::vector<float> preDelay;
     size_t di = 0, prePos = 0;
     float currentOffset = 1000.f, compTarget = 1.f, compGain = 1.f;
-    int compCounter = 0;
+    uint32_t compCounter = 0;
+    bool signalIdle = true;
     float hpX = 0, hpY = 0, envelope = 0, delayToneL = 0, delayToneR = 0;
     int sr = 48000;
     float cachedLow = 999, cachedMid = 999, cachedHigh = 999;
@@ -192,12 +193,35 @@ public:
         hpX = hpY = envelope = delayToneL = delayToneR = 0.f;
         cachedLow = cachedMid = cachedHigh = 999.f;
         compTarget = compGain = 1.f; compCounter = 0;
+        // Existing init() retains EQ filter history. Only skip a truly pristine
+        // bus; reopening a stream with retained filter state follows tick().
+        signalIdle = low.z1 == 0.f && low.z2 == 0.f && mid.z1 == 0.f
+                && mid.z2 == 0.f && high.z1 == 0.f && high.z2 == 0.f;
     }
 
     void configure(const float* p) {
         if (p[7] != cachedLow) { low.set(0, p[7], 180, sr); cachedLow = p[7]; }
         if (p[8] != cachedMid) { mid.set(1, p[8], 1400, sr); cachedMid = p[8]; }
         if (p[9] != cachedHigh) { high.set(2, p[9], 6500, sr); cachedHigh = p[9]; }
+    }
+
+    bool idle() const { return signalIdle; }
+    // A new stream with no nonzero input has no vocal effects to calculate.
+    // After the first input, stay awake until init(): this preserves every tail
+    // without scanning delay buffers or introducing callback work spikes.
+    // Monitoring flags never gate processing needed for recordings or loops.
+    void process(float input, const float* p, float& l, float& r) {
+        if (signalIdle && input == 0.f) {
+            // Preserve delay-time smoothing and compressor cadence while asleep.
+            float target = std::clamp(p[5] * sr / 1000.f, 1.f, float(delay.size() - 2));
+            currentOffset += (target - currentOffset) * .005f;
+            ++compCounter;
+            if (++di >= delay.size()) di = 0;
+            l = r = 0.f;
+            return;
+        }
+        signalIdle = false;
+        tick(input, p, l, r);
     }
 
     void tick(float input, const float* p, float& l, float& r) {

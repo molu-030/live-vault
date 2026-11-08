@@ -21,6 +21,8 @@ final class LiveScreen {
     TextView backing, backingTime, route, volumeLabel, micVolumeLabel;
     SeekBar backingVolume, micVolume;
     StudioKnob reverbVolume, echoVolume;
+    LiveMixerView mixer;
+    TextView arrangement, recordingTarget;
     boolean volumeDragging, micVolumeDragging;
     private final boolean[] dragging = new boolean[20];
 
@@ -79,14 +81,14 @@ final class LiveScreen {
 
     LinearLayout panel() {
         LinearLayout p = a.column();
-        p.setPadding(a.dp(12), a.dp(4), a.dp(12), a.dp(4));
+        p.setPadding(a.dp(12), a.dp(a.tabletLandscape() ? 4 : 2), a.dp(12), a.dp(a.tabletLandscape() ? 4 : 2));
         p.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12, StudioTheme.BORDER));
         return p;
     }
 
     void addPanel(View p) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = a.dp(6);
+        lp.topMargin = a.dp(a.tabletLandscape() ? 6 : 2);
         a.page.addView(p, lp);
     }
 
@@ -200,6 +202,15 @@ final class LiveScreen {
             a.page.flexible(display, 151, 300);
         }
 
+        arrangement = text("", tablet ? 13 : 11, StudioTheme.OLIVE);
+        arrangement.setTypeface(StudioTheme.mono(a));
+        arrangement.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+        arrangement.setMaxLines(tablet ? 2 : 1);
+        arrangement.setBackgroundColor(StudioTheme.LCD_BG);
+        if (tablet) session.addView(arrangement, new LinearLayout.LayoutParams(-1, -2));
+        // Phones reuse the existing accompaniment caption for composer position;
+        // an extra dashboard row would displace fixed controls at large text sizes.
+
         // Section label "입출력" & 2x2 Input / Output Controls Grid
         session.addView(heading(tr("입출력", "I/O")), new LinearLayout.LayoutParams(-1, -2));
         LinearLayout grid = a.column();
@@ -252,7 +263,9 @@ final class LiveScreen {
             rightLp.leftMargin = a.dp(14);
             tabletRow.addView(rightScroll, rightLp);
             a.page.addView(tabletRow, new LinearLayout.LayoutParams(-1, a.dp(420)));
-            a.page.flexible(tabletRow, 400, 1600);
+            // Use exactly the viewport left by the fixed footer; a workspace floor
+            // must not add outer scrolling to the 600dp expanded layout.
+            a.page.flexible(tabletRow, 0, 1600);
         } else {
             a.page.addView(session, new LinearLayout.LayoutParams(-1, -2));
         }
@@ -306,6 +319,24 @@ final class LiveScreen {
         fh.addView(detailsButton, new LinearLayout.LayoutParams(a.dp(tablet ? 112 : 80), a.dp(48)));
         fx.addView(fh);
         if (tablet) {
+            LinearLayout modes = a.row();
+            Button effectsMode = button(tr("보컬 효과", "Vocal FX"), () -> {});
+            Button mixerMode = button(tr("트랙 믹서", "Track mixer"), () -> {});
+            modes.addView(effectsMode, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+            modes.addView(mixerMode, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+            fx.addView(modes);
+            mixer = new LiveMixerView(a);
+            mixer.setVisibility(View.GONE);
+            fx.addView(mixer, new LinearLayout.LayoutParams(-1, -2));
+            paint(effectsMode, true);
+            effectsMode.setOnClickListener(v -> {
+                mixer.close(); mixer.setVisibility(View.GONE); knobs.setVisibility(View.VISIBLE);
+                detailsButton.setVisibility(View.VISIBLE); paint(effectsMode, true); paint(mixerMode, false);
+            });
+            mixerMode.setOnClickListener(v -> {
+                a.composerScreen.clearSolo(); mixer.poll(); mixer.setVisibility(View.VISIBLE); knobs.setVisibility(View.GONE);
+                detailsButton.setVisibility(View.GONE); paint(effectsMode, false); paint(mixerMode, true);
+            });
             // A real base height survives ScrollView's initial unspecified measurement;
             // weights consume spare viewport height only when fillViewport remeasures.
             knobs.setMinimumHeight(a.dp(170));
@@ -328,6 +359,12 @@ final class LiveScreen {
         LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(a.dp(90), a.dp(48));
         vp.leftMargin = a.dp(8);
         dock.addView(video, vp);
+        recordingTarget = text("", 11, StudioTheme.MUTED);
+        recordingTarget.setGravity(Gravity.CENTER);
+        recordingTarget.setPadding(0, 0, 0, 0);
+        recordingTarget.setLines(1);
+        recordingTarget.setHorizontallyScrolling(false);
+        a.actionDock.addView(recordingTarget);
         a.actionDock.addView(dock);
         a.recordOptions = a.globalOptions;
 
@@ -562,7 +599,10 @@ final class LiveScreen {
         if (composer) {
             double[] cs = a.composer.state();
             backing.setText(a.composer.project.name + " ▾");
-            backingTime.setText(tr("작곡기 · 마디 ", "Composer · bar ") + (1 + (int) (Math.max(0, cs[0]) / MusicTheory.barBeats(a.composer.project.meter))) + (!playing ? tr(" · 일시정지", " · paused") : ""));
+            backingTime.setText(a.tabletLandscape()
+                    ? tr("작곡기 · 마디 ", "Composer · bar ") + (1 + (int) (Math.max(0, cs[0]) / MusicTheory.barBeats(a.composer.project.meter))) + (!playing ? tr(" · 일시정지", " · paused") : "")
+                    : arrangementText(true));
+            backingTime.setContentDescription(arrangementText());
         } else {
             double[] local = NativeAudio.localPlaybackInfo();
             backing.setText(a.selectedFile.isEmpty() ? tr("반주 선택 ▾", "Choose backing ▾") : a.selectedFile + " ▾");
@@ -582,7 +622,46 @@ final class LiveScreen {
             backingPlayButton.setContentDescription(tr("YouTube 일시정지 · 재생은 동영상 제어 사용", "Pause YouTube · use video controls to play"));
         }
         backingPlayButton.setEnabled(a.youtube.selected || !a.settingsLocked());
+        if (mixer != null && mixer.getVisibility() == View.VISIBLE) mixer.poll();
+        if (arrangement != null) arrangement.setText(arrangementText());
+        boolean micOnlyTarget = RecordingManager.active ? RecordingManager.micOnly
+                : AudioService.waiting() ? AudioService.pendingMicOnly : a.youtube.selected;
+        if (recordingTarget != null) recordingTarget.setText(micOnlyTarget
+                ? (a.tabletLandscape()
+                    ? tr("녹음 대상 · 마이크만 (YouTube 소리 제외)", "Records · microphone only (YouTube excluded)")
+                    : tr("녹음 · 마이크만 (YouTube 제외)", "Records · mic only (YouTube excluded)"))
+                : tr("녹음 대상 · 전체 믹스", "Records · full mix"));
         sync();
+    }
+
+    String arrangementText() { return arrangementText(false); }
+
+    String arrangementText(boolean compact) {
+        ComposerSession session = a.composer;
+        ComposerProject project = session.project;
+        double[] state = session.state();
+        int index = session.playing() ? (int) state[2] : session.selectedPart;
+        if (index < 0 || index >= project.parts.size()) return tr("파트 —", "Part —");
+        ComposerProject.Part part = project.parts.get(index);
+        double bar = MusicTheory.barBeats(project.meter);
+        int position = session.playing() ? Math.max(1, Math.min(part.bars, 1 + (int) (Math.max(0, state[0] - state[3]) / bar))) : 1;
+        String next = "—";
+        double start = 0;
+        outer: for (int i = 0; i < project.order.size(); i++) {
+            ComposerProject.Order order = project.order.get(i);
+            ComposerProject.Part ordered = project.part(order.part);
+            for (int repeat = 0; repeat < order.repeats; repeat++) {
+                if (ordered == part && (!session.playing() || Math.abs(start - state[3]) < .01)) {
+                    next = repeat + 1 < order.repeats ? part.label
+                            : project.part(project.order.get((i + 1) % project.order.size()).part).label;
+                    break outer;
+                }
+                start += ordered.bars * bar;
+            }
+        }
+        if (compact) return part.label + " " + position + "/" + part.bars + " → " + next;
+        return (session.playing() ? tr("현재 ", "Now ") : tr("선택 ", "Selected ")) + part.label
+                + " · " + position + "/" + part.bars + tr("마디 · 다음 ", " bars · Next ") + next;
     }
 
     void transport(boolean busy, boolean waiting, boolean recording) {

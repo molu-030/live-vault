@@ -695,6 +695,13 @@ public class MainActivity extends Activity {
     }
 
     void showTab() {
+        if (tab != 6 && effectComparison != null) {
+            if (settingsLocked() || recordPermissionPending) finishEffectComparisonForRecording();
+            else {
+                effectComparison.cancel(this);
+                effectComparison = null;
+            }
+        }
         setVolumeControlStream(AudioRouting.selected(this) == 1 ? AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC);
         if (camera != null && camera.recording) return;
         youtube.detach();
@@ -1044,28 +1051,58 @@ public class MainActivity extends Activity {
                 || (harmony != null && (harmony.state[4] >= 0 || harmony.state[5] >= 0));
     }
 
+    AudioSetupGuide audioSetupGuide;
+    EffectComparison effectComparison;
+
     void audioSettings() {
         LinearLayout topRow = row();
-        topRow.addView(title(tr("오디오 설정", "Audio settings")), new LinearLayout.LayoutParams(0, -2, 1));
+        topRow.addView(title(tr("오디오 준비", "Audio setup")), new LinearLayout.LayoutParams(0, -2, 1));
         StudioButton backBtn = StudioTheme.styled(this, tr("라이브로 ›", "To Live ›"), StudioButton.QUIET, () -> chooseTab(0));
         backBtn.setTextColor(LIME);
         topRow.addView(backBtn, new LinearLayout.LayoutParams(-2, dp(48)));
         add(topRow);
 
+        if (audioSetupGuide == null) audioSetupGuide = new AudioSetupGuide(this);
+        audioSetupGuide.header();
+
         // Device & Route Card
         LinearLayout routeCard = beginCard();
-        add(text(tr("입출력 경로", "Input & Output Route"), 16, TEXT));
+        audioSetupGuide.section(0, content);
+        add(text(tr("1 · 장치 선택", "1 · Choose devices"), 16, TEXT));
         add(button(tr("마이크 소스: ", "Input device: ") + inputName() + " ▾", this::selectInput));
         add(button(tr("출력 소스: ", "Output device: ") + outputName() + " ▾", this::outputMode));
-        add(button(tr("출력 및 하울링 보호 설정 ›", "Output & feedback protection ›"), this::monitoringOptions));
+        audioSetupGuide.next(1);
         endCard(routeCard);
 
         // 4 Core Switches from Reference Design
         LinearLayout switchCard = beginCard();
-        add(text(tr("음성 및 입력 처리", "Voice & Input Processing"), 16, TEXT));
+        audioSetupGuide.section(1, content);
+        add(text(tr("2 · 입력 레벨 확인", "2 · Check input level"), 16, TEXT));
+        audioSetupGuide.inputCheck();
         toggle(tr("내 목소리 듣기", "Voice monitoring"), 11);
         toggle(tr("소음 완화", "Noise reduction"), 19);
 
+        Switch agcSw = new Switch(this);
+        agcSw.setText(tr("자동 입력 레벨", "Auto gain control"));
+        agcSw.setTextColor(TEXT);
+        agcSw.setTextSize(14);
+        agcSw.setPadding(0, dp(10), 0, dp(10));
+        agcSw.setChecked(AudioRouting.autoGainPreferred(this));
+        agcSw.setOnCheckedChangeListener((b, on) -> {
+            AudioRouting.setAutoGainPreferred(this, on);
+            if (AudioService.active) {
+                startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.EFFECTS));
+            }
+        });
+        add(agcSw);
+        audioSetupGuide.next(2);
+        endCard(switchCard);
+
+        // Latency & Sync Card
+        LinearLayout latencyCard = beginCard();
+        audioSetupGuide.section(2, content);
+        add(text(tr("3 · 싱크·보호 확인", "3 · Check sync and protection"), 16, TEXT));
+        audioSetupGuide.protectionCheck();
         Switch echoSw = new Switch(this);
         deviceEchoSwitch = echoSw;
         echoSw.setText(tr("기기 에코 제거(AEC)", "Device Echo cancellation (AEC)") + " · " + deviceEchoStatus());
@@ -1082,24 +1119,7 @@ public class MainActivity extends Activity {
         add(echoSw);
 
 
-        Switch agcSw = new Switch(this);
-        agcSw.setText(tr("자동 입력 레벨", "Auto gain control"));
-        agcSw.setTextColor(TEXT);
-        agcSw.setTextSize(14);
-        agcSw.setPadding(0, dp(10), 0, dp(10));
-        agcSw.setChecked(AudioRouting.autoGainPreferred(this));
-        agcSw.setOnCheckedChangeListener((b, on) -> {
-            AudioRouting.setAutoGainPreferred(this, on);
-            if (AudioService.active) {
-                startService(new Intent(this, AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.EFFECTS));
-            }
-        });
-        add(agcSw);
-        endCard(switchCard);
-
-        // Latency & Sync Card
-        LinearLayout latencyCard = beginCard();
-        add(text(tr("실시간 레이턴시", "Live latency"), 16, TEXT));
+        add(text(tr("출력 버퍼", "Output buffer"), 16, TEXT));
         note(tr("낮추면 반응이 빨라지고, 높이면 끊김이 줄어듭니다. 블루투스 전송 지연은 남습니다.", "Lower values respond faster; higher values can reduce dropouts. Bluetooth delay remains."));
         int mode = AudioRouting.selected(this);
         int count = AudioRouting.prefs(this).getInt("bursts" + mode, 2);
@@ -1162,13 +1182,14 @@ public class MainActivity extends Activity {
         });
         add(shift);
         note(tr("− 보컬 앞당김 / + 보컬 늦춤. 다음 녹음에 적용하며 실시간 목소리에는 지연을 추가하지 않습니다.", "− shifts vocals earlier / + shifts them later in the next recording; live monitoring is unchanged."));
-        add(button(tr("싱크 테스트 · 5초", "Sync test · 5 seconds"), this::syncTest));
+        note(tr("5초 녹음을 듣고 보컬과 기준음을 비교하는 청취 테스트입니다. 실제 왕복 지연을 자동 측정하지 않습니다.", "Listen to a 5-second recording and compare your voice with the reference beats. This does not automatically measure round-trip latency."));
+        add(button(tr("싱크 청취 테스트 · 5초", "Sync listening test · 5 seconds"), this::syncTest));
         endCard(latencyCard);
 
         // Detailed Effects & EQ Card
         LinearLayout fxCard = beginCard();
         add(text(tr("상세 효과 및 EQ", "Detailed Effects & EQ"), 16, TEXT));
-        slider(tr("마이크 볼륨", "Microphone volume"), 0, 0, 2, v -> Math.round(v * 100) + "%");
+        effectComparisonControls();
         slider(tr("반주 볼륨", "Backing volume"), 1, 0, 1, v -> Math.round(v * 100) + "%");
         slider(tr("리버브 양", "Reverb amount"), 2, 0, 1, v -> Math.round(v * 100) + "%");
         slider(tr("리버브 잔향", "Reverb decay"), 3, .3f, 6, v -> String.format(Locale.US, "%.1f s", v));
@@ -1190,6 +1211,55 @@ public class MainActivity extends Activity {
                 )
         ));
         endCard(fxCard);
+    }
+
+    void finishEffectComparisonForRecording() {
+        if (effectComparison == null) return;
+        effectComparison = null;
+        toast(tr("현재 효과를 유지하고 A/B 비교를 마쳤습니다.", "A/B comparison finished; current effects are kept."));
+    }
+
+    void effectComparisonControls() {
+        if (effectComparison == null) {
+            add(button(tr("효과 A/B 비교 시작", "Start effect A/B comparison"), () -> {
+                if (settingsLocked()) return;
+                effectComparison = new EffectComparison(this);
+                showTab();
+            }));
+            return;
+        }
+        note(tr("시작 효과를 A에 담았습니다. 효과를 바꾼 뒤 B에 저장하고 번갈아 들으세요. 녹음을 시작하면 현재 효과를 유지하고 비교를 마칩니다. 그 외에는 유지를 누르지 않고 나가면 시작 효과로 복원합니다.",
+                "A starts with your original effects. Edit effects, save B, then switch to compare. Starting a recording keeps the current effects and ends comparison. Otherwise, leaving restores the original unless you finish and keep it."));
+        if (!effectComparison.listening.isEmpty()) add(text(tr("불러온 설정 · ", "Loaded settings · ") + effectComparison.listening, 13, LIME));
+        note(tr("리버브·에코·EQ·컴프레서만 비교합니다. 음량·모니터·보호 설정은 그대로입니다.", "Compare reverb, echo, EQ and compressor. Volume, monitoring and protection settings stay as they are."));
+        LinearLayout slots = row();
+        weighted(slots, button(tr("현재 → A 저장", "Save current → A"), () -> {
+            if (settingsLocked()) return;
+            effectComparison.save(this, false); showTab();
+        }), 48);
+        weighted(slots, button(tr("현재 → B 저장", "Save current → B"), () -> {
+            if (settingsLocked()) return;
+            effectComparison.save(this, true); showTab();
+        }), 48);
+        add(slots);
+        LinearLayout listen = row();
+        weighted(listen, button(tr("A 불러오기", "Load A"), () -> {
+            if (settingsLocked()) return;
+            effectComparison.listen(this, false); showTab();
+        }), 48);
+        Button loadB = button(tr("B 불러오기", "Load B"), () -> {
+            if (settingsLocked()) return;
+            effectComparison.listen(this, true); showTab();
+        });
+        loadB.setEnabled(effectComparison.hasB());
+        weighted(listen, loadB, 48); add(listen);
+        add(button(tr("비교 취소 · 시작 설정 복원", "Cancel comparison · restore original"), () -> {
+            if (settingsLocked()) return;
+            effectComparison.cancel(this); effectComparison = null; showTab();
+        }));
+        add(button(tr("비교 마침 · 현재 설정 유지", "Finish comparison · keep current"), () -> {
+            effectComparison = null; showTab();
+        }));
     }
 
     void updateLatency(TextView label) {
@@ -1677,6 +1747,7 @@ public class MainActivity extends Activity {
 
     void requestRecording() {
         if (exiting()) return;
+        finishEffectComparisonForRecording();
         pendingCapture = !youtube.selected && captureOtherApps && CaptureSupport.available();
         captureOtherApps = false;
         continueRecording();
@@ -1718,6 +1789,7 @@ public class MainActivity extends Activity {
 
     void scheduleRecording(Intent projection) {
         if (exiting()) return;
+        finishEffectComparisonForRecording();
         if (youtube.selected) projection = null;
         clearRecordingRequest();
         pendingMonitor = AudioService.canMonitor(this) || values[11] > .5f;
@@ -2933,6 +3005,7 @@ public class MainActivity extends Activity {
                 toast(AudioService.error);
                 AudioService.error = "";
             }
+            if (tab == 6 && audioSetupGuide != null) audioSetupGuide.poll(s, running);
             if (tab == 0 && liveScreen != null) {
                 liveScreen.poll(s, running);
             }

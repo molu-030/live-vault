@@ -89,6 +89,15 @@ final class ComposerTransport {
         if(t.drums()){
             boolean fill=part.fill&&barIndex==bars-1;
             for(ComposerRhythm.Hit hit:ComposerRhythm.drums(rhythm,fill,barIndex,part.energy,pattern(t))){
+                // Energy shapes orchestration, not only loudness: quiet parts keep
+                // main-beat cymbals; their closing fill leaves two clear pickups.
+                boolean closing=fill&&hit.beat>=bar-1;
+                if(closing&&((hit.note==45&&part.energy<.75)||(hit.note==50&&part.energy<.4)))continue;
+                boolean cymbal=hit.note==42||hit.note==44||hit.note==46||hit.note==49||hit.note==51;
+                // Compound 6/8 has two dotted-quarter beats (0,1.5), while
+                // simple meters retain quarter-note beats. Keep the meter's feel.
+                double pulse=project.meter==2?1.5:1;
+                if(!closing&&part.energy<.4&&cymbal&&Math.abs(hit.beat/pulse-Math.rint(hit.beat/pulse))>1e-6)continue;
                 double at=barStart+hit.beat;if(at>=pos-.00001&&at<end-.00001)autoNote(at,ms(70),ch,hit.note,hit.gain,pos,end,part,hit.note==38||hit.note==37?ms(5*part.humanize):0);
             }return previous;
         }
@@ -108,7 +117,19 @@ final class ComposerTransport {
                 else if((pMod==2||pMod==4)&&i%2==1)pitch+=12;
                 else if(pMod==3&&Math.abs(at-pos)>.00001)pitch+=tones[i%tones.length];
                 boolean last=true;for(int j=i+1;j<attacks.length;j++)if(barStart+attacks[j]<end-.00001){last=false;break;}
-                if(next!=null&&last&&at>pos+.00001&&end-at<=1.01&&barIndex%4==3&&part.energy>.4){int target=36+(next.bass>=0?next.bass:next.root);pitch=target+(target>=bass?-1:1);}
+                // A walking line approaches each actual bass change by a semitone.
+                // Other bass roles reserve that pickup for energetic four-bar/part
+                // cadences. Never replace the harmony's initial root/slash-bass anchor.
+                boolean cadence=(barIndex+1)%4==0||barIndex==bars-1;
+                int nextBass=next==null?bass:36+(next.bass>=0?next.bass:next.root);
+                boolean changing=MusicTheory.pc(nextBass)!=MusicTheory.pc(bass);
+                if(changing&&last&&at>pos+.00001&&end-at<=1.01
+                        &&((pMod==3&&part.energy>.4)||(cadence&&part.energy>.65))){
+                    int target=MusicTheory.fit(nextBass,28,55);
+                    while(target-pitch>6&&target-12>=28)target-=12;
+                    while(pitch-target>6&&target+12<=55)target+=12;
+                    pitch=target+(target>=pitch?-1:1);
+                }
                 double until=i+1<attacks.length?barStart+attacks[i+1]-at:end-at;
                 double dur = (pMod == 4) ? Math.min(.22, until*.6) : Math.min(until*.8, end-at);
                 autoNote(at,dur,ch,MusicTheory.fit(pitch,28,55),pMod==4?.85:.78,pos,end,part,0);

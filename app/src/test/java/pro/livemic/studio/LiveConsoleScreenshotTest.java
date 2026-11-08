@@ -90,7 +90,11 @@ public class LiveConsoleScreenshotTest {
                 assertEquals(3,a.nav.getChildCount());
                 assertTrue("Footer follows dashboard viewport",rec.top>=StudioScreenshotTest.bounds(a,a.pageScroll).bottom);
                 assertTrue("Footer clears system navigation",rec.bottom<=height-24);
-                assertTrue("Dashboard fits viewport",a.page.getHeight()<=a.pageScroll.getHeight());
+                assertTrue("Dashboard fits viewport: english="+english+" width="+width+" height="+height+" fontScale="+scale
+                        +" page="+a.page.getHeight()+" viewport="+a.pageScroll.getHeight()
+                        +" pageBounds="+StudioScreenshotTest.bounds(a,a.page)+" viewportBounds="+StudioScreenshotTest.bounds(a,a.pageScroll)
+                        +" lcd="+a.liveScreen.display.getHeight()+" target="+a.liveScreen.recordingTarget.getHeight()
+                        +" dock="+StudioScreenshotTest.bounds(a,a.actionDock),a.page.getHeight()<=a.pageScroll.getHeight());
                 a.pageScroll.scrollTo(0,a.page.getHeight());
                 assertEquals("No dashboard scrolling",0,a.pageScroll.getScrollY());
                 assertEquals(rec,StudioScreenshotTest.bounds(a,a.recButton));

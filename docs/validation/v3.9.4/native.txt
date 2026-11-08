@@ -1,0 +1,167 @@
+v3.9.4 host native/scheduler validation UTC 2026-11-08T12:55:54.297451+00:00
+No Gradle or commit.
+Scope: pristine vocal DSP bus only; stays awake after first nonzero input until stream initialization. No state scans, automatic tail truncation, analyzer gating, or voice-instrument gating.
+Rejected candidate: once-per-second whole-state tail scan measured up to0.8ms on this host; removed before final source freeze. Host numbers are not device battery measurements.
+
+scheduler compile
+$ <jdk>/bin/javac -cp <android-sdk>/platforms/android-35/android.jar -d <temporary-test-dir>/java app/src/main/java/pro/livemic/studio/ComposerProject.java app/src/main/java/pro/livemic/studio/TrackConfig.java app/src/main/java/pro/livemic/studio/VoicePhrase.java app/src/main/java/pro/livemic/studio/VoiceInstrumentSettings.java app/src/main/java/pro/livemic/studio/ComposerTransport.java app/src/main/java/pro/livemic/studio/ComposerRhythm.java app/src/main/java/pro/livemic/studio/MusicTheory.java tests/ArrangementTransitionTest.java
+
+exit_code=0
+
+scheduler transitions
+$ <jdk>/bin/java -cp <temporary-test-dir>/java:<android-sdk>/platforms/android-35/android.jar pro.livemic.studio.ArrangementTransitionTest
+PASS: nine grooves,4/4+3/4+6/8,energy-shaped fill/cymbal density,walking approaches,root anchors,ranges,balanced notes,seed reproducibility,recorded timing unchanged
+
+exit_code=0
+
+native
+$ bash scripts/test-native.sh
+PASS: local seek bounds, invalid input, latest request and clearing
+PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail
+PASS: stereo Haas echo and delay modulation stability
+PASS: noise reduction suppresses quiet signal while preserving voiced signal
+PASS: silence stability, growing-tone suppression, overload mute and explicit reset
+PASS: captured stereo gain, underflow silence, disabled capture drain, fresh-session isolation
+
+exit_code=0
+
+composer
+$ bash scripts/test-composer.sh
+PASS: coarse sample address offsets preserve signed-short boundaries and unsigned accumulation
+PASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence
+PASS: live chord hip-hop rhythm index8 and invalid-index fallback, fixed allocation
+PASS: clearing solo preserves volume, pan and mute
+PASS: 44100Hz immediate mute ends at next part
+PASS: 48000Hz immediate mute ends at next part
+PASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence
+PASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence
+
+exit_code=0
+
+feedback
+$ bash scripts/test-feedback.sh
+PASS: feedback frequency coverage, staged stereo gain, repeated incidents, benign audio, stereo latch/reset, routes and invalid inputs
+
+exit_code=0
+
+harmony
+$ bash scripts/test-harmony.sh
+44100 Hz: third 3097.89 fifth 3033.09 input 6.84
+48000 Hz: third 3369.10 fifth 3318.08 input 7.61
+
+exit_code=0
+
+DSP idle compile False
+$ c++ -std=c++17 -O2 -Wall -Wextra tests/dsp_idle_test.cpp -o <temporary-test-dir>/idle-opt
+
+exit_code=0
+
+DSP idle equivalence False
+$ <temporary-test-dir>/idle-opt
+PASS: 44100Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34885e-23
+PASS: 44100Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.3451e-23
+PASS: 48000Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34943e-23
+PASS: 48000Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34568e-23
+
+exit_code=0
+
+DSP idle compile True
+$ c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all tests/dsp_idle_test.cpp -o <temporary-test-dir>/idle-sanitized
+
+exit_code=0
+
+DSP idle equivalence True
+$ <temporary-test-dir>/idle-sanitized
+PASS: 44100Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34885e-23
+PASS: 44100Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.3451e-23
+PASS: 48000Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34943e-23
+PASS: 48000Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34568e-23
+
+exit_code=0
+
+whitespace
+$ git diff --check -- app/src/main/cpp/audio_core.h app/src/main/cpp/engine.cpp app/src/main/java/pro/livemic/studio/ComposerTransport.java tests/dsp_idle_test.cpp tests/ArrangementTransitionTest.java
+
+exit_code=0
+
+PASS: requested conservative scope complete. Synthetic DSP maximum error and all test output above; no real-device battery claims.
+
+FOLLOW-UP FREEZE UTC2026-11-08T12:57:38.379209+00:00: pristine gate checks retained low/mid/high z1/z2 exactly zero; no extra filter reset.
+
+native after retained-EQ fix
+$ bash scripts/test-native.sh
+PASS: local seek bounds, invalid input, latest request and clearing
+PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail
+PASS: stereo Haas echo and delay modulation stability
+PASS: noise reduction suppresses quiet signal while preserving voiced signal
+PASS: silence stability, growing-tone suppression, overload mute and explicit reset
+PASS: captured stereo gain, underflow silence, disabled capture drain, fresh-session isolation
+
+exit_code=0
+
+DSP reinit compile False
+$ c++ -std=c++17 -O2 -Wall -Wextra tests/dsp_idle_test.cpp -o <temporary-test-dir>/reinit-opt
+
+exit_code=0
+
+DSP reinit equivalence False
+$ <temporary-test-dir>/reinit-opt
+PASS: 44100Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34885e-23
+PASS: 44100Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.3451e-23
+PASS: 44100Hz reinit retains existing EQ state and remains sample-identical on silence/resume
+PASS: 48000Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34943e-23
+PASS: 48000Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34568e-23
+PASS: 48000Hz reinit retains existing EQ state and remains sample-identical on silence/resume
+
+exit_code=0
+
+DSP reinit compile True
+$ c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all tests/dsp_idle_test.cpp -o <temporary-test-dir>/reinit-asan
+
+exit_code=0
+
+DSP reinit equivalence True
+$ <temporary-test-dir>/reinit-asan
+PASS: 44100Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34885e-23
+PASS: 44100Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.3451e-23
+PASS: 44100Hz reinit retains existing EQ state and remains sample-identical on silence/resume
+PASS: 48000Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34943e-23
+PASS: 48000Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34568e-23
+PASS: 48000Hz reinit retains existing EQ state and remains sample-identical on silence/resume
+
+exit_code=0
+
+final whitespace
+$ git diff --check -- app/src/main/cpp/audio_core.h app/src/main/cpp/engine.cpp app/src/main/java/pro/livemic/studio/ComposerTransport.java tests/dsp_idle_test.cpp tests/ArrangementTransitionTest.java
+
+exit_code=0
+
+SOURCE SHA256 after final validation:
+f29d9234e075e3c021eefaf3f4e943c91ef214acf5e9982b1f994811ec8dd9df app/src/main/cpp/audio_core.h
+0628f4f1f77eadbf7f6cf94428bc4bd31f7319ca9428013938167776fa1b80d4 app/src/main/cpp/engine.cpp
+010e4aa0354db20bfd1de469515ccfdde003eaa4e2fc0ca228f0bd4c98c00ab3 app/src/main/cpp/composer_engine.h
+c1c52aba73c4bb21343ec4bb537f5c4d423808f50322c16a646768006171009f app/src/main/java/pro/livemic/studio/ComposerTransport.java
+0d057675a734a48917cf60fed9d469a8349a247ee931a0d1f3e20c268373ad22 tests/dsp_idle_test.cpp
+5921f873cc84db4e79863a9c3ea85e49b72fe88eb21b7b5411a59bca6e378468 tests/ArrangementTransitionTest.java
+PASS: final retained-EQ state behavior and all prior validations; no Gradle invocation. CompletedUTC 2026-11-08T12:59:18.666967+00:00
+
+METER FOLLOW-UP FREEZE UTC2026-11-08T13:16:10.351409+00:00: quiet cymbals keep main beats; compound6/8 uses1.5 quarter-note pulse,3/4 uses1 quarter-note pulse. C++ unchanged.
+
+meter scheduler compile
+$ <jdk>/bin/javac -cp <android-sdk>/platforms/android-35/android.jar -d <temporary-test-dir> app/src/main/java/pro/livemic/studio/ComposerProject.java app/src/main/java/pro/livemic/studio/TrackConfig.java app/src/main/java/pro/livemic/studio/VoicePhrase.java app/src/main/java/pro/livemic/studio/VoiceInstrumentSettings.java app/src/main/java/pro/livemic/studio/ComposerTransport.java app/src/main/java/pro/livemic/studio/ComposerRhythm.java app/src/main/java/pro/livemic/studio/MusicTheory.java tests/ArrangementTransitionTest.java
+
+exit_code=0
+
+meter nine-groove scheduler regressions
+$ <jdk>/bin/java -cp <temporary-test-dir>:<android-sdk>/platforms/android-35/android.jar pro.livemic.studio.ArrangementTransitionTest
+PASS: nine grooves,4/4+3/4+6/8,energy-shaped fill/cymbal density,6/8 dotted-quarter and3/4 quarter pulses,walking approaches,root anchors,ranges,balanced notes,seed reproducibility,recorded timing unchanged
+
+exit_code=0
+
+meter whitespace
+$ git diff --check -- app/src/main/java/pro/livemic/studio/ComposerTransport.java tests/ArrangementTransitionTest.java
+
+exit_code=0
+dcb1fb6641d7b0cedb0737eff198f52acc1854e5f53f62f2d82e4cd5888a4e86 app/src/main/java/pro/livemic/studio/ComposerTransport.java
+5edc399da3078ac771e3379d1a084722c887178d6ee8647ec6c7909bc15e0388 tests/ArrangementTransitionTest.java
+PASS: compound6/8 quiet cymbals retain0/1.5;3/4 retains0/1/2; nine grooves,seed,recorded-timing and other scheduler regressions pass.

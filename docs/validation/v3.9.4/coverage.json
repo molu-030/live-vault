@@ -1,0 +1,49 @@
+{
+  "method": "Full run then replacement with final UI class results; not a single all-pass full execution.",
+  "full": {
+    "tests": 261,
+    "failures": 3,
+    "errors": 0,
+    "skipped": 0
+  },
+  "final_ui": {
+    "tests": 17,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "latest_unique": {
+    "tests": 262,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "suites": 37,
+  "final_ui_classes": {
+    "pro.livemic.studio.YouTubeScreenshotTest": {
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.LiveConsoleScreenshotTest": {
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.LiveMixerViewTest": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.TabletLayoutTest": {
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "device_verified": false
+}

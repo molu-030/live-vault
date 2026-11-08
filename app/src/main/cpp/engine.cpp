@@ -431,7 +431,7 @@ public:
 
         for (int i = 0; i < n; i++) {
             float l, r;
-            dsp.tick(inputBuffer[i], p, l, r);
+            dsp.process(inputBuffer[i], p, l, r);
             float music = band(p, base + i);
             float ml = music + composerMusic[i * 2] * p[1];
             float mr = music + composerMusic[i * 2 + 1] * p[1];

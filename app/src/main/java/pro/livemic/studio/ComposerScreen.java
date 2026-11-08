@@ -19,6 +19,9 @@ final class ComposerScreen {
     Button play;
     Button phrase;
     Button voicePower;
+    TextView draftStatus,libraryStatus,recordingTarget;
+    Button retryDraft,retryLibrary,undoButton,redoButton,comparePhrase;
+    TextView compareInfo;
     int solo = -1;
     String soloPart = "";
     ComposerProject soloProject;
@@ -224,6 +227,9 @@ final class ComposerScreen {
         leftPane = rightPane = null;
         readout = transportLabel = lcdStatus = null;
         play = phrase = voicePower = null;
+        draftStatus = libraryStatus = recordingTarget = null;
+        retryDraft = retryLibrary = undoButton = redoButton = comparePhrase = null;
+        compareInfo = null;
         chordCards.clear();
         highlightedBar = -2;
         if (voice) {
@@ -257,6 +263,7 @@ final class ComposerScreen {
                 + " · " + new String[]{"4/4", "3/4", "6/8"}[p.meter]);
         summary.setPadding(0, a.dp(4), 0, a.dp(8));
         hero.addView(summary);
+        saveControls(hero);
 
         lcdStatus = a.text("", 13, Color.rgb(225, 228, 196));
         lcdStatus.setTypeface(StudioTheme.bold(a));
@@ -570,6 +577,26 @@ final class ComposerScreen {
         a.exchange.showExport(s.project);
     }
 
+    void saveControls(LinearLayout parent) {
+        for(boolean draft:new boolean[]{true,false}){
+            LinearLayout row=a.row();row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView label=a.text(s.saveStatus(draft),12,MainActivity.MUTED);
+            label.setSingleLine(false);
+            row.addView(label,new LinearLayout.LayoutParams(0,-2,1));
+            Button retry=StudioTheme.styled(a,tr("재시도","Retry"),StudioButton.CHIP,()->{s.retrySave(draft);poll();});
+            retry.setContentDescription(tr(draft?"초안 저장 재시도":"내 반주 저장 재시도",draft?"Retry draft save":"Retry save to My Backings"));
+            row.addView(retry,new LinearLayout.LayoutParams(-2,a.dp(48)));
+            if(draft){draftStatus=label;retryDraft=retry;}else{libraryStatus=label;retryLibrary=retry;}
+            parent.addView(row);
+        }
+        LinearLayout history=a.row();
+        undoButton=StudioTheme.styled(a,tr("실행 취소","Undo"),StudioButton.CHIP,()->{s.history(false);refresh();});
+        redoButton=StudioTheme.styled(a,tr("다시 실행","Redo"),StudioButton.CHIP,()->{s.history(true);refresh();});
+        history.addView(undoButton,new LinearLayout.LayoutParams(0,a.dp(48),1));
+        history.addView(redoButton,new LinearLayout.LayoutParams(0,a.dp(48),1));
+        parent.addView(history);
+    }
+
     void projectMenu() {
         choose(tr("프로젝트", "Project"), new String[]{
                 tr("저장", "Save"),
@@ -579,7 +606,8 @@ final class ComposerScreen {
                 tr("실행 취소", "Undo"),
                 tr("다시 실행", "Redo"),
                 tr("내 반주 열기", "Open saved projects"),
-                tr("AI 수정본 불러오기", "Import AI revision")
+                tr("AI 수정본 불러오기", "Import AI revision"),
+                tr("이름 있는 복사본 저장", "Save named copy")
         }, -1, k -> {
             if (k == 0) s.save();
             else if (k == 1) input(tr("프로젝트 이름", "Project name"), s.project.name, name -> edit(p -> p.name = name, false));
@@ -590,8 +618,12 @@ final class ComposerScreen {
             else if (k == 6) {
                 a.libraryFilter = 1;
                 a.chooseTab(4);
-            } else {
+            } else if(k==7) {
                 a.exchange.showImport();
+                return;
+            } else {
+                input(tr("저장 후 이 복사본에서 계속 편집", "Save and continue editing this copy"),
+                        s.project.name+tr(" 스냅샷"," Snapshot"),name->{s.duplicate(name);refresh();});
                 return;
             }
             refresh();
@@ -909,6 +941,14 @@ final class ComposerScreen {
     void voice() {
         VoiceInstrumentSettings v = s.project.voice;
         a.add(a.title(tr("목소리로 연주", "Play with voice")));
+        LinearLayout projectControls=a.column();saveControls(projectControls);a.add(projectControls);
+        recordingTarget=a.text(s.recordingTarget(),14,MainActivity.TEXT);recordingTarget.setSingleLine(false);
+        a.add(recordingTarget);
+        comparePhrase=a.button(tr("이전 / 현재 테이크 비교","Compare previous / current take"),this::comparePhrase);
+        a.add(comparePhrase);
+        compareInfo=a.text(tr("이번 세션의 임시 비교입니다. 전환 후 재생을 누르세요. 다른 편집이나 다시 기록하면 비교가 끝납니다.",
+                "Temporary comparison for this session. Select a take, then press Play. Other edits or a new recording end comparison."),12,MainActivity.MUTED);
+        a.add(compareInfo);
         boolean tablet = a.tabletLandscape();
         LinearLayout pageContent = a.content;
         if (tablet) a.content = tabletPanes("voice");
@@ -961,6 +1001,15 @@ final class ComposerScreen {
         a.content = pageContent;
         dock(true);
         poll();
+    }
+
+    void comparePhrase(){
+        if(!s.canComparePhrase())return;
+        choose(tr("세션 임시 비교 · 선택 후 재생", "Session comparison · select, then Play"),new String[]{
+                s.previousTakeEmpty()?tr("이전: 프레이즈 없음", "Previous: no phrase"):tr("이전 테이크 적용", "Use previous take"),
+                tr("현재 테이크 적용", "Use current take"),
+                tr("이전 상태로 복원 · 비교 종료", "Restore previous · end comparison")
+        },s.currentTakeSelected()?1:0,n->{s.selectPhraseTake(n==1,n==2);refresh();});
     }
 
     void voiceSettings() {
@@ -1026,7 +1075,18 @@ final class ComposerScreen {
         poll();
     }
 
+    private void updateStatusText(TextView view,String text){if(!text.contentEquals(view.getText()))view.setText(text);}
+
     void poll() {
+        if(draftStatus!=null)updateStatusText(draftStatus,s.saveStatus(true));
+        if(libraryStatus!=null)updateStatusText(libraryStatus,s.saveStatus(false));
+        if(retryDraft!=null)retryDraft.setVisibility(s.saveFailed(true)?View.VISIBLE:View.GONE);
+        if(retryLibrary!=null)retryLibrary.setVisibility(s.saveFailed(false)?View.VISIBLE:View.GONE);
+        if(undoButton!=null)undoButton.setEnabled(s.canUndo());
+        if(redoButton!=null)redoButton.setEnabled(s.canRedo());
+        if(recordingTarget!=null)recordingTarget.setText(s.recordingTarget());
+        if(comparePhrase!=null)comparePhrase.setVisibility(s.canComparePhrase()?View.VISIBLE:View.GONE);
+        if(compareInfo!=null)compareInfo.setVisibility(s.canComparePhrase()?View.VISIBLE:View.GONE);
         double[] st = s.state();
         int active = s.playing() && st[0] >= st[3] && (int) st[2] == s.selectedPart
                 ? (int) ((st[0] - st[3]) / MusicTheory.barBeats(s.project.meter))

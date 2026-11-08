@@ -115,7 +115,17 @@ public class TabletLayoutTest {
                 assertTrue(a.tabletLandscape()); assertEquals(View.VISIBLE,a.nav.getVisibility());
                 View left=a.root.findViewWithTag("tablet-live-left");assertNotNull(left);
                 ScrollView right=pane(a,"tablet-live-right"); distinct(a,left,right);
-                assertFalse("Expanded live has no outer vertical scroll",a.pageScroll.canScrollVertically(1));
+                assertFalse("Expanded live has no outer vertical scroll: size="+size[0]+"x"+size[1]+" english="+english
+                        +" page="+a.page.getHeight()+" viewport="+a.pageScroll.getHeight()
+                        +" pageBounds="+bounds(a,a.page)+" viewportBounds="+bounds(a,a.pageScroll)
+                        +" workspace="+a.root.findViewWithTag("tablet-live-workspace").getHeight()
+                        +" lcd="+a.liveScreen.display.getHeight()+" target="+a.liveScreen.recordingTarget.getHeight()
+                        +" targetText="+a.liveScreen.recordingTarget.getText()
+                        +" targetLines="+(a.liveScreen.recordingTarget.getLayout()==null?-1:a.liveScreen.recordingTarget.getLayout().getLineCount())
+                        +" targetTextSize="+a.liveScreen.recordingTarget.getTextSize()+" targetMin="+a.liveScreen.recordingTarget.getMinimumHeight()
+                        +" targetPadding="+a.liveScreen.recordingTarget.getPaddingTop()+","+a.liveScreen.recordingTarget.getPaddingBottom()
+                        +" targetLayoutHeight="+(a.liveScreen.recordingTarget.getLayout()==null?-1:a.liveScreen.recordingTarget.getLayout().getHeight())
+                        +" dock="+bounds(a,a.actionDock)+" rootPadding="+a.root.getPaddingTop()+","+a.root.getPaddingBottom(),a.pageScroll.canScrollVertically(1));
                 for(View v:new View[]{a.liveScreen.inputButton,a.outputButton,a.liveScreen.micButton,a.liveScreen.monitorToggle,a.liveScreen.backingPlayButton,a.recButton})touchTarget(a,v);
                 for(View v:new View[]{a.liveScreen.inputButton,a.outputButton,a.liveScreen.display,a.liveScreen.backingPlayButton,a.liveScreen.detailsButton}) {
                     Rect visible=new Rect(); assertTrue("Essential live control visible",v.getGlobalVisibleRect(visible));
