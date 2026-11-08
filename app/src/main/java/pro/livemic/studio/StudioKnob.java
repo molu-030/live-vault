@@ -44,7 +44,7 @@ final class StudioKnob extends View {
         touchSlop=ViewConfiguration.get(context).getScaledTouchSlop();
         value=clamp(initial);setFocusable(true);setClickable(true);updateDescription();
     }
-    /** A fixed-height main-screen dial with a separate, readable LCD value. */
+    /** A fixed-height main-screen dial with a readable value beneath it. */
     StudioKnob compact(){compact=true;requestLayout();invalidate();return this;}
     private float dp(float n){return n*getResources().getDisplayMetrics().density;}
     private float sp(float n){return n*getResources().getDisplayMetrics().scaledDensity;}
@@ -100,19 +100,28 @@ final class StudioKnob extends View {
         double angle=Math.toRadians(135+270*fraction());float ux=(float)Math.cos(angle),uy=(float)Math.sin(angle);
         paint.setStrokeWidth(dp(3));paint.setStrokeCap(Paint.Cap.ROUND);paint.setColor(0xffdce99a);
         canvas.drawLine(cx+ux*face*.58f,cy+uy*face*.58f,cx+ux*face*.84f,cy+uy*face*.84f,paint);
-        // A wide inset and a separate unit line preserve legibility at larger font sizes.
-        float insetWidth=face*.78f,insetHeight=face*.52f;
-        bounds.set(cx-insetWidth,cy-insetHeight,cx+insetWidth,cy+insetHeight);
-        paint.setColor(0xff18232b);canvas.drawRoundRect(bounds,dp(7),dp(7),paint);
-        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(1));paint.setColor(0xff73838c);canvas.drawRoundRect(bounds,dp(7),dp(7),paint);paint.setStyle(Paint.Style.FILL);
+        // Let the value sit directly on the face, scaling with the dial on tablets.
         String display=formatter.value(value).trim(),number=display,unit="";
         java.util.regex.Matcher match=VALUE_PARTS.matcher(display);
         if(match.matches()){number=match.group(1);unit=match.group(2);}
         text.setTypeface(StudioTheme.mono(getContext()));text.setColor(0xfff3f7f8);text.setTextAlign(Paint.Align.CENTER);
-        text.setTextSize(sp(15));Paint.FontMetrics fm=text.getFontMetrics();
-        float baseline=unit.isEmpty()?cy-(fm.ascent+fm.descent)/2:cy-dp(1);
-        canvas.drawText(number,cx,baseline,text);
-        if(!unit.isEmpty()){text.setTextSize(sp(10));text.setColor(0xffcad7de);Paint.FontMetrics um=text.getFontMetrics();canvas.drawText(unit,cx,baseline+Math.min(insetHeight*.8f,-um.ascent+dp(1)),text);}
+        float valueSize=sp(Math.max(15,Math.min(34,face/getResources().getDisplayMetrics().density*.34f)));
+        float valueWidth=face*1.1f;
+        text.setTextSize(valueSize);
+        if(unit.isEmpty()||text.measureText(display)<=valueWidth){
+            Paint.FontMetrics fm=text.getFontMetrics();
+            canvas.drawText(display,cx,cy-(fm.ascent+fm.descent)/2,text);
+        }else{
+            // Keep longer millisecond/second values clear of the position marker.
+            Paint.FontMetrics fm=text.getFontMetrics();
+            float numberHeight=fm.descent-fm.ascent;
+            float unitSize=sp(Math.max(10,Math.min(16,face/getResources().getDisplayMetrics().density*.18f)));
+            text.setTextSize(unitSize);Paint.FontMetrics um=text.getFontMetrics();
+            float unitHeight=um.descent-um.ascent,gap=dp(1);
+            float top=cy-(numberHeight+gap+unitHeight)/2;
+            text.setTextSize(valueSize);canvas.drawText(number,cx,top-fm.ascent,text);
+            text.setTextSize(unitSize);canvas.drawText(unit,cx,top+numberHeight+gap-um.ascent,text);
+        }
         text.setTextAlign(Paint.Align.LEFT);
     }
     private void drawCompact(Canvas canvas){
@@ -131,9 +140,8 @@ final class StudioKnob extends View {
         double angle=Math.toRadians(135+270*fraction());
         paint.setColor(0xffe0e9ad);paint.setStrokeWidth(dp(3));
         canvas.drawLine(cx+(float)Math.cos(angle)*face*.42f,cy+(float)Math.sin(angle)*face*.42f,cx+(float)Math.cos(angle)*face*.83f,cy+(float)Math.sin(angle)*face*.83f,paint);
-        String display=formatter.value(value);text.setTypeface(StudioTheme.mono(getContext()));text.setTextSize(sp(12));text.setColor(0xffedf3cf);
+        String display=formatter.value(value);text.setTypeface(StudioTheme.mono(getContext()));text.setTextSize(sp(12));text.setColor(0xfff3f7f8);
         float base=getHeight()-dp(3)-text.getFontMetrics().descent;
-        bounds.set(cx-dp(31),base+text.getFontMetrics().ascent-dp(2),cx+dp(31),getHeight()-dp(1));paint.setColor(0xff151e20);canvas.drawRoundRect(bounds,dp(4),dp(4),paint);
         canvas.drawText(display,cx,base,text);text.setTextAlign(Paint.Align.LEFT);
         if(isFocused()){paint.setColor(StudioTheme.ACCENT);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(1));bounds.set(dp(1),dp(1),getWidth()-dp(1),getHeight()-dp(1));canvas.drawRoundRect(bounds,dp(8),dp(8),paint);paint.setStyle(Paint.Style.FILL);}
     }
