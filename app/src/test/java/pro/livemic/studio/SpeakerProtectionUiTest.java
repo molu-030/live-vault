@@ -24,6 +24,7 @@ public class SpeakerProtectionUiTest {
         AudioService.playbackActive=false;
         AudioService.echoStatus=AudioRouting.EchoStatus.OFF;
         StudioScreenshotTest.Audio.feedbackReductionDb=0;
+        StudioScreenshotTest.Audio.inputProfile=0;
         StudioScreenshotTest.Audio.supplied=new float[22];
         a=Robolectric.buildActivity(MainActivity.class).setup().get();
         a.handler.removeCallbacks(a.tick);
@@ -40,6 +41,7 @@ public class SpeakerProtectionUiTest {
         AudioService.active=false;
         AudioService.echoStatus=AudioRouting.EchoStatus.OFF;
         StudioScreenshotTest.Audio.feedbackReductionDb=0;
+        StudioScreenshotTest.Audio.inputProfile=0;
         StudioScreenshotTest.Audio.supplied=null;
         AppLanguage.set(a,false);
     }
@@ -56,6 +58,23 @@ public class SpeakerProtectionUiTest {
             Switch found=echoSwitch(((ViewGroup)v).getChildAt(i));if(found!=null)return found;
         }
         return null;
+    }
+
+    @Test public void settingsReportActualInputProfileSeparatelyFromAecAndExplainReentry() {
+        AppLanguage.set(a,true);
+        AudioService.active=true;AudioService.echoStatus=AudioRouting.EchoStatus.UNAVAILABLE;
+        StudioScreenshotTest.Audio.inputProfile=3;
+        a.chooseTab(6);
+        String page=text(a.page);
+        assertTrue(page.contains("Speaker echo-control input"));
+        assertTrue(page.contains("AEC): Unavailable"));
+        assertTrue(page.contains("Digital backing bypasses vocal effects"));
+        assertTrue(page.contains("does not guarantee complete separation"));
+        StudioScreenshotTest.Audio.inputProfile=1;
+        assertTrue(a.protectionStatus().contains("Voice recognition input"));
+        assertFalse(a.protectionStatus().contains("Speaker echo-control input"));
+        StudioScreenshotTest.Audio.inputProfile=0;
+        assertTrue(a.protectionStatus().contains("Input profile unverified"));
     }
 
     @Test public void actualAecStateIsIndependentOfPreferenceInBothLanguages() {

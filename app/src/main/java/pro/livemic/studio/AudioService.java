@@ -364,6 +364,7 @@ public class AudioService extends Service {
                         routing = new AudioRouting(this, 0, false);
                         routing.prepare();
                     }
+                    EchoInputProfile.configure(this);
                     if (!NativeAudio.startPlayback(routing.output, routing.mode)) {
                         throw new IllegalStateException(AppLanguage.text(AudioService.this, "반주 출력 장치를 열지 못했습니다.", "Could not open the backing output device."));
                     }
@@ -472,6 +473,7 @@ public class AudioService extends Service {
                 routing = next;
                 routing.prepare();
                 NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts" + routing.mode, 2));
+                EchoInputProfile.configure(this);
                 if (!NativeAudio.reroute(routing.input, routing.output, routing.mode, wasActive)) {
                     throw new IllegalStateException(AppLanguage.text(this, "선택한 오디오 장치를 열지 못했습니다.", "Could not open the selected audio device."));
                 }
@@ -498,6 +500,7 @@ public class AudioService extends Service {
                     try {
                         previous.prepare();
                         NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts" + previous.mode, 2));
+                        EchoInputProfile.configure(this);
                         restored = NativeAudio.reroute(previous.input, previous.output, previous.mode, wasActive);
                         if (restored) {
                             AudioRouting.refreshFeedbackProtection(this);
@@ -552,6 +555,7 @@ public class AudioService extends Service {
                     routing.prepare();
                 }
                 NativeAudio.bufferBursts(AudioRouting.prefs(this).getInt("bursts" + routing.mode, 2));
+                EchoInputProfile.configure(this);
                 active = NativeAudio.start(routing.input, routing.output, routing.mode);
                 if (!active) {
                     throw new IllegalStateException(AppLanguage.text(

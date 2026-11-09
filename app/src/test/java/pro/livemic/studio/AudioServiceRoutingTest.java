@@ -52,6 +52,15 @@ public class AudioServiceRoutingTest {
    countdown.cancel();RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.pendingMicOnly=false;AudioService.youtubeSelected=false;
   }
  }
+ @Test public void everyStreamStartAndRouteRollbackRefreshesEchoInputConfiguration(){
+  int configurations=StudioScreenshotTest.Audio.echoInputConfigurations;
+  action(AudioService.PLAYBACK);assertEquals(++configurations,StudioScreenshotTest.Audio.echoInputConfigurations);
+  action("start mic");assertEquals(++configurations,StudioScreenshotTest.Audio.echoInputConfigurations);
+  action(AudioService.ROUTE);assertEquals(++configurations,StudioScreenshotTest.Audio.echoInputConfigurations);
+  StudioScreenshotTest.Audio.rerouteResults.add(false);StudioScreenshotTest.Audio.rerouteResults.add(true);
+  action(AudioService.ROUTE);configurations+=2;assertEquals(configurations,StudioScreenshotTest.Audio.echoInputConfigurations);
+  assertTrue(AudioService.active);
+ }
  @Test public void playbackRouteNeverStartsMicrophone(){action(AudioService.PLAYBACK);assertTrue(AudioService.playbackActive);assertEquals(1,StudioScreenshotTest.Audio.playbackStarts);assertEquals(0,StudioScreenshotTest.Audio.microphoneStarts);clearSpies();action(AudioService.ROUTE);assertEquals(Collections.singletonList(false),StudioScreenshotTest.Audio.rerouteMic);assertEquals(0,StudioScreenshotTest.Audio.microphoneStarts);assertFalse(AudioService.active);assertTrue(AudioService.playbackActive);}
  @Test public void activeRouteRestoresOnlyActualSafeMonitoring(){
   wired();action("start mic");assertTrue(AudioService.active);float[] stats=StudioScreenshotTest.Audio.supplied;stats[21]=1;stats[17]=0;clearSpies();action(AudioService.ROUTE);assertEquals(Collections.singletonList(true),StudioScreenshotTest.Audio.rerouteMic);assertEquals(Arrays.asList(false,true),StudioScreenshotTest.Composer.monitorCalls);assertEquals(1,StudioScreenshotTest.Audio.changes.get(StudioScreenshotTest.Audio.changes.size()-1)[1],0);

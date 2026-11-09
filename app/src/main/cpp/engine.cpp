@@ -3,6 +3,7 @@
 #include "record_alignment.h"
 #include "local_seek.h"
 #include "input_resampler.h"
+#include "echo_input_profile.h"
 #include <aaudio/AAudio.h>
 #include <jni.h>
 #include <android/log.h>
@@ -84,6 +85,9 @@ public:
     std::atomic<bool> localBusy{false};
     LocalSeek localSeek;
     InputResampler inputResampler;
+    std::mutex echoInputControl;
+    EchoInputProfile echoInputConfig;
+    std::atomic<int> inputProfile{0};
 
     Engine() {
         float defaults[] = {1, .55f, .27f, 2.2f, .14f, 280, .25f, 0, 0, 1, 1, 0, 0, 0, 0, 78, 0, 0, 0, 1};
@@ -221,28 +225,49 @@ public:
 
     bool openMicrophone(int device, int mode) {
         if (input) return true;
+        EchoInputProfile profile;
+        {
+            std::lock_guard<std::mutex> lock(echoInputControl);
+            profile = echoInputConfig;
+        }
+        bool speakerEcho = mode == 0 && output && profile.useFor(device, AAudioStream_getDeviceId(output));
+        bool communication = mode > 0 || speakerEcho;
         AAudioStreamBuilder* b = nullptr;
         AAudio_createStreamBuilder(&b);
         AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_INPUT);
         AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
         AAudioStreamBuilder_setChannelCount(b, 1);
         AAudioStreamBuilder_setSampleRate(b, sr);
-        AAudioStreamBuilder_setPerformanceMode(b, mode > 0 ? AAUDIO_PERFORMANCE_MODE_NONE : AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
-        AAudioStreamBuilder_setInputPreset(b, mode > 0 ? AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION : AAUDIO_INPUT_PRESET_VOICE_RECOGNITION);
+        AAudioStreamBuilder_setPerformanceMode(b, communication ? AAUDIO_PERFORMANCE_MODE_NONE : AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+        AAudioStreamBuilder_setInputPreset(b, communication ? AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION : AAUDIO_INPUT_PRESET_VOICE_RECOGNITION);
         AAudioStreamBuilder_setSessionId(b, AAUDIO_SESSION_ID_ALLOCATE);
         if (device > 0) AAudioStreamBuilder_setDeviceId(b, device);
         AAudioStreamBuilder_setErrorCallback(b, error, this);
 
-        auto result = AAudioStreamBuilder_openStream(b, &input);
-        if (result != AAUDIO_OK) {
-            AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_NONE);
-            AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
-            result = AAudioStreamBuilder_openStream(b, &input);
-        }
-        if (result != AAUDIO_OK) {
-            AAudioStreamBuilder_setSampleRate(b, 0);
-            AAudioStreamBuilder_setChannelCount(b, 0);
-            result = AAudioStreamBuilder_openStream(b, &input);
+        auto openInput = [&]() {
+            auto result = AAudioStreamBuilder_openStream(b, &input);
+            if (result != AAUDIO_OK) {
+                AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_NONE);
+                AAudioStreamBuilder_setSharingMode(b, AAUDIO_SHARING_MODE_SHARED);
+                result = AAudioStreamBuilder_openStream(b, &input);
+            }
+            if (result != AAUDIO_OK) {
+                AAudioStreamBuilder_setSampleRate(b, 0);
+                AAudioStreamBuilder_setChannelCount(b, 0);
+                result = AAudioStreamBuilder_openStream(b, &input);
+            }
+            return result;
+        };
+        auto result = openInput();
+        // A default input may change after device enumeration. Do not keep the
+        // special preset if the opened microphone cannot be verified as built-in.
+        if (speakerEcho && (result != AAUDIO_OK || !profile.builtinMicrophone(AAudioStream_getDeviceId(input)))) {
+            if (input) AAudioStream_close(input);
+            input = nullptr;
+            speakerEcho = false;
+            AAudioStreamBuilder_setInputPreset(b, AAUDIO_INPUT_PRESET_VOICE_RECOGNITION);
+            AAudioStreamBuilder_setPerformanceMode(b, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+            result = openInput();
         }
         AAudioStreamBuilder_delete(b);
 
@@ -278,11 +303,15 @@ public:
             fault = result;
             return false;
         }
+        int actualPreset = AAudioStream_getInputPreset(input);
+        inputProfile = actualPreset == AAUDIO_INPUT_PRESET_VOICE_RECOGNITION ? 1
+                : actualPreset == AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION ? (speakerEcho ? 3 : 2) : 0;
         publishedInput.store(input, std::memory_order_release);
         return true;
     }
 
     void microphoneOff(bool preserve = false) {
+        inputProfile = 0;
         publishedInput.store(nullptr, std::memory_order_release);
         params[11] = 0;
         if (!preserve) harmony.disable();
@@ -868,6 +897,28 @@ JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_pushPlayback(JNIEnv* 
     size_t n = engine.playback.push(buffer.data(), count);
     if (n < size_t(count) && engine.recording) engine.overflow = true;
     return n;
+}
+
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_configureEchoInput(
+        JNIEnv* env, jclass, jboolean enabled, jintArray speakers, jintArray microphones, jboolean defaultSafe) {
+    EchoInputProfile config;
+    config.enabled = enabled;
+    config.defaultInputSafe = defaultSafe;
+    auto readIds = [env](jintArray values) {
+        std::vector<int> ids;
+        if (values) {
+            ids.resize(env->GetArrayLength(values));
+            if (!ids.empty()) env->GetIntArrayRegion(values, 0, ids.size(), ids.data());
+        }
+        return ids;
+    };
+    config.speakers = readIds(speakers);
+    config.microphones = readIds(microphones);
+    std::lock_guard<std::mutex> lock(engine.echoInputControl);
+    engine.echoInputConfig = std::move(config);
+}
+JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputProfile(JNIEnv*, jclass) {
+    return engine.inputProfile.load();
 }
 
 JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputSession(JNIEnv*, jclass) {

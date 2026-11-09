@@ -15,6 +15,9 @@ public final class NativeAudio {
     public static native void guideTone(float frequency);
     public static native float[] pitchFrame();
     public static native int inputSession();
+    public static native void configureEchoInput(boolean supportedAndPreferred, int[] builtinSpeakerIds, int[] builtinMicIds, boolean defaultInputSafe);
+    /** 0: inactive/unknown, 1: voice recognition, 2: communication, 3: verified built-in speaker echo-control input. */
+    public static native int inputProfile();
     public static native int outputDevice();
     public static native void feedbackProtection(boolean riskyOutput);
     public static native void monitorLevel(float level);

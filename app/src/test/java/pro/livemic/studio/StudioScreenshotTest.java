@@ -46,7 +46,11 @@ public class StudioScreenshotTest {
   @Implementation protected static boolean bufferBursts(int n){burstCalls.add(n);return true;}
   @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
   @Implementation protected static int inputSession(){inputSessions++;return 0;}
-  static int actualOutputDevice,feedbackResets;
+  static int actualOutputDevice,feedbackResets,inputProfile,echoInputConfigurations;
+  static boolean echoInputSupported,echoDefaultSafe;
+  static int[] echoSpeakers=new int[0],echoMicrophones=new int[0];
+  @Implementation protected static int inputProfile(){return inputProfile;}
+  @Implementation protected static void configureEchoInput(boolean enabled,int[] speakers,int[] microphones,boolean defaultSafe){echoInputConfigurations++;echoInputSupported=enabled;echoSpeakers=speakers.clone();echoMicrophones=microphones.clone();echoDefaultSafe=defaultSafe;}
   static float feedbackReductionDb;
   @Implementation protected static float feedbackReductionDb(){return feedbackReductionDb;}
   static final java.util.List<Boolean> feedbackProtectionCalls=new java.util.ArrayList<>();

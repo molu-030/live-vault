@@ -1,0 +1,54 @@
+{
+  "method": "Full run followed by latest replacement of five input/routing/AEC/UI classes; not a single all-pass full execution.",
+  "full": {
+    "tests": 267,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 0
+  },
+  "final_scoped": {
+    "tests": 40,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "latest_unique": {
+    "tests": 267,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "scoped_classes": {
+    "pro.livemic.studio.AecStatusTest": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.EchoInputProfileTest": {
+      "tests": 3,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.AudioServiceRoutingTest": {
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.SpeakerProtectionUiTest": {
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "pro.livemic.studio.AudioRoutingTest": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "device_verified": false
+}

@@ -1117,6 +1117,7 @@ public class MainActivity extends Activity {
             }
         });
         add(echoSw);
+        note(tr("디지털 반주는 보컬 효과를 우회하지만 스피커에서 마이크로 재유입된 소리에는 효과가 적용됩니다. AEC 활성도 완전 분리를 보장하지 않습니다.", "Digital backing bypasses vocal effects; speaker sound returning through the mic receives them. Active AEC does not guarantee complete separation."));
 
 
         add(text(tr("출력 버퍼", "Output buffer"), 16, TEXT));
@@ -1496,10 +1497,19 @@ public class MainActivity extends Activity {
                 ? tr("보호감쇠 -", "Protection -") + Math.round(db) + "dB" : "";
     }
 
+    String inputProfileStatus() {
+        switch (NativeAudio.inputProfile()) {
+            case 1: return tr("음성 인식 입력", "Voice recognition input");
+            case 2: return tr("음성 통신 입력", "Voice communication input");
+            case 3: return tr("내장 스피커 에코 제어 입력", "Speaker echo-control input");
+            default: return tr("입력 프로필 미확인", "Input profile unverified");
+        }
+    }
+
     String protectionStatus() {
         String reduction = AudioService.active ? feedbackReductionLabel() : "";
         return tr("기기 에코 제거(AEC): ", "Device echo cancellation (AEC): ")
-                + deviceEchoStatus() + (reduction.isEmpty() ? "" : " · " + reduction);
+                + deviceEchoStatus() + " · " + inputProfileStatus() + (reduction.isEmpty() ? "" : " · " + reduction);
     }
 
     void monitoringOptions() {
