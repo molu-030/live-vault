@@ -1,0 +1,24 @@
+PASS bounded certificate hidden slot, intervening-write invalidation, NaN
+PASS 44100Hz fb=-0.7 6s reverb/1.9s echo sparse/resume/reinit maxError=2.83348e-20 retiredSec=40.0632 maxScanSlotsPer512=256 callbackAllocations=0
+PASS 44100Hz fb=0.7 6s reverb/1.9s echo sparse/resume/reinit maxError=2.71851e-19 retiredSec=196.825 maxScanSlotsPer512=256 callbackAllocations=0
+PASS 48000Hz fb=-0.7 6s reverb/1.9s echo sparse/resume/reinit maxError=3.34092e-20 retiredSec=39.8228 maxScanSlotsPer512=256 callbackAllocations=0
+PASS 48000Hz fb=0.7 6s reverb/1.9s echo sparse/resume/reinit maxError=2.69149e-19 retiredSec=196.813 maxScanSlotsPer512=256 callbackAllocations=0
+PASS denormal retirement, NaN state/config and out-of-range gain admission
+HOST benchmark active voice tick reference CPU512us mean=51.606 p50=46.227 p99=144.983 max=433.671 wallMax=434.398 maxScanSlots=0 (host only; wall includes scheduling)
+HOST benchmark active voice process CPU512us mean=51.7629 p50=46.268 p99=148.405 max=450.326 wallMax=451.117 maxScanSlots=0 (host only; wall includes scheduling)
+HOST benchmark pristine idle tick reference CPU512us mean=174.485 p50=151.457 p99=472.961 max=3389.4 wallMax=3391.53 maxScanSlots=0 (host only; wall includes scheduling)
+HOST benchmark pristine idle process CPU512us mean=3.0288 p50=2.749 p99=2.771 max=153.618 wallMax=154.351 maxScanSlots=0 (host only; wall includes scheduling)
+HOST benchmark late tail/certificate tick reference CPU512us mean=289.487 p50=256.244 p99=601.081 max=3165.66 wallMax=3167.34 maxScanSlots=0 (host only; wall includes scheduling)
+HOST benchmark late tail/certificate process CPU512us mean=188.727 p50=270.112 p99=1083.77 max=2648.01 wallMax=2649.92 maxScanSlots=256 (host only; wall includes scheduling)
+PASS: local seek bounds, invalid input, latest request and clearing
+PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail
+PASS: stereo Haas echo and delay modulation stability
+PASS: noise reduction suppresses quiet signal while preserving voiced signal
+PASS: silence stability, growing-tone suppression, overload mute and explicit reset
+PASS: captured stereo gain, underflow silence, disabled capture drain, fresh-session isolation
+PASS: 44100Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=2.01509e-21
+PASS: 44100Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.3451e-23
+PASS: 44100Hz reinit retains existing EQ state and remains sample-identical on silence/resume
+PASS: 48000Hz short echo pristine idle,6s reverb+echo tail,resume equivalence maxError=1.81763e-21
+PASS: 48000Hz 1.9s echo pristine idle,6s reverb+echo tail,resume equivalence maxError=6.34568e-23
+PASS: 48000Hz reinit retains existing EQ state and remains sample-identical on silence/resume

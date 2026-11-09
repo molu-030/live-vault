@@ -107,7 +107,7 @@ public class YouTubePlayerTest {
     }
     @Test public void youtubeRecordingUsesMicOnlyAndNativeSourcesKeepNormalMixAndSync() {
         StudioScreenshotTest.Audio.supplied=new float[22];StudioScreenshotTest.Audio.supplied[10]=1;
-        RecordingManager.syncMs=85;
+        RecordingSyncProfiles.saveResolved(a,RecordingSyncProfiles.current(a),85);
         for(boolean youtube:new boolean[]{false,true,false}) {
             RecordingManager.active=false;AudioService.youtubeSelected=youtube;
             StudioScreenshotTest.Audio.micOnlyCalls.clear();StudioScreenshotTest.Audio.syncCalls.clear();

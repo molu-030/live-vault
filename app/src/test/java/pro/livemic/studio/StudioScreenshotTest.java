@@ -66,6 +66,17 @@ public class StudioScreenshotTest {
   @Implementation protected static void recordMicOnly(boolean enabled){micOnlyCalls.add(enabled);}
   @Implementation protected static void recordSync(int milliseconds){syncCalls.add(milliseconds);}
   @Implementation protected static boolean beginRecord(String path){return true;}
+  @Implementation protected static boolean beginRecordSources(String mix,String raw,String fixed){return NativeAudio.beginRecord(mix);}
+  @Implementation protected static boolean recordSourcesValid(){return false;}
+  @Implementation protected static boolean recordSourcesEditable(){return false;}
+  @Implementation protected static boolean renderTakeSources(String raw,String fixed,String output,float[] values,int sync){return false;}
+  @Implementation protected static void cancelTakeRender(){}
+  @Implementation protected static void recentVoiceEnabled(boolean enabled){}
+  @Implementation protected static int recentVoiceSeconds(){return -1;}
+  @Implementation protected static long saveRecentVoice(String path){return -1;}
+  @Implementation protected static boolean commitRecentVoice(long token){return false;}
+  static int actualInputDevice;
+  @Implementation protected static int inputDevice(){return actualInputDevice;}
  }
  @org.robolectric.annotation.internal.DoNotInstrument
  @Implements(value=NativeComposer.class,isInAndroidSdk=false)

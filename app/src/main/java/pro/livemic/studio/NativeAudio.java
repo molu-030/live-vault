@@ -15,6 +15,16 @@ public final class NativeAudio {
     public static native void guideTone(float frequency);
     public static native float[] pitchFrame();
     public static native int inputSession();
+    public static native int inputDevice();
+    public static native boolean beginRecordSources(String mix,String raw,String fixed);
+    public static native boolean recordSourcesValid();
+    public static native boolean recordSourcesEditable();
+    public static native boolean renderTakeSources(String raw,String fixed,String output,float[] values,int syncMs);
+    public static native void cancelTakeRender();
+    public static native void recentVoiceEnabled(boolean enabled);
+    public static native int recentVoiceSeconds();
+    public static native long saveRecentVoice(String rawPath);
+    public static native boolean commitRecentVoice(long snapshotToken);
     public static native void configureEchoInput(boolean supportedAndPreferred, int[] builtinSpeakerIds, int[] builtinMicIds, boolean defaultInputSafe);
     /** 0: inactive/unknown, 1: voice recognition, 2: communication, 3: verified built-in speaker echo-control input. */
     public static native int inputProfile();

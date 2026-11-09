@@ -13,5 +13,7 @@ if [[ "${SANITIZE:-0}" == 1 ]]; then
 fi
 "${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" tests/echo_input_profile_test.cpp -o "$TASK_AUDIO_BUS_DIR/profile-test"
 "$TASK_AUDIO_BUS_DIR/profile-test"
+"${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" tests/take_sources_test.cpp -o "$TASK_AUDIO_BUS_DIR/source-test"
+"$TASK_AUDIO_BUS_DIR/source-test" "$TASK_AUDIO_BUS_DIR"
 "${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" tests/audio_bus_render_test.cpp -o "$TASK_AUDIO_BUS_DIR/test"
 "$TASK_AUDIO_BUS_DIR/test" "$TASK_AUDIO_BUS_DIR" app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2

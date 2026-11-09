@@ -31,7 +31,7 @@ public final class TakeStore {
     }
 
     private void recover() {
-        File[] files = directory.listFiles((d, n) -> n.endsWith(".wav"));
+        File[] files = directory.listFiles((d, n) -> n.endsWith(".wav") && !n.endsWith(".raw.wav") && !n.endsWith(".fixed.wav"));
         if (files == null) return;
         for (File f : files) {
             String id = f.getName().replace(".wav", "");
@@ -141,7 +141,7 @@ public final class TakeStore {
     }
 
     public void delete(String id) {
-        for (String ext : new String[]{".wav", ".mid", ".mp4", ".json", ".video.mp4", ".aac.m4a", ".mp4.pending.mp4"}) {
+        for (String ext : new String[]{".wav", ".mid", ".mp4", ".json", ".video.mp4", ".aac.m4a", ".mp4.pending.mp4", ".raw.wav", ".fixed.wav"}) {
             new File(directory, id + ext).delete();
         }
     }

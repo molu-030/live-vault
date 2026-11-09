@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <utility>
+#include "bounded_tail.h"
 namespace lm {
 constexpr double PI=3.14159265358979323846;
 inline float hz(int midi) { return 440.f*std::pow(2.f,(midi-69)/12.f); }
@@ -133,7 +135,12 @@ public:
         }
     }
 
-    float tick(float x, float decay, int type) {
+    std::pair<const float*, size_t> tailSpan(size_t i) const {
+        if (i < NUM_COMBS) return {combLines[i].data(), combLines[i].size()};
+        const auto& line = allpassLines[i - NUM_COMBS];
+        return {line.data(), line.size()};
+    }
+    float tick(float x, float decay, int type, bool* quietWrites = nullptr) {
         if (decay != cachedDecay || type != cachedType) {
             cachedDecay = decay;
             cachedType = type;
@@ -150,6 +157,8 @@ public:
             float out = line[pos];
             combFilter[i] = out * (1.f - damping) + combFilter[i] * damping + 1e-25f;
             line[pos] = x * 0.125f + combFilter[i] * combFeedback[i];
+            if (quietWrites && *quietWrites)
+                *quietWrites = BoundedTail::quiet(line[pos]) && BoundedTail::quiet(combFilter[i]);
             if (++pos >= line.size()) pos = 0;
             sum += out;
         }
@@ -161,6 +170,7 @@ public:
             size_t& pos = allpassPos[i];
             float buf = line[pos];
             line[pos] = ap + buf * 0.5f + 1e-25f;
+            if (quietWrites && *quietWrites) *quietWrites = BoundedTail::quiet(line[pos]);
             ap = buf - ap * 0.5f;
             if (++pos >= line.size()) pos = 0;
         }
@@ -177,12 +187,15 @@ class DSP {
     float currentOffset = 1000.f, compTarget = 1.f, compGain = 1.f;
     uint32_t compCounter = 0;
     bool signalIdle = true;
+    bool tailConfigurationSafe = true;
+    BoundedTail tail;
     float hpX = 0, hpY = 0, envelope = 0, delayToneL = 0, delayToneR = 0;
     int sr = 48000;
     float cachedLow = 999, cachedMid = 999, cachedHigh = 999;
 public:
     void init(int rate) {
         sr = rate;
+        tail.init();
         left.init(sr, 0);
         right.init(sr, 1);
         preDelay.assign(std::max(1, int(sr * 0.015f)), 0.f);
@@ -200,31 +213,43 @@ public:
     }
 
     void configure(const float* p) {
+        tailConfigurationSafe = true;
+        for (int i = 0; i < 20; ++i) tailConfigurationSafe = tailConfigurationSafe && std::isfinite(p[i]);
+        // Leave unusual/corrupt finite gains on the full path: the certificate's
+        // numerical error margin assumes bounded mixes and the supported EQ range.
+        tailConfigurationSafe = tailConfigurationSafe && std::abs(p[0]) <= 4.f
+                && std::abs(p[2]) <= 4.f && std::abs(p[4]) <= 4.f
+                && std::abs(p[7]) <= 12.f && std::abs(p[8]) <= 12.f && std::abs(p[9]) <= 12.f
+                && p[18] >= 0.f && p[18] <= 3.f;
         if (p[7] != cachedLow) { low.set(0, p[7], 180, sr); cachedLow = p[7]; }
         if (p[8] != cachedMid) { mid.set(1, p[8], 1400, sr); cachedMid = p[8]; }
         if (p[9] != cachedHigh) { high.set(2, p[9], 6500, sr); cachedHigh = p[9]; }
     }
 
     bool idle() const { return signalIdle; }
-    // A new stream with no nonzero input has no vocal effects to calculate.
-    // After the first input, stay awake until init(): this preserves every tail
-    // without scanning delay buffers or introducing callback work spikes.
+    size_t tailInspected() const { return tail.inspected(); }
+    // Retirement requires a complete bounded certificate over all ring contents
+    // with no nonquiet writes during that certificate, plus quiet scalar state.
+    // 1e-18 is far below the 1e-12 equivalence tolerance even after the reverb's
+    // parallel comb sum and four allpasses. No ring is cleared on the callback.
     // Monitoring flags never gate processing needed for recordings or loops.
     void process(float input, const float* p, float& l, float& r) {
-        if (signalIdle && input == 0.f) {
+        if (signalIdle && input == 0.f && tailConfigurationSafe) {
             // Preserve delay-time smoothing and compressor cadence while asleep.
             float target = std::clamp(p[5] * sr / 1000.f, 1.f, float(delay.size() - 2));
             currentOffset += (target - currentOffset) * .005f;
-            ++compCounter;
+            if ((compCounter++ & 15) == 0) compTarget = 1.f;
+            compGain += (compTarget - compGain) * .02f;
             if (++di >= delay.size()) di = 0;
+            if (++prePos >= preDelay.size()) prePos = 0;
             l = r = 0.f;
             return;
         }
         signalIdle = false;
-        tick(input, p, l, r);
+        tick(input, p, l, r, true);
     }
 
-    void tick(float input, const float* p, float& l, float& r) {
+    void tick(float input, const float* p, float& l, float& r, bool certifyTail = false) {
         float x = input - hpX + 0.990f * hpY;
         hpX = input;
         hpY = x;
@@ -271,12 +296,27 @@ public:
         preDelay[prePos] = x;
         prePos = (prePos + 1) % preDelay.size();
 
-        float revL = left.tick(preOut, p[3], int(p[18]));
-        float revR = right.tick(preOut, p[3], int(p[18]));
+        bool quietWrites = certifyTail && tailConfigurationSafe && input == 0.f
+                && BoundedTail::quiet(hpX) && BoundedTail::quiet(hpY)
+                && BoundedTail::quiet(low.z1) && BoundedTail::quiet(low.z2)
+                && BoundedTail::quiet(mid.z1) && BoundedTail::quiet(mid.z2)
+                && BoundedTail::quiet(high.z1) && BoundedTail::quiet(high.z2)
+                && BoundedTail::quiet(envelope) && BoundedTail::quiet(x)
+                && BoundedTail::quiet(delayToneL) && BoundedTail::quiet(delayToneR)
+                && BoundedTail::quiet(delay[(di + delay.size() - 1) % delay.size()]);
+        bool* probe = quietWrites ? &quietWrites : nullptr;
+        float revL = left.tick(preOut, p[3], int(p[18]), probe);
+        float revR = right.tick(preOut, p[3], int(p[18]), probe);
 
         float dryMix = 1.f - p[2] * 0.25f;
         l = x * dryMix + revL * p[2] + delayToneL * p[4];
         r = x * dryMix + revR * p[2] + delayToneR * p[4];
+        if (certifyTail && tail.step(quietWrites, 26, [&](size_t span) {
+                if (span < 12) return left.tailSpan(span);
+                if (span < 24) return right.tailSpan(span - 12);
+                const auto& line = span == 24 ? delay : preDelay;
+                return std::pair<const float*, size_t>{line.data(), line.size()};
+            })) signalIdle = true;
     }
 };
 inline std::vector<uint8_t> midiFile(const std::vector<Note>& notes,int bpm){

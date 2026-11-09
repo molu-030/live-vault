@@ -574,7 +574,6 @@ public class AudioService extends Service {
             }
             if (requested) {
                 message = "";
-                RecordingManager.syncMs = AudioRouting.prefs(this).getInt("sync" + AudioRouting.selected(this), 0);
                 pendingMicOnly = youtubeSelected || intent.getBooleanExtra("micOnly", false);
                 pendingTempo = Math.max(40, Math.min(240, intent.getIntExtra("bpm", 78)));
                 if (external) {

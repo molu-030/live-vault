@@ -1158,7 +1158,15 @@ public class MainActivity extends Activity {
         note(tr("표시는 실제 적용된 출력 버퍼입니다. 장치가 요청값을 제한할 수 있습니다.", "The display shows the applied output buffer. The device may limit the requested value."));
 
         add(text(tr("녹음 싱크 보정", "Recording sync adjustment"), 16, TEXT));
-        int offset = AudioRouting.prefs(this).getInt("sync" + mode, 0);
+        RecordingSyncProfiles.Profile syncProfile = RecordingSyncProfiles.current(this);
+        note(tr("현재 보정 프로필: ", "Current adjustment profile: ") + syncProfile.label);
+        if (!syncProfile.confirmed) note(tr("입력 또는 출력 경로가 미확정입니다. 조절값은 이 미확정 프로필에만 저장되며, 실제 장치 확인 후에는 별도 장치쌍 프로필을 사용합니다. 마이크를 켠 뒤 실제 경로를 확인하세요.", "Input or output is unconfirmed. Adjustments save only to this unconfirmed profile; identifying the devices uses a separate device-pair profile. Turn on the microphone to check the actual route."));
+        TextView syncOrigin = text(syncProfile.inherited
+                ? tr("기존 출력 모드 보정값을 초기값으로 사용합니다. 조절하면 이 장치쌍에만 저장합니다.", "Using the previous output-mode offset as the initial value. Adjusting saves only to this device pair.")
+                : syncProfile.saved ? tr("이 경로에 저장한 수동 보정값입니다.", "Using the manual offset saved for this route.")
+                : tr("저장된 보정값이 없어 0 ms로 시작합니다.", "No saved offset; starting at 0 ms."), 12, MUTED);
+        add(syncOrigin);
+        int offset = syncProfile.offsetMs;
         TextView sync = text(tr("보컬 보정: ", "Vocal offset: ") + offset + " ms", 13, TEXT);
         add(sync);
         SeekBar shift = new SeekBar(this);
@@ -1176,8 +1184,13 @@ public class MainActivity extends Activity {
             public void onProgressChanged(SeekBar b, int v, boolean u) {
                 if (u && !settingsLocked()) {
                     int ms = v * 5 - 500;
-                    AudioRouting.prefs(MainActivity.this).edit().putInt("sync" + mode, ms).apply();
+                    if (!RecordingSyncProfiles.save(MainActivity.this, syncProfile, ms)) {
+                        b.setEnabled(false);
+                        sync.setText(tr("장치 경로가 바뀌었습니다. 화면을 다시 열어 보정하세요.", "The device route changed. Reopen this screen to adjust it."));
+                        return;
+                    }
                     sync.setText(tr("보컬 보정: ", "Vocal offset: ") + ms + " ms");
+                    syncOrigin.setText(tr("이 경로에 저장한 수동 보정값입니다.", "Using the manual offset saved for this route."));
                 }
             }
         });
@@ -1709,6 +1722,7 @@ public class MainActivity extends Activity {
                 MUTED
         );
         panel.addView(details);
+        panel.addView(text(tr("새 녹음은 원음과 고정 믹스를 함께 보존합니다. 48 kHz에서 추가 약 35 MB/분입니다. 원음은 기기 AEC·소음 처리 후이며, 보관함에서 지원되는 테이크의 보컬 효과를 새 복사본으로 편집할 수 있습니다.", "New recordings retain microphone and fixed-mix sources: about 35 MB extra per minute at 48 kHz. Sources follow device AEC/noise processing. Supported takes can be edited as a new copy in Library."),12,MUTED));
 
         TextView gain = text(tr("녹음에 담을 다른 앱 소리: ", "Other app audio in recording: ") + Math.round(captureGain * 100) + "%", 12, TEXT);
         SeekBar slider = new SeekBar(this);
@@ -2290,6 +2304,8 @@ public class MainActivity extends Activity {
         videoPaused = next;
     }
 
+    TakeEffectsEditor takeEffectsEditor;
+
     void library() {
         LinearLayout filters = row();
         StudioButton recFilter = StudioTheme.styled(this, tr("녹음", "Recording"), StudioButton.CHIP, () -> {
@@ -2310,6 +2326,7 @@ public class MainActivity extends Activity {
         }
         add(title(tr("보관함", "Library")));
         note(tr("녹음과 연습을 한곳에", "Recordings and practice in one place"));
+        RecentVoiceRecovery.draw(this);
         if (busy) note(tr("영상에 보컬 오디오를 합치고 있습니다…", "Merging vocal audio into video…"));
 
         List<JSONObject> takes = store.list();
@@ -2346,6 +2363,10 @@ public class MainActivity extends Activity {
             );
             meta.setPadding(0, dp(5), 0, 0);
             copy.addView(meta);
+            if(j.optBoolean("cleanSources")||j.optBoolean("sourceRawRetained")||j.optBoolean("sourceFixedRetained")){
+                long sourceBytes=store.file(id,".raw.wav").length()+store.file(id,".fixed.wav").length();
+                copy.addView(text(String.format(Locale.US,(j.optBoolean("sourceFixed",true)||j.optBoolean("sourceFixedRetained"))?tr("원음·고정 믹스 %.1f MB · ","Sources %.1f MB · "):tr("마이크 원음 %.1f MB · ","Mic source %.1f MB · "),sourceBytes/1000000.0)+(j.optBoolean("sourceEditable")?tr("효과 후편집 지원","FX editing available"):!j.optBoolean("cleanSources")?tr("부분 원음 보존 · 저장 오류로 후편집 불가","Partial sources retained · editing unavailable after save error"):tr("처리·보컬 경로·형식으로 후편집 불가","FX editing unavailable: processing/routing/format")),11,MUTED));
+            }
             heading.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
             for (String type : new String[]{"MP4", "WAV", "MID"}) {
@@ -2489,6 +2510,13 @@ public class MainActivity extends Activity {
             actions.add(() -> play(wav));
             names.add(tr("WAV 저장", "Save WAV"));
             actions.add(() -> export(wav));
+        }
+        if (TakeAudioFiles.editable(store,j)) {
+            names.add(tr("보컬 효과 후편집 · 새 복사본", "Edit vocal effects · new copy"));
+            actions.add(() -> {takeEffectsEditor=new TakeEffectsEditor(this,j);takeEffectsEditor.show();});
+        } else if(j.optBoolean("cleanSources")){
+            names.add(tr("효과 후편집 지원 안내", "Vocal editing availability"));
+            actions.add(() -> toast(tr("자동화음·보컬 경로 변경 또는 지원하지 않는 형식이 포함되어 후편집을 지원하지 않습니다. 원래 믹스와 원음은 유지됩니다.", "Live harmony, voice routing changes or an unsupported format prevent vocal editing. The original mix and sources are retained.")));
         }
         if (midi.exists()) {
             names.add(tr("MIDI 저장", "Save MIDI"));
@@ -2746,7 +2774,6 @@ public class MainActivity extends Activity {
         if (!camera.start(rawVideo, () -> {
             videoPreparing = false;
             if (exiting() || camera != target || !target.recording) { target.stop(); return; }
-            RecordingManager.syncMs = AudioRouting.prefs(this).getInt("sync" + AudioRouting.selected(this), 0);
             if (!RecordingManager.start(this, Math.round(values[15]))) {
                 target.stop();
                 toast(tr("오디오를 시작하지 못해 영상 녹화를 중지했습니다.", "Video recording stopped because audio could not start."));
@@ -2775,7 +2802,7 @@ public class MainActivity extends Activity {
                 return;
             }
             final RecordingManager.Result saved = r;
-            final long voiceDelayUs = Math.max(0, RecordingManager.syncMs) * 1000L;
+            final long voiceDelayUs = Math.max(0, saved.offsetMs) * 1000L;
             File source = rawVideo;
             if (!videoOk) {
                 if (exiting()) exitSaveError += "Video was interrupted; saved audio and original video retained.\n";
@@ -3086,6 +3113,11 @@ public class MainActivity extends Activity {
             if (lastRouteRevision != AudioService.routeRevision) {
                 lastRouteRevision = AudioService.routeRevision;
                 if (tab == 0) showTab();
+                else if (tab == 6) {
+                    BackNavigation.Page current = currentPage();
+                    showTab();
+                    restorePageScroll(current);
+                }
             }
             if (lastRecordingRevision != AudioService.revision) {
                 lastRecordingRevision = AudioService.revision;
@@ -3355,8 +3387,8 @@ public class MainActivity extends Activity {
         if (exiting()) return;
         try {
             File f = new File(getCacheDir(), "sync-test.wav");
-            int sync = AudioRouting.prefs(this).getInt("sync" + AudioRouting.selected(this), 0);
-            NativeAudio.recordSync(sync);
+            RecordingSyncProfiles.Profile syncProfile = RecordingSyncProfiles.current(this);
+            NativeAudio.recordSync(syncProfile.offsetMs);
             set(13, 0);
             NativeAudio.playLocal(false);
             set(15, 60);
@@ -3366,7 +3398,8 @@ public class MainActivity extends Activity {
                 return;
             }
             testActive = true;
-            toast(tr("클릭에 맞춰 소리 내세요. 5초 후 테스트를 재생합니다.", "Sing with the click. The test plays after 5 seconds."));
+            toast(tr("클릭에 맞춰 소리 내세요. 5초 후 테스트를 재생합니다.", "Sing with the click. The test plays after 5 seconds.")
+                    + "\n" + syncProfile.label + " · " + syncProfile.offsetMs + " ms");
             handler.postDelayed(() -> {
                 if (testActive) finishSyncTest(true);
             }, 5000);
@@ -3463,6 +3496,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if(takeEffectsEditor!=null)takeEffectsEditor.close();
         handler.removeCallbacks(adaptWindow);
         if (modernBack != null) modernBack.unregister();
         backWindows.clear();

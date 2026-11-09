@@ -41,7 +41,7 @@ final class ComposerSession {
     boolean currentTakeSelected(){return canComparePhrase()&&comparison.currentSelected;}
     boolean previousTakeEmpty(){return !canComparePhrase()||comparison.previous.isEmpty();}
     void selectPhraseTake(boolean current,boolean finish){
-        if(!canComparePhrase())return;PhraseComparison saved=comparison;
+        if(restoreLocked()||!canComparePhrase())return;PhraseComparison saved=comparison;
         ComposerProject.Part target=project.part(saved.partId);List<VoicePhrase> before=new ArrayList<>(target.phrases);
         try{
             List<VoicePhrase> replacements=new ArrayList<>();for(String json:current?saved.current:saved.previous)replacements.add(VoicePhrase.read(new JSONObject(json)));
@@ -56,8 +56,8 @@ final class ComposerSession {
     private boolean libraryDirty=true;
     private void ensureSaveProject(){if(!project.id.equals(saveProjectId)){saveProjectId=project.id;saveEpoch++;draftSave.reset();librarySave.reset();libraryDirty=true;}}
     private void projectChanged(){ensureSaveProject();libraryDirty=true;if(librarySave.phase==SaveState.SAVING){librarySave.request++;librarySave.phase=SaveState.IDLE;}}
-    boolean canUndo(){return !capturing&&!store.undo.isEmpty();}
-    boolean canRedo(){return !capturing&&!store.redo.isEmpty();}
+    boolean canUndo(){return !capturing&&!versionRestoreLock&&!store.undo.isEmpty();}
+    boolean canRedo(){return !capturing&&!versionRestoreLock&&!store.redo.isEmpty();}
     String saveStatus(boolean draft){
         ensureSaveProject();SaveState status=draft?draftSave:librarySave;
         String label=AppLanguage.text(context,draft?"초안":"내 반주",draft?"Draft":"My Backings");
@@ -121,7 +121,7 @@ final class ComposerSession {
             default: return value;
         }
     }
-    void edit(Consumer<ComposerProject> change,boolean structure){if(capturing){error=AppLanguage.text(context,"프레이즈 기록을 마친 뒤 편집하세요.","Finish recording the phrase before editing.");return;}if(structure&&playing()){error=AppLanguage.text(context,"일시정지 후 파트 구성을 편집하세요.","Pause playback before editing parts.");return;}
+    void edit(Consumer<ComposerProject> change,boolean structure){if(restoreLocked())return;if(capturing){error=AppLanguage.text(context,"프레이즈 기록을 마친 뒤 편집하세요.","Finish recording the phrase before editing.");return;}if(structure&&playing()){error=AppLanguage.text(context,"일시정지 후 파트 구성을 편집하세요.","Pause playback before editing parts.");return;}
         comparison=null;
         try{String before=project.json().toString();try{change.accept(project);project.validate();}catch(Exception e){project=ComposerProject.read(new JSONObject(before));throw e;}store.checkpoint(ComposerProject.read(new JSONObject(before)));revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
     void persist(){projectChanged();queueSave(true);}
@@ -148,13 +148,104 @@ final class ComposerSession {
     void play(){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}int request=++playbackRequest;publish(-1);worker.execute(()->main.post(()->{if(ExitCoordinator.isExitRequested()||request!=playbackRequest)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));NativeAudio.playLocal(false);NativeComposer.transport(1);}));}
     void pause(){playbackRequest++;NativeComposer.transport(2);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
     void stop(){playbackRequest++;if(capturing)cancelPhrase();NativeComposer.transport(0);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
-    void voice(boolean on){if(on&&ExitCoordinator.isExitRequested())return;if(on&&!YouTubePlayer.beforeNativePlayback())return;voiceOn=on;applyVoice();nonEditingRevision();}
+    void voice(boolean on){if(restoreLocked())return;if(on&&ExitCoordinator.isExitRequested())return;if(on&&!YouTubePlayer.beforeNativePlayback())return;voiceOn=on;applyVoice();nonEditingRevision();}
     void applyVoice(){VoiceInstrumentSettings s=project.voice;NativeComposer.voice(voiceOn,s.program,s.mode,s.octave,s.autoRange,s.snap,s.response,s.quality,s.rhythm,s.mixVoice,s.confidence,s.gate);}
-    void history(boolean redo){if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 실행 취소하세요.","Finish recording before undoing.");return;}if((redo?store.redo:store.undo).isEmpty())return;comparison=null;try{project=store.history(project,redo);revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
+    void history(boolean redo){if(restoreLocked())return;if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 실행 취소하세요.","Finish recording before undoing.");return;}if((redo?store.redo:store.undo).isEmpty())return;comparison=null;try{project=store.history(project,redo);revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
     void save(){queueSave(false);}
-    void open(ComposerProject p){if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 프로젝트를 여세요.","Finish recording before opening a project.");return;}comparison=null;stop();voice(false);project=p;saveProjectId="";ensureSaveProject();selectedPart=0;store.undo.clear();store.redo.clear();persist();publish(-1);revision++;}
+    void open(ComposerProject p){if(restoreLocked())return;if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 프로젝트를 여세요.","Finish recording before opening a project.");return;}comparison=null;stop();voice(false);project=p;saveProjectId="";ensureSaveProject();selectedPart=0;store.undo.clear();store.redo.clear();persist();publish(-1);revision++;}
     void duplicate(){duplicate(project.name+AppLanguage.text(context," 복제"," Copy"));}
     void duplicate(String name){int before=revision;edit(p->{p.id=UUID.randomUUID().toString();p.name=name;},true);if(revision!=before)save();}
+    boolean versionBusy,versionRestoreLock;
+    private boolean restoreLocked(){if(!versionRestoreLock)return false;error=AppLanguage.text(context,"버전 복원을 마칠 때까지 잠시 기다려 주세요.","Please wait for the version restore to finish.");return true;}
+    private <T> void versionTask(Callable<T> task,Consumer<T> success,Runnable completed) {
+        if(ExitCoordinator.isExitRequested()||worker.isShutdown())return;
+        if(capturing||versionBusy){error=AppLanguage.text(context,"기록 또는 버전 작업을 마친 뒤 다시 시도하세요.","Finish recording or the version operation first.");return;}
+        ComposerProject expected=project;int expectedRevision=revision;versionBusy=true;
+        worker.execute(()->{
+            T value=null;String failure="";
+            try{value=task.call();}catch(Exception e){failure=displayError(e.getMessage()==null?e.toString():e.getMessage());}
+            final T result=value;final String problem=failure;
+            main.post(()->{
+                versionBusy=false;
+                if(ExitCoordinator.isExitRequested()||worker.isShutdown())return;
+                if(project!=expected||revision!=expectedRevision||capturing){error=AppLanguage.text(context,"프로젝트가 변경되어 버전 작업을 적용하지 않았습니다.","The project changed. The version operation was not applied.");if(completed!=null)completed.run();return;}
+                if(!problem.isEmpty())error=AppLanguage.text(context,"버전 작업 실패: ","Version operation failed: ")+problem;
+                else success.accept(result);
+                if(completed!=null)completed.run();
+            });
+        });
+    }
+    void listVersions(Consumer<List<ProjectVersions.Version>> result,Runnable completed){
+        String id=project.id;versionTask(()->store.versions.list(id),result,completed);
+    }
+    void createVersion(String name,Runnable completed){
+        if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 버전을 만드세요.","Finish recording before creating a version.");return;}
+        try{ComposerProject snapshot=ComposerProject.read(project.json());
+            versionTask(()->store.versions.create(snapshot,name),version->{message=AppLanguage.text(context,"버전을 저장했습니다: ","Version saved: ")+version.name;},completed);
+        }catch(Exception e){error=displayError(e.getMessage());if(completed!=null)completed.run();}
+    }
+    void renameVersion(ProjectVersions.Version version,String name,Runnable completed){
+        if(!project.id.equals(version.projectId)){error=AppLanguage.text(context,"다른 프로젝트의 버전입니다.","This version belongs to another project.");return;}
+        versionTask(()->store.versions.rename(version,name),renamed->{message=AppLanguage.text(context,"버전 이름을 변경했습니다.","Version renamed.");},completed);
+    }
+    void previewVersion(ProjectVersions.Version version,Consumer<ComposerProject> result,Runnable completed){
+        if(!project.id.equals(version.projectId)){error=AppLanguage.text(context,"다른 프로젝트의 버전입니다.","This version belongs to another project.");return;}
+        versionTask(()->store.versions.readProject(version.projectId,version.id),result,completed);
+    }
+    private static final class PreparedRestore {
+        final ComposerProject project;final ProjectVersions.Version backup;
+        PreparedRestore(ComposerProject project,ProjectVersions.Version backup){this.project=project;this.backup=backup;}
+    }
+    void restoreVersion(ProjectVersions.Version version,boolean asCopy,Runnable completed){
+        if(capturing||versionBusy||!project.id.equals(version.projectId)){error=AppLanguage.text(context,"기록 또는 버전 작업 중이거나 다른 프로젝트의 버전입니다.","Recording or a version operation is active, or this version belongs to another project.");return;}
+        if(ExitCoordinator.isExitRequested()||worker.isShutdown())return;
+        try{
+            ComposerProject expected=project,before=ComposerProject.read(project.json());int expectedRevision=revision;
+            String beforeJson=before.json().toString();versionBusy=true;
+            String backupName=AppLanguage.text(context,"복원 전 자동 백업","Automatic backup before restore");
+            String copySuffix=AppLanguage.text(context," 복원 사본"," Restored copy");
+            worker.execute(()->{
+                PreparedRestore prepared=null;String failure="";
+                try{
+                    ComposerProject restored=store.versions.readProject(version.projectId,version.id);
+                    if(asCopy){restored.id=UUID.randomUUID().toString();restored.name+=copySuffix;}restored.validate();
+                    store.write(before,false);
+                    // Staging is durable but invisible, and never evicts an existing named version.
+                    prepared=new PreparedRestore(restored,store.versions.stage(before,backupName));
+                }catch(Exception e){failure=displayError(e.getMessage()==null?e.toString():e.getMessage());}
+                final PreparedRestore result=prepared;final String problem=failure;
+                main.post(()->{
+                    boolean valid=false;try{valid=result!=null&&project==expected&&revision==expectedRevision&&!capturing&&!ExitCoordinator.isExitRequested()&&project.json().toString().equals(beforeJson);}catch(Exception ignored){}
+                    if(!problem.isEmpty()||!valid){
+                        versionBusy=false;
+                        if(result!=null)worker.execute(()->{try{store.versions.discardStaged(result.backup);}catch(Exception ignored){}});
+                        error=problem.isEmpty()?AppLanguage.text(context,"프로젝트가 변경되어 버전 작업을 적용하지 않았습니다.","The project changed. The version operation was not applied.")
+                                :AppLanguage.text(context,"버전 작업 실패: ","Version operation failed: ")+problem;
+                        if(completed!=null&&!ExitCoordinator.isExitRequested())completed.run();return;
+                    }
+                    // All project mutations are blocked only for this final, short disk commit.
+                    versionRestoreLock=true;
+                    worker.execute(()->{
+                        String commitFailure="";
+                        try{store.versions.commitStaged(result.backup);}catch(Exception e){commitFailure=displayError(e.getMessage()==null?e.toString():e.getMessage());try{store.versions.discardStaged(result.backup);}catch(Exception ignored){}}
+                        final String commitProblem=commitFailure;
+                        main.post(()->{
+                            versionRestoreLock=false;versionBusy=false;
+                            if(!commitProblem.isEmpty())error=AppLanguage.text(context,"버전 작업 실패: ","Version operation failed: ")+commitProblem;
+                            else try{
+                                store.checkpoint(before);comparison=null;stop();voice(false);project=result.project;selectedPart=0;
+                                revision++;persist();publish(-1);save();
+                                message=asCopy?AppLanguage.text(context,"복원 사본을 열었습니다. 이전 상태는 원본 프로젝트의 자동 백업에 있습니다.","Opened a restored copy. The previous state is backed up in the original project's history.")
+                                        :AppLanguage.text(context,"버전을 복원했습니다. 이전 상태는 자동 백업에 있습니다.","Version restored. The previous state is in the automatic backup.");
+                            }catch(Exception e){error=displayError(e.getMessage());}
+                            if(completed!=null&&!ExitCoordinator.isExitRequested())completed.run();
+                        });
+                    });
+                });
+            });
+        }catch(Exception e){versionBusy=false;error=displayError(e.getMessage());if(completed!=null)completed.run();}
+    }
+
     private TrackConfig microphoneTrack(ComposerProject.Part target){for(TrackConfig t:target.tracks)if(t.voice&&!t.drums()&&"microphone".equals(t.phraseSource))return t;return null;}
     private String targetLabel(ComposerProject.Part target,TrackConfig microphone){
         return AppLanguage.text(context,"파트 ","Part ")+target.label+" → "+(microphone==null
@@ -168,7 +259,7 @@ final class ComposerSession {
         ComposerProject.Part target=project.parts.get(index);
         return AppLanguage.text(context,"기록 대상: ","Recording target: ")+targetLabel(target,microphoneTrack(target));
     }
-    void recordPhrase(){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!voiceOn||!AudioService.active){error=AppLanguage.text(context,"목소리 악기를 먼저 켜세요.","Turn on the voice instrument first.");return;}if(capturing){cancelPhrase();return;}if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}try{
+    void recordPhrase(){if(restoreLocked())return;if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!voiceOn||!AudioService.active){error=AppLanguage.text(context,"목소리 악기를 먼저 켜세요.","Turn on the voice instrument first.");return;}if(capturing){cancelPhrase();return;}if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}try{
         comparison=null;state=NativeComposer.state();
         boolean wasPlaying=playing();int actualPart=wasPlaying?(int)state[2]:selectedPart;
         if(actualPart<0||actualPart>=project.parts.size())throw new IOException(AppLanguage.text(context,"기록할 파트를 찾을 수 없습니다.","The recording part is unavailable."));

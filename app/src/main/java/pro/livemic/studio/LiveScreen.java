@@ -589,6 +589,7 @@ final class LiveScreen {
 
         boolean rec = RecordingManager.active, wait = AudioService.waiting();
         String state = a.busy ? tr("준비 / 저장 중", "PREPARING / SAVING") : rec ? (RecordingManager.paused ? tr("일시정지", "PAUSED") : "REC") : wait ? tr("예약", "COUNTDOWN") : running ? tr("마이크 켜짐", "MIC ON") : tr("대기", "READY");
+        if(NativeAudio.recentVoiceSeconds()>=0) state += running ? tr(" · 10초 보관", " · 10s history") : tr(" · 보관 대기", " · history armed");
         String time = rec ? a.formatTime(s[8]) : wait ? String.valueOf(AudioService.remaining()) + "s" : "00:00";
         float hz = running && Float.isFinite(s[0]) && s[0] > 0 ? s[0] : 0;
         display.cents = hz > 0 ? Math.max(-50, Math.min(50, s[1])) : 0;

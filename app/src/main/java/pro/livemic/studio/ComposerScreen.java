@@ -607,7 +607,8 @@ final class ComposerScreen {
                 tr("다시 실행", "Redo"),
                 tr("내 반주 열기", "Open saved projects"),
                 tr("AI 수정본 불러오기", "Import AI revision"),
-                tr("이름 있는 복사본 저장", "Save named copy")
+                tr("이름 있는 복사본 저장", "Save named copy"),
+                tr("버전 이력", "Version history")
         }, -1, k -> {
             if (k == 0) s.save();
             else if (k == 1) input(tr("프로젝트 이름", "Project name"), s.project.name, name -> edit(p -> p.name = name, false));
@@ -621,6 +622,9 @@ final class ComposerScreen {
             } else if(k==7) {
                 a.exchange.showImport();
                 return;
+            } else if(k==9) {
+                versionHistory();
+                return;
             } else {
                 input(tr("저장 후 이 복사본에서 계속 편집", "Save and continue editing this copy"),
                         s.project.name+tr(" 스냅샷"," Snapshot"),name->{s.duplicate(name);refresh();});
@@ -628,6 +632,68 @@ final class ComposerScreen {
             }
             refresh();
         });
+    }
+
+    void versionHistory() {
+        if(s.capturing){a.toast(tr("기록을 마친 뒤 버전 이력을 여세요.","Finish recording before opening version history."));return;}
+        BackNavigation.Page origin=a.renderedPage;
+        s.listVersions(versions->{
+            if(a.isFinishing()||a.isDestroyed()||a.renderedPage!=origin)return;
+            List<String> labels=new ArrayList<>();
+            labels.add(tr("현재 상태를 새 버전으로 저장", "Save current state as a version"));
+            labels.add(tr("보관 정책 · 이름과 관계없이 최신 20개", "Retention · newest 20, including named versions"));
+            for(ProjectVersions.Version version:versions)labels.add(version.name+"\n"+versionTime(version.createdAt));
+            choose(tr("버전 이력 · 이 기기에 저장", "Version history · stored on this device"),labels.toArray(new String[0]),-1,n->{
+                if(n==0){input(tr("버전 이름 · 최대 80자", "Version name · up to 80 characters"),s.project.name,name->s.createVersion(name,this::refresh));}
+                else if(n==1)choose(tr("버전 보관 정책", "Version retention"),new String[]{
+                        tr("이름 있는 버전과 자동 백업을 포함해 최신 20개만 유지합니다. 새 버전을 만들면 가장 오래된 버전이 삭제됩니다.", "Only the newest 20 versions are kept, including named versions and automatic backups. Creating a version removes the oldest one."),
+                        tr("복제본은 별도 이력입니다. 저장된 프로젝트 삭제를 확인하면 해당 프로젝트의 버전도 모두 삭제됩니다.", "Copies have separate histories. Confirming deletion of a saved project also deletes all of its versions.")},-1,k->{});
+                else versionOptions(versions.get(n-2));
+            });
+        },null);
+    }
+
+    String versionTime(long at){return java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(new Date(at));}
+
+    void versionOptions(ProjectVersions.Version version) {
+        BackNavigation.Page origin=a.renderedPage;
+        s.previewVersion(version,target->{
+            if(a.isFinishing()||a.isDestroyed()||a.renderedPage!=origin)return;
+            String summary=versionSummary(s.project,target);
+            choose(version.name+" · "+versionTime(version.createdAt)+"\n"+summary,new String[]{
+                    tr("이 프로젝트를 복원…", "Restore this project…"),
+                    tr("새 사본으로 열기…", "Open as a new copy…"),
+                    tr("버전 이름 변경", "Rename version")},-1,n->{
+                if(n==2){input(tr("버전 이름", "Version name"),version.name,name->s.renameVersion(version,name,this::refresh));return;}
+                boolean asCopy=n==1;
+                LinearLayout panel=a.column();
+                panel.addView(a.text(summary+"\n\n"+tr("현재 상태를 내 반주에 저장하고 자동 백업 버전을 만든 뒤 적용합니다. 취소하면 현재 편집 내용은 바뀌지 않습니다.", "Your current state will be saved to My Backings and an automatic backup version before applying this version. Cancelling keeps your current edits."),14,MainActivity.TEXT));
+                form(asCopy?tr("복원 사본 열기", "Open restored copy"):tr("버전 복원 확인", "Confirm version restore"),panel,
+                        asCopy?tr("사본 열기", "Open copy"):tr("복원", "Restore"),()->s.restoreVersion(version,asCopy,this::refresh),null);
+            });
+        },null);
+    }
+
+    String versionSummary(ComposerProject current,ComposerProject target) {
+        Set<String> currentTracks=new HashSet<>(),targetTracks=new HashSet<>();
+        Map<String,String> oldRows=new HashMap<>(),newRows=new HashMap<>();
+        Map<String,String> oldParts=new HashMap<>(),newParts=new HashMap<>();
+        try {
+            for(ComposerProject.Part part:current.parts)oldParts.put(part.id,part.json().toString());
+            for(ComposerProject.Part part:target.parts)newParts.put(part.id,part.json().toString());
+            for(ComposerProject.Part part:current.parts)for(TrackConfig track:part.tracks){currentTracks.add(track.id);oldRows.put(part.id+":"+track.id,track.json().toString());}
+            for(ComposerProject.Part part:target.parts)for(TrackConfig track:part.tracks){targetTracks.add(track.id);newRows.put(part.id+":"+track.id,track.json().toString());}
+        }catch(Exception ignored){}
+        Set<String> rows=new HashSet<>(oldRows.keySet());rows.addAll(newRows.keySet());int changed=0;
+        for(String id:rows)if(!Objects.equals(oldRows.get(id),newRows.get(id)))changed++;
+        Set<String> parts=new HashSet<>(oldParts.keySet());parts.addAll(newParts.keySet());int changedParts=0;
+        for(String id:parts)if(!Objects.equals(oldParts.get(id),newParts.get(id)))changedParts++;
+        return tr("키 ","Key ")+MusicTheory.ROOTS[current.key]+" → "+MusicTheory.ROOTS[target.key]
+                +" · BPM "+current.bpm+" → "+target.bpm
+                +"\n"+tr("파트 ","Parts ")+current.parts.size()+" → "+target.parts.size()
+                +tr(" · 변경 ", " · Changed ")+changedParts
+                +"\n"+tr("트랙 ","Tracks ")+currentTracks.size()+" → "+targetTracks.size()
+                +" · "+tr("파트별 설정 차이 ","Part settings changed: ")+changed;
     }
 
     void tempo() {
@@ -687,7 +753,7 @@ final class ComposerScreen {
     }
 
     void selectPart(int index) {
-        if (s.capturing || index < 0 || index >= s.project.parts.size() || index == s.selectedPart) return;
+        if (s.capturing || s.versionRestoreLock || index < 0 || index >= s.project.parts.size() || index == s.selectedPart) return;
         clearSolo();
         s.selectedPart = index;
         refresh();
@@ -972,7 +1038,7 @@ final class ComposerScreen {
             String[] labels = new String[s.project.parts.size()];
             for (int i = 0; i < labels.length; i++) labels[i] = s.project.parts.get(i).label;
             choose(tr("기록할 파트", "Part to record"), labels, s.selectedPart, n -> {
-                if (!s.capturing) {
+                if (!s.capturing && !s.versionRestoreLock) {
                     clearSolo();
                     s.selectedPart = n;
                     refresh();
@@ -1352,10 +1418,11 @@ final class ComposerScreen {
                             p.name += tr(" 복제", " copy");
                             saveProject(p);
                         } else {
-                            StudioDialogs.confirmDanger(a, tr("반주 삭제", "Delete backing"), p.name + tr(" 프로젝트를 삭제할까요?", " · Delete this project?"), tr("삭제", "Delete"), () ->
+                            if(s.versionBusy&&p.id.equals(s.project.id)){a.toast(tr("버전 작업을 마친 뒤 삭제하세요.", "Finish the version operation before deleting."));return;}
+                            StudioDialogs.confirmDanger(a, tr("반주 삭제", "Delete backing"), p.name + tr(" 프로젝트와 이 프로젝트의 모든 버전을 삭제할까요? 복구할 수 없습니다.", " · Delete this project and all of its versions? This cannot be undone."), tr("삭제", "Delete"), () ->
                                     s.worker.execute(() -> {
-                                        s.store.delete(p.id);
-                                        a.runOnUiThread(this::refresh);
+                                        try{s.store.delete(p.id);a.runOnUiThread(this::refresh);}
+                                        catch(Exception e){a.runOnUiThread(()->a.toast(e.getMessage()));}
                                     }));
                         }
                     })));

@@ -15,10 +15,10 @@ static void equivalent(int rate, bool longEcho) {
         float l,r,a,b;reference.tick(input,p,l,r);
         actual.process(input,p,a,b);
         maxError=std::max(maxError,std::max(std::abs(a-l),std::abs(b-r)));
-        assert(std::isfinite(a)&&std::isfinite(b));if(!(std::abs(a-l)<1e-6f&&std::abs(b-r)<1e-6f)){std::cerr<<"divergence rate="<<rate<<" frame="<<i<<" error="<<maxError<<" reference="<<l<<" actual="<<a<<" idle="<<actual.idle()<<"\n";assert(false);}
+        assert(std::isfinite(a)&&std::isfinite(b));if(!(std::abs(a-l)<1e-12f&&std::abs(b-r)<1e-12f)){std::cerr<<"divergence rate="<<rate<<" frame="<<i<<" error="<<maxError<<" reference="<<l<<" actual="<<a<<" idle="<<actual.idle()<<"\n";assert(false);}
         if(i<rate)assert(actual.idle()&&a==0&&b==0);
         if(i>rate*2&&i<rate*4)lateTail+=double(a)*a+double(b)*b;
-        if(i>=rate)assert(!actual.idle());
+        if(i>=rate&&i<rate*4)assert(!actual.idle());
         if(input!=0)assert(!actual.idle());
     }
     assert(lateTail>1e-7);
