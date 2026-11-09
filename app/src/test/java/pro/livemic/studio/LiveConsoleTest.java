@@ -20,6 +20,9 @@ public class LiveConsoleTest {
 
     @Before
     public void setup() throws Exception {
+        // Screenshot/workflow tests share an uninstrumented native shadow. Start
+        // with a stopped session so playback clicks cannot inherit their transport.
+        new StudioScreenshotTest().resetComposer();
         AppLanguage.set(RuntimeEnvironment.getApplication(), true);
         AudioService.active = false;
         AudioService.playbackActive = false;

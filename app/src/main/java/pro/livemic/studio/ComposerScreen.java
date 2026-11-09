@@ -42,15 +42,15 @@ final class ComposerScreen {
         rightPane.setFillViewport(true);
         leftPane.setClipToPadding(false);
         rightPane.setClipToPadding(false);
-        leftPane.setPadding(0, 0, a.dp(4), a.dp(8));
-        rightPane.setPadding(0, 0, a.dp(4), a.dp(8));
+        leftPane.setPadding(0, 0, a.dp(StudioTheme.SPACE_4), a.dp(StudioTheme.SPACE_8));
+        rightPane.setPadding(0, 0, a.dp(StudioTheme.SPACE_4), a.dp(StudioTheme.SPACE_8));
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -1, 1);
         LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -1, 1);
-        right.leftMargin = a.dp(24);
+        right.leftMargin = a.dp(StudioTheme.SPACE_24);
         row.addView(leftPane, left);
         row.addView(rightPane, right);
         a.add(row);
-        a.page.flexible(row, 160, 1600);
+        a.page.flexible(row, 120, 1600);
         LinearLayout leftContent = a.column();
         leftPane.addView(leftContent, new ScrollView.LayoutParams(-1, -2));
         LinearLayout rightContent = a.column();
@@ -150,50 +150,78 @@ final class ComposerScreen {
     }
 
     TextView caption(String text) {
-        TextView v = a.text(text, 12, MainActivity.MUTED);
+        TextView v = a.text(text, StudioTheme.TYPE_LABEL, MainActivity.MUTED);
         v.setTypeface(StudioTheme.medium(a));
         return v;
     }
 
     void section(String name, String detail) {
         LinearLayout row = a.row();
-        TextView title = a.text(name, 19, MainActivity.TEXT);
+        TextView title = a.text(name, StudioTheme.TYPE_HEADLINE, MainActivity.TEXT);
         title.setTypeface(StudioTheme.bold(a));
         row.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         if (detail != null) row.addView(caption(detail));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = a.dp(15);
-        lp.bottomMargin = a.dp(8);
+        int previousGap = 0;
+        if(a.content.getChildCount()>0){
+            View previous = a.content.getChildAt(a.content.getChildCount()-1);
+            if(previous.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)previousGap=((ViewGroup.MarginLayoutParams)previous.getLayoutParams()).bottomMargin;
+        }
+        lp.topMargin = Math.max(0, a.dp(StudioTheme.SPACE_24)-previousGap);
+        lp.bottomMargin = a.dp(StudioTheme.SPACE_8);
         a.content.addView(row, lp);
     }
 
     TextView action(String text, Runnable onClick) {
-        TextView v = a.text(text, 13, MainActivity.LIME);
+        TextView v = a.text(text, StudioTheme.TYPE_BODY, MainActivity.LIME);
         v.setTypeface(StudioTheme.medium(a));
-        v.setPadding(a.dp(4), a.dp(10), a.dp(4), a.dp(10));
+        v.setPadding(a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL), a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL));
         v.setOnClickListener(w -> onClick.run());
         v.setFocusable(true);
-        v.setMinHeight(a.dp(48));
-        v.setMinWidth(a.dp(48));
+        v.setMinHeight(a.dp(StudioTheme.TOUCH_TARGET));
+        v.setMinWidth(a.dp(StudioTheme.TOUCH_TARGET));
         v.setGravity(Gravity.CENTER_VERTICAL);
         return v;
     }
 
+    void controlPadding(TextView view) {
+        view.setMinHeight(a.dp(StudioTheme.TOUCH_TARGET));
+        view.setPadding(a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL),
+                a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL));
+    }
+
+    void peerAction(LinearLayout row, View view) {
+        view.setMinimumHeight(a.dp(StudioTheme.TOUCH_TARGET));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -1, 1);
+        if(row.getChildCount()>0)lp.leftMargin = a.dp(StudioTheme.SPACE_8);
+        row.addView(view, lp);
+    }
+
+    boolean compactLandscape() {
+        return a.tabletLandscape() && a.getResources().getConfiguration().screenHeightDp <= 640;
+    }
+
     void stat(LinearLayout row, String label, String value, Runnable click) {
         LinearLayout tile = a.column();
-        tile.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
-        tile.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 10));
-        tile.addView(caption(label));
+        boolean compact = compactLandscape();
+        tile.setPadding(a.dp(StudioTheme.CARD_PADDING), a.dp(compact ? StudioTheme.BUTTON_PADDING_VERTICAL : StudioTheme.CARD_PADDING),
+                a.dp(StudioTheme.CARD_PADDING), a.dp(compact ? StudioTheme.BUTTON_PADDING_VERTICAL : StudioTheme.CARD_PADDING));
+        tile.setBackground(StudioTheme.background(a, StudioTheme.RAISED, StudioTheme.CARD_RADIUS));
+        if(!compact)tile.addView(caption(label));
+        tile.setContentDescription(label + ": " + value);
         TextView text = a.text(value + " ▾", 13, MainActivity.TEXT);
         text.setTypeface(StudioTheme.bold(a));
-        text.setSingleLine();
+        text.setSingleLine(false);
+        text.setMaxLines(2);
         text.setEllipsize(TextUtils.TruncateAt.END);
-        tile.addView(text);
-        tile.setMinimumHeight(a.dp(52));
+        LinearLayout.LayoutParams valueSpacing = new LinearLayout.LayoutParams(-1, -2);
+        valueSpacing.topMargin = compact ? 0 : a.dp(StudioTheme.SPACE_8);
+        tile.addView(text, valueSpacing);
+        tile.setMinimumHeight(a.dp(StudioTheme.TOUCH_TARGET));
         tile.setOnClickListener(v -> click.run());
         tile.setFocusable(true);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-        if (row.getChildCount() > 0) lp.leftMargin = a.dp(6);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -1, 1);
+        if (row.getChildCount() > 0) lp.leftMargin = a.dp(StudioTheme.SPACE_8);
         row.addView(tile, lp);
     }
 
@@ -245,23 +273,25 @@ final class ComposerScreen {
         }
 
         LinearLayout hero = StudioTheme.card(a);
-        hero.setBackground(StudioTheme.background(a, Color.rgb(16, 20, 15), 14));
-        hero.setPadding(a.dp(16), a.dp(14), a.dp(16), a.dp(14));
+        hero.setBackground(StudioTheme.background(a, Color.rgb(16, 20, 15), StudioTheme.CARD_RADIUS));
+        hero.setPadding(a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING));
         LinearLayout top = a.row();
         LinearLayout name = a.column();
         name.addView(caption(tr("내 반주 프로젝트", "BACKING PROJECT")));
-        TextView projectName = a.text(p.name, 21, MainActivity.TEXT);
+        TextView projectName = a.text(p.name, StudioTheme.TYPE_HEADLINE, MainActivity.TEXT);
         projectName.setTypeface(StudioTheme.bold(a));
         projectName.setSingleLine();
         projectName.setEllipsize(TextUtils.TruncateAt.END);
-        name.addView(projectName);
+        LinearLayout.LayoutParams nameSpacing = new LinearLayout.LayoutParams(-1, -2);
+        nameSpacing.topMargin = a.dp(StudioTheme.SPACE_8);
+        name.addView(projectName, nameSpacing);
         top.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         top.addView(action(tr("관리 ⋯", "Manage ⋯"), this::projectMenu));
         hero.addView(top);
         TextView summary = caption(tr("작곡 초안 · ", "Composition draft · ") + p.parts.size()
                 + tr("개 파트 · ", " parts · ") + p.totalBars() + tr("마디", " bars")
                 + " · " + new String[]{"4/4", "3/4", "6/8"}[p.meter]);
-        summary.setPadding(0, a.dp(4), 0, a.dp(8));
+        summary.setPadding(0, a.dp(StudioTheme.SPACE_8), 0, a.dp(StudioTheme.SPACE_8));
         hero.addView(summary);
         saveControls(hero);
 
@@ -270,7 +300,7 @@ final class ComposerScreen {
         lcdStatus.setBackground(StudioTheme.background(a, Color.rgb(24, 30, 22), 8));
         lcdStatus.setPadding(a.dp(10), a.dp(6), a.dp(10), a.dp(6));
         LinearLayout.LayoutParams lcdLp = new LinearLayout.LayoutParams(-1, -2);
-        lcdLp.bottomMargin = a.dp(10);
+        lcdLp.bottomMargin = a.dp(StudioTheme.SPACE_8);
         hero.addView(lcdStatus, lcdLp);
 
         LinearLayout stats = a.row();
@@ -285,16 +315,14 @@ final class ComposerScreen {
 
         LinearLayout aiBar = a.row();
         LinearLayout.LayoutParams aiBarLp = new LinearLayout.LayoutParams(-1, -2);
-        aiBarLp.topMargin = a.dp(10);
+        aiBarLp.topMargin = a.dp(StudioTheme.SPACE_8);
         StudioButton export = StudioTheme.styled(a, tr("AI 내보내기", "AI export"), StudioButton.CHIP, this::exportProject);
         export.setContentDescription(tr("AI 편집용 프로젝트 JSON 내보내기", "Export project JSON for AI editing"));
         StudioTheme.selected(export, true);
         StudioButton aiImport = StudioTheme.styled(a, tr("JSON 불러오기", "Import JSON"), StudioButton.CHIP, () -> a.exchange.showImport());
         aiImport.setContentDescription(tr("수정한 프로젝트 JSON 불러오기", "Import revised project JSON"));
-        a.weighted(aiBar, export, 44);
-        LinearLayout.LayoutParams expLp = (LinearLayout.LayoutParams) export.getLayoutParams();
-        expLp.rightMargin = a.dp(8);
-        a.weighted(aiBar, aiImport, 44);
+        peerAction(aiBar, export);
+        peerAction(aiBar, aiImport);
         hero.addView(aiBar, aiBarLp);
         boolean tablet = a.tabletLandscape();
         if (tablet) {
@@ -302,15 +330,21 @@ final class ComposerScreen {
             LinearLayout wideHero = a.row();
             wideHero.setGravity(Gravity.CENTER_VERTICAL);
             LinearLayout identity = a.column();
+            if(compactLandscape()){
+                name.getChildAt(0).setVisibility(View.GONE);
+                nameSpacing.topMargin = 0;
+                lcdStatus.setSingleLine();
+                lcdStatus.setEllipsize(TextUtils.TruncateAt.END);
+            }
             identity.addView(top);
-            identity.addView(summary);
+            if(!compactLandscape())identity.addView(summary);
             identity.addView(lcdStatus, lcdLp);
             LinearLayout controls = a.column();
             controls.addView(stats);
             controls.addView(aiBar, aiBarLp);
             wideHero.addView(identity, new LinearLayout.LayoutParams(0, -2, 1));
             LinearLayout.LayoutParams controlsLp = new LinearLayout.LayoutParams(0, -2, 1);
-            controlsLp.leftMargin = a.dp(24);
+            controlsLp.leftMargin = a.dp(StudioTheme.SPACE_24);
             wideHero.addView(controls, controlsLp);
             hero.addView(wideHero);
         }
@@ -322,25 +356,30 @@ final class ComposerScreen {
         LinearLayout parts = a.row();
         Button previous = a.button("‹", () -> selectPart(s.selectedPart - 1));
         previous.setTextSize(24);
+        previous.setMinHeight(a.dp(64));
         previous.setContentDescription(tr("이전 파트", "Previous part"));
         previous.setEnabled(!s.capturing && s.selectedPart > 0);
-        parts.addView(previous, new LinearLayout.LayoutParams(a.dp(52), a.dp(64)));
+        parts.addView(previous, new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET), -1));
         Button currentPart = a.button((tablet ? tr("파트 ", "Part ") : "") + part.label + " · " + part.bars + tr("마디", " bars")
                 + "\n" + (s.selectedPart + 1) + " / " + p.parts.size() + tr(" · 전체 파트 ▾", " · All parts ▾"), this::choosePart);
         currentPart.setSingleLine(false);
         currentPart.setMaxLines(2);
         currentPart.setEnabled(!s.capturing);
-        parts.addView(currentPart, new LinearLayout.LayoutParams(0, a.dp(64), 1));
+        currentPart.setMinHeight(a.dp(64));
+        LinearLayout.LayoutParams selectedPartLp = new LinearLayout.LayoutParams(0, -2, 1);
+        selectedPartLp.leftMargin = a.dp(StudioTheme.SPACE_8);selectedPartLp.rightMargin = a.dp(StudioTheme.SPACE_8);
+        parts.addView(currentPart, selectedPartLp);
         Button next = a.button("›", () -> selectPart(s.selectedPart + 1));
         next.setTextSize(24);
+        next.setMinHeight(a.dp(64));
         next.setContentDescription(tr("다음 파트", "Next part"));
         next.setEnabled(!s.capturing && s.selectedPart < p.parts.size() - 1);
-        parts.addView(next, new LinearLayout.LayoutParams(a.dp(52), a.dp(64)));
+        parts.addView(next, new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET), -1));
         a.add(parts);
 
         LinearLayout partActions = a.row();
-        partActions.addView(action(tr("⚙️ 파트 편집", "⚙️ Edit part"), this::partMenu), new LinearLayout.LayoutParams(0, -2, 1));
-        partActions.addView(action(tr("🎛️ 연주 느낌", "🎛️ Feel"), this::performance));
+        peerAction(partActions, action(tr("⚙️ 파트 편집", "⚙️ Edit part"), this::partMenu));
+        peerAction(partActions, action(tr("🎛️ 연주 느낌", "🎛️ Feel"), this::performance));
         a.add(partActions);
 
         section(tr("코드 진행", "Chord progression"), part.label + " · " + part.bars + tr("마디", " bars"));
@@ -359,8 +398,8 @@ final class ComposerScreen {
             for (int c = 0; c < 2 && b + c < part.bars; c++) {
                 int bar = b + c;
                 LinearLayout card = a.column();
-                card.setPadding(a.dp(12), a.dp(9), a.dp(12), a.dp(9));
-                card.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12));
+                card.setPadding(a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING));
+                card.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, StudioTheme.CARD_RADIUS));
                 card.setMinimumHeight(a.dp(74));
                 card.setOnClickListener(v -> chord(bar, 0));
                 card.setFocusable(true);
@@ -390,13 +429,13 @@ final class ComposerScreen {
                     root.setSingleLine();
                     root.setEllipsize(TextUtils.TruncateAt.END);
                     LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(-2, -2);
-                    rp.topMargin = a.dp(4);
+                    rp.topMargin = a.dp(StudioTheme.SPACE_8);
                     card.addView(root, rp);
                 } else {
                     LinearLayout splitRow = a.row();
                     splitRow.setGravity(Gravity.CENTER_VERTICAL);
                     LinearLayout.LayoutParams srp = new LinearLayout.LayoutParams(-1, -2);
-                    srp.topMargin = a.dp(4);
+                    srp.topMargin = a.dp(StudioTheme.SPACE_8);
                     for (int j = 0; j < part.chords.get(bar).size(); j++) {
                         if (j > 0) {
                             TextView slash = a.text(" · ", 14, MainActivity.MUTED);
@@ -418,11 +457,12 @@ final class ComposerScreen {
                 }
 
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
-                if (c > 0) lp.leftMargin = a.dp(8);
+                if (c > 0) lp.leftMargin = a.dp(StudioTheme.SPACE_16);
                 row.addView(card, lp);
                 chordCards.add(card);
             }
-            a.add(row);
+            LinearLayout.LayoutParams chordRowLp = new LinearLayout.LayoutParams(-1, -2);
+            chordRowLp.bottomMargin = a.dp(StudioTheme.SPACE_16);a.content.addView(row, chordRowLp);
         }
 
         if (tablet) rightPane();
@@ -446,20 +486,20 @@ final class ComposerScreen {
         for (int i = 0; i < part.tracks.size(); i++) {
             int n = i;
             TrackConfig t = part.tracks.get(i);
+            LinearLayout trackCard = StudioTheme.card(a);
             LinearLayout row = a.row();
-            row.setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8));
-            row.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 12));
+            trackCard.addView(row);
             row.setGravity(Gravity.CENTER_VERTICAL);
 
             TextView icon = a.text(trackEmoji(t), 18, MainActivity.TEXT);
             icon.setGravity(Gravity.CENTER);
             icon.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 10));
             LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(a.dp(38), a.dp(38));
-            ip.rightMargin = a.dp(10);
+            ip.rightMargin = a.dp(StudioTheme.SPACE_8);
             row.addView(icon, ip);
 
             LinearLayout details = a.column();
-            TextView nameText = a.text(t.name, 15, t.muted ? MainActivity.MUTED : MainActivity.TEXT);
+            TextView nameText = a.text(t.name, StudioTheme.TYPE_TITLE, t.muted ? MainActivity.MUTED : MainActivity.TEXT);
             nameText.setTypeface(StudioTheme.bold(a));
             nameText.setSingleLine();
             nameText.setEllipsize(TextUtils.TruncateAt.END);
@@ -477,31 +517,37 @@ final class ComposerScreen {
             String patLabel = (t.voice && phraseForTrack != null)
                     ? phraseLabel + " (" + phraseForTrack.notes.size() + tr("음)", " notes)")
                     : patterns[Math.min(t.pattern, patterns.length - 1)];
-            details.addView(caption((t.drums() ? tr("드럼 키트 ", "Drum kit ") + t.program : InstrumentCatalog.GM[t.program])
-                    + " · " + patLabel + " · " + Math.round(t.volume * 100) + "%"));
+            TextView trackDetail = caption((t.drums() ? tr("드럼 키트 ", "Drum kit ") + t.program : InstrumentCatalog.GM[t.program])
+                    + " · " + patLabel + " · " + Math.round(t.volume * 100) + "%");
+            LinearLayout.LayoutParams trackDetailLp = new LinearLayout.LayoutParams(-1, -2);
+            trackDetailLp.topMargin = a.dp(StudioTheme.SPACE_8);details.addView(trackDetail, trackDetailLp);
+            details.setMinimumHeight(a.dp(StudioTheme.TOUCH_TARGET));
             details.setOnClickListener(v -> track(n));
             details.setFocusable(false);
             row.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
 
-            TextView mute = a.text("M", 13, t.muted ? Color.rgb(255, 110, 110) : MainActivity.MUTED);
+            LinearLayout trackActions = a.row();
+            LinearLayout.LayoutParams trackActionsLp = new LinearLayout.LayoutParams(-1, -2);
+            trackActionsLp.topMargin = a.dp(StudioTheme.SPACE_8);
+            trackCard.addView(trackActions, trackActionsLp);
+            TextView mute = a.text("M", StudioTheme.TYPE_BODY, t.muted ? Color.rgb(255, 110, 110) : MainActivity.MUTED);
             mute.setTypeface(StudioTheme.bold(a));
             mute.setGravity(Gravity.CENTER);
-            mute.setBackground(StudioTheme.background(a, t.muted ? 0x33ff5555 : StudioTheme.RAISED, 8));
+            mute.setBackground(StudioTheme.background(a, t.muted ? 0x33ff5555 : StudioTheme.RAISED, StudioTheme.BUTTON_RADIUS));
             mute.setOnClickListener(v -> {
                 edit(x -> t.muted = !t.muted, false);
                 liveTrack(n);
             });
             mute.setFocusable(true);
             mute.setContentDescription(t.muted ? tr("뮤트 해제", "Unmute") : tr("뮤트", "Mute"));
-            LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
-            mp.rightMargin = a.dp(6);
-            row.addView(mute, mp);
+            controlPadding(mute);
+            peerAction(trackActions, mute);
 
             boolean isSolo = (solo == n);
-            TextView soloBtn = a.text("S", 13, isSolo ? MainActivity.LIME : MainActivity.MUTED);
+            TextView soloBtn = a.text("S", StudioTheme.TYPE_BODY, isSolo ? MainActivity.LIME : MainActivity.MUTED);
             soloBtn.setTypeface(StudioTheme.bold(a));
             soloBtn.setGravity(Gravity.CENTER);
-            soloBtn.setBackground(StudioTheme.background(a, isSolo ? 0x339dff00 : StudioTheme.RAISED, 8));
+            soloBtn.setBackground(StudioTheme.background(a, isSolo ? 0x339dff00 : StudioTheme.RAISED, StudioTheme.BUTTON_RADIUS));
             soloBtn.setOnClickListener(v -> {
                 if (s.playing() && liveChannel(t.id) < 0) {
                     a.toast(tr("재생 중인 파트에서 솔로를 사용해 주세요.", "Use solo on the currently playing part."));
@@ -513,19 +559,20 @@ final class ComposerScreen {
             });
             soloBtn.setFocusable(true);
             soloBtn.setContentDescription(isSolo ? tr("솔로 종료", "End solo") : tr("솔로", "Solo"));
-            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(a.dp(36), a.dp(36));
-            sp.rightMargin = a.dp(6);
-            row.addView(soloBtn, sp);
+            controlPadding(soloBtn);
+            peerAction(trackActions, soloBtn);
 
             TextView more = a.text("⋯", 16, MainActivity.MUTED);
             more.setGravity(Gravity.CENTER);
-            more.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 8));
+            more.setBackground(StudioTheme.background(a, StudioTheme.RAISED, StudioTheme.BUTTON_RADIUS));
             more.setOnClickListener(v -> track(n));
             more.setFocusable(true);
             more.setContentDescription(tr("트랙 설정", "Track options"));
-            row.addView(more, new LinearLayout.LayoutParams(a.dp(36), a.dp(36)));
-
-            a.add(row);
+            controlPadding(more);
+            LinearLayout.LayoutParams moreLp = new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET), a.dp(StudioTheme.TOUCH_TARGET));
+            moreLp.leftMargin = a.dp(StudioTheme.SPACE_8);row.addView(more, moreLp);
+            LinearLayout.LayoutParams trackCardLp = new LinearLayout.LayoutParams(-1, -2);
+            trackCardLp.bottomMargin = a.dp(StudioTheme.SPACE_16);a.content.addView(trackCard, trackCardLp);
         }
         a.add(StudioTheme.styled(a, tr("＋ 악기 추가", "＋ Add instrument"), StudioButton.OUTLINE, () -> instrument(-1, false)));
 
@@ -550,7 +597,7 @@ final class ComposerScreen {
             a.libraryFilter = 1;
             a.chooseTab(4);
         }), new LinearLayout.LayoutParams(0, -2, 1));
-        ((LinearLayout.LayoutParams) links.getChildAt(0).getLayoutParams()).rightMargin = a.dp(8);
+        ((LinearLayout.LayoutParams) links.getChildAt(0).getLayoutParams()).rightMargin = a.dp(StudioTheme.SPACE_8);
         links.addView(action(tr("목소리로 연주 ›", "Play with voice ›"), () -> a.chooseTab(8)),
                 new LinearLayout.LayoutParams(0, -2, 1));
         a.add(links);
@@ -585,20 +632,23 @@ final class ComposerScreen {
             row.addView(label,new LinearLayout.LayoutParams(0,-2,1));
             Button retry=StudioTheme.styled(a,tr("재시도","Retry"),StudioButton.CHIP,()->{s.retrySave(draft);poll();});
             retry.setContentDescription(tr(draft?"초안 저장 재시도":"내 반주 저장 재시도",draft?"Retry draft save":"Retry save to My Backings"));
-            row.addView(retry,new LinearLayout.LayoutParams(-2,a.dp(48)));
+            row.addView(retry,new LinearLayout.LayoutParams(-2,-2));
             if(draft){draftStatus=label;retryDraft=retry;}else{libraryStatus=label;retryLibrary=retry;}
             parent.addView(row);
         }
         LinearLayout history=a.row();
         undoButton=StudioTheme.styled(a,tr("실행 취소","Undo"),StudioButton.CHIP,()->{s.history(false);refresh();});
         redoButton=StudioTheme.styled(a,tr("다시 실행","Redo"),StudioButton.CHIP,()->{s.history(true);refresh();});
-        history.addView(undoButton,new LinearLayout.LayoutParams(0,a.dp(48),1));
-        history.addView(redoButton,new LinearLayout.LayoutParams(0,a.dp(48),1));
+        peerAction(history,undoButton);
+        peerAction(history,redoButton);
         parent.addView(history);
     }
 
     void projectMenu() {
-        choose(tr("프로젝트", "Project"), new String[]{
+        String title=tr("프로젝트", "Project");
+        if(compactLandscape())title+=" · "+s.project.name+"\n"+s.project.parts.size()+tr("개 파트 · "," parts · ")
+                +s.project.totalBars()+tr("마디 · "," bars · ")+MusicTheory.ROOTS[s.project.key]+" · "+s.project.bpm+" BPM";
+        choose(title, new String[]{
                 tr("저장", "Save"),
                 tr("이름 변경", "Rename"),
                 tr("복제", "Duplicate"),
@@ -702,7 +752,7 @@ final class ComposerScreen {
         StudioFader fader = new StudioFader(a, tr("템포", "Tempo"), 40, 240, bpm[0], v -> Math.round(v) + " BPM", v -> bpm[0] = Math.round(v));
         panel.addView(fader, new LinearLayout.LayoutParams(-1, -2));
         TextView caption = a.text(tr("박자", "Meter"), 14, MainActivity.MUTED);
-        caption.setPadding(0, a.dp(18), 0, a.dp(8));
+        caption.setPadding(0, a.dp(StudioTheme.SPACE_24), 0, a.dp(StudioTheme.SPACE_8));
         panel.addView(caption);
         LinearLayout choices = a.row();
         String[] names = {"4/4", "3/4", "6/8"};
@@ -733,7 +783,7 @@ final class ComposerScreen {
         panel.addView(new StudioFader(a, tr("연주 강도", "Energy"), 0, 1, values[0], v -> Math.round(v * 100) + "%", v -> values[0] = v));
         StudioFader timing = new StudioFader(a, tr("자연스러운 타이밍", "Humanize timing"), 0, 1, values[1], v -> Math.round(v * 100) + "%", v -> values[1] = v);
         LinearLayout.LayoutParams spacing = new LinearLayout.LayoutParams(-1, -2);
-        spacing.topMargin = a.dp(16);
+        spacing.topMargin = a.dp(StudioTheme.SPACE_16);
         panel.addView(timing, spacing);
         Button toggle = StudioTheme.styled(a, tr("마무리 필인: ", "Ending fill: ") + (fill[0] ? tr("켜짐", "On") : tr("꺼짐", "Off")), StudioButton.CHIP, () -> {});
         StudioTheme.selected(toggle, fill[0]);
@@ -743,7 +793,7 @@ final class ComposerScreen {
             StudioTheme.selected(toggle, fill[0]);
         });
         LinearLayout.LayoutParams toggleSpacing = new LinearLayout.LayoutParams(-1, -2);
-        toggleSpacing.topMargin = a.dp(16);
+        toggleSpacing.topMargin = a.dp(StudioTheme.SPACE_16);
         panel.addView(toggle, toggleSpacing);
         form(part.label + tr("파트 · 연주 느낌", " · Performance feel"), panel, tr("적용", "Apply"), () -> edit(p -> {
             part.energy = values[0];
@@ -972,7 +1022,7 @@ final class ComposerScreen {
         });
         panel.addView(volume, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.topMargin = a.dp(18);
+        lp.topMargin = a.dp(StudioTheme.SPACE_24);
         panel.addView(pan, lp);
         form(t.name + tr(" · 볼륨과 팬", " · Volume & pan"), panel, tr("저장", "Save"), () -> edit(x -> {
             t.volume = values[0];
@@ -1127,8 +1177,8 @@ final class ComposerScreen {
         });
         ((StudioButton) play).glyph(s.playing() ? "pause" : "play");
         StudioTheme.selected(play, true);
-        a.weighted(row, play, 48);
-        a.weighted(row, a.button(tr("■ 정지", "■ Stop"), s::stop), 48);
+        peerAction(row, play);
+        peerAction(row, a.button(tr("■ 정지", "■ Stop"), s::stop));
         a.actionDock.addView(row);
         if (voice) {
             phrase = a.button(s.capturing ? tr("취소 · 이전 프레이즈 유지", "Cancel · keep previous phrase") : tr("프레이즈 기록", "Record phrase"), () -> {
@@ -1160,7 +1210,7 @@ final class ComposerScreen {
         if (active < 0 || active >= chordCards.size()) active = -1;
         if (active != highlightedBar) {
             for (int i = 0; i < chordCards.size(); i++) {
-                android.graphics.drawable.GradientDrawable bg = StudioTheme.background(a, StudioTheme.SURFACE, 12);
+                android.graphics.drawable.GradientDrawable bg = StudioTheme.background(a, StudioTheme.SURFACE, StudioTheme.CARD_RADIUS);
                 if (i == active) bg.setStroke(a.dp(2), MainActivity.LIME);
                 chordCards.get(i).setBackground(bg);
             }
@@ -1227,7 +1277,7 @@ final class ComposerScreen {
         item.setText(styled);
         item.setContentDescription(label);
         item.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        item.setPadding(a.dp(12), a.dp(8), a.dp(8), a.dp(8));
+        controlPadding(item);
         item.setMinHeight(a.dp(56));
         row.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
         Button star = a.button(favorite ? "★" : "☆", () -> {
@@ -1240,7 +1290,8 @@ final class ComposerScreen {
         star.setTextColor(favorite ? StudioTheme.ACCENT : MainActivity.MUTED);
         star.setContentDescription((favorite ? tr("즐겨찾기에서 제거: ", "Remove favorite: ")
                 : tr("즐겨찾기에 추가: ", "Add favorite: ")) + label);
-        row.addView(star, new LinearLayout.LayoutParams(a.dp(52), a.dp(52)));
+        LinearLayout.LayoutParams favoriteLp = new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET), a.dp(StudioTheme.TOUCH_TARGET));
+        favoriteLp.leftMargin = a.dp(StudioTheme.SPACE_8);row.addView(star, favoriteLp);
         list.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
 
@@ -1250,15 +1301,15 @@ final class ComposerScreen {
         String partId = s.part().id;
         Dialog dialog = new Dialog(a);
         LinearLayout panel = a.column();
-        panel.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
-        panel.setBackground(StudioTheme.background(a, 0xff0d0f12, 20, 0xff353b44));
+        panel.setPadding(a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING));
+        panel.setBackground(StudioTheme.background(a, 0xff0d0f12, StudioTheme.CARD_RADIUS, 0xff353b44));
         EditText search = new EditText(a);
         search.setTextColor(MainActivity.TEXT);
         search.setHintTextColor(MainActivity.MUTED);
         search.setHint(tr("악기 · 카테고리 검색", "Search instruments or categories"));
         search.setSingleLine();
         search.setTypeface(StudioTheme.body(a));
-        search.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        controlPadding(search);
         search.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
         panel.addView(search);
         final int[] category = {0};
@@ -1386,7 +1437,7 @@ final class ComposerScreen {
         field.setTextColor(MainActivity.TEXT);
         field.setHintTextColor(MainActivity.MUTED);
         field.setTypeface(StudioTheme.body(a));
-        field.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        controlPadding(field);
         field.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
         field.setSelectAllOnFocus(true);
         form(title, field, tr("저장", "Save"), () -> {
@@ -1472,8 +1523,8 @@ final class ComposerScreen {
 
         Dialog dialog = new Dialog(a);
         LinearLayout root = a.column();
-        root.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
-        root.setBackground(StudioTheme.background(a, 0xff0f1418, 16, 0xff354048));
+        root.setPadding(a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING));
+        root.setBackground(StudioTheme.background(a, 0xff0f1418, StudioTheme.CARD_RADIUS, 0xff354048));
 
         LinearLayout header = a.row();
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -1484,7 +1535,7 @@ final class ComposerScreen {
         root.addView(header);
 
         LinearLayout hud = a.column();
-        hud.setPadding(a.dp(12), a.dp(8), a.dp(12), a.dp(8));
+        hud.setPadding(a.dp(StudioTheme.SPACE_12), a.dp(StudioTheme.SPACE_8), a.dp(StudioTheme.SPACE_12), a.dp(StudioTheme.SPACE_8));
         hud.setBackground(StudioTheme.background(a, 0xff162026, 10));
         
         TextView statusText = a.text("", 14, Color.rgb(225, 228, 196));
@@ -1498,38 +1549,30 @@ final class ComposerScreen {
         root.addView(hud);
 
         LinearLayout toolbar1 = a.row();
-        toolbar1.setGravity(Gravity.CENTER_VERTICAL);
-        toolbar1.setPadding(0, a.dp(8), 0, a.dp(6));
-
+        toolbar1.setPadding(0, a.dp(StudioTheme.SPACE_8), 0, a.dp(StudioTheme.SPACE_8));
         Button prevBar = StudioTheme.styled(a, "◀", StudioButton.CHIP, () -> {});
         Button nextBar = StudioTheme.styled(a, "▶", StudioButton.CHIP, () -> {});
-        toolbar1.addView(prevBar, new LinearLayout.LayoutParams(a.dp(44), a.dp(38)));
-        toolbar1.addView(nextBar, new LinearLayout.LayoutParams(a.dp(44), a.dp(38)));
-
+        prevBar.setContentDescription(tr("이전 마디", "Previous bar"));
+        nextBar.setContentDescription(tr("다음 마디", "Next bar"));
+        toolbar1.addView(prevBar, new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET), -1));
+        LinearLayout.LayoutParams nextBarLp = new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET), -1);
+        nextBarLp.leftMargin = a.dp(StudioTheme.SPACE_8);toolbar1.addView(nextBar, nextBarLp);
         Button octBtn = StudioTheme.styled(a, tr("옥타브: C", "Oct: C") + baseOctave[0], StudioButton.CHIP, () -> {});
-        LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(-2, a.dp(38));
-        olp.leftMargin = a.dp(6);
-        toolbar1.addView(octBtn, olp);
-
-        Button lenBtn = StudioTheme.styled(a, tr("길이: 1박", "Len: 1 beat"), StudioButton.CHIP, () -> {});
-        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(-2, a.dp(38));
-        llp.leftMargin = a.dp(6);
-        toolbar1.addView(lenBtn, llp);
-
-        Button restBtn = StudioTheme.styled(a, tr("쉼표 ␣", "Rest ␣"), StudioButton.CHIP, () -> {});
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(0, a.dp(38), 1);
-        rlp.leftMargin = a.dp(6);
-        toolbar1.addView(restBtn, rlp);
+        peerAction(toolbar1, octBtn);
         root.addView(toolbar1);
 
+        LinearLayout lengths = a.row();
+        lengths.setPadding(0, 0, 0, a.dp(StudioTheme.SPACE_8));
+        Button lenBtn = StudioTheme.styled(a, tr("길이: 1박", "Len: 1 beat"), StudioButton.CHIP, () -> {});
+        Button restBtn = StudioTheme.styled(a, tr("쉼표 ␣", "Rest ␣"), StudioButton.CHIP, () -> {});
+        peerAction(lengths, lenBtn);peerAction(lengths, restBtn);
+        root.addView(lengths);
+
         LinearLayout toolbar2 = a.row();
-        toolbar2.setPadding(0, 0, 0, a.dp(8));
+        toolbar2.setPadding(0, 0, 0, a.dp(StudioTheme.SPACE_8));
         Button deleteLast = StudioTheme.styled(a, tr("⌫ 직전 음 삭제", "⌫ Delete note"), StudioButton.STANDARD, () -> {});
         Button clearAll = StudioTheme.styled(a, tr("전체 초기화", "Clear all"), StudioButton.STANDARD, () -> {});
-        toolbar2.addView(deleteLast, new LinearLayout.LayoutParams(0, a.dp(40), 1));
-        LinearLayout.LayoutParams clp2 = new LinearLayout.LayoutParams(0, a.dp(40), 1);
-        clp2.leftMargin = a.dp(8);
-        toolbar2.addView(clearAll, clp2);
+        peerAction(toolbar2, deleteLast);peerAction(toolbar2, clearAll);
         root.addView(toolbar2);
 
         HorizontalScrollView keyScroll = new HorizontalScrollView(a);
@@ -1628,7 +1671,7 @@ final class ComposerScreen {
             whiteKey.setTextSize(11);
             whiteKey.setTypeface(StudioTheme.bold(a));
             whiteKey.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            whiteKey.setPadding(0, 0, 0, a.dp(8));
+            whiteKey.setPadding(0, 0, 0, a.dp(StudioTheme.SPACE_8));
             whiteKey.setBackground(StudioTheme.background(a, 0xfff0f4f8, 6, 0xffb0c0cc));
             whiteKey.setOnClickListener(v -> {
                 int midi = (baseOctave[0] + 1) * 12 + whitePitches[noteIndex];
@@ -1686,8 +1729,8 @@ final class ComposerScreen {
             dialog.dismiss();
         });
         StudioTheme.selected(saveBtn, true);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, a.dp(48));
-        slp.topMargin = a.dp(12);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(-1, -2);
+        slp.topMargin = a.dp(StudioTheme.SPACE_12);
         root.addView(saveBtn, slp);
 
         updateUI.run();

@@ -16,9 +16,9 @@ final class StudioRootLayout extends LinearLayout {
     }
     @Override protected void onMeasure(int widthSpec,int heightSpec){
         int width=MeasureSpec.getSize(widthSpec)-safeLeft-safeRight;
-        int gutter=StudioTheme.dp(getContext(),width/getResources().getDisplayMetrics().density>=400?20:16);
+        int gutter=StudioTheme.dp(getContext(),StudioTheme.SPACE_16);
         boolean expanded=getContext() instanceof MainActivity && ((MainActivity)getContext()).tabletLandscape();
-        if(expanded)gutter=StudioTheme.dp(getContext(),24);
+        if(expanded)gutter=StudioTheme.dp(getContext(),StudioTheme.SPACE_24);
         gutter=Math.max(gutter,(width-StudioTheme.dp(getContext(),expanded?1600:480))/2);
         int left=safeLeft+gutter,right=safeRight+gutter;
         if(getPaddingLeft()!=left||getPaddingRight()!=right||getPaddingTop()!=safeTop||getPaddingBottom()!=safeBottom)

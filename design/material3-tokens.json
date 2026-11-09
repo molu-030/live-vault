@@ -1,0 +1,49 @@
+{
+  "basis": "Material 3 principles; Live Vault brand adaptation",
+  "spacingDp": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32
+  ],
+  "pageGutterDp": {
+    "phone": 16,
+    "expandedTablet": 24
+  },
+  "card": {
+    "paddingDp": 16,
+    "radiusDp": 12,
+    "gapDp": 16
+  },
+  "button": {
+    "minimumTouchDp": 48,
+    "horizontalPaddingDp": 16,
+    "verticalPaddingDp": 12,
+    "radiusDp": 12
+  },
+  "typeSp": {
+    "label": [
+      12,
+      16
+    ],
+    "bodyAndButton": [
+      14,
+      20
+    ],
+    "title": [
+      16,
+      24
+    ],
+    "headline": [
+      20,
+      28
+    ],
+    "display": [
+      24,
+      32
+    ]
+  },
+  "compactExceptions": "Phone live cards H12/V4; multiline bounded controls H8/V0; small sheet gaps shrink before touch targets. Different content uses natural height."
+}

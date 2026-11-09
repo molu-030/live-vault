@@ -29,7 +29,8 @@ final class LiveMixerView extends LinearLayout {
     LiveMixerView(MainActivity a) {
         super(a); this.a = a; session = a.composer;
         setOrientation(VERTICAL);
-        heading = a.text("", 12, StudioTheme.MUTED);
+        heading = a.text("", StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
+        heading.setPadding(0, 0, 0, a.dp(StudioTheme.SPACE_8));
         addView(heading);
         HorizontalScrollView scroll = new HorizontalScrollView(a);
         scroll.setHorizontalScrollBarEnabled(true);
@@ -86,18 +87,19 @@ final class LiveMixerView extends LinearLayout {
             final int slot = i, createdRevision = session.revision;
             TrackConfig track = part.tracks.get(i);
             LinearLayout strip = a.column();
-            strip.setPadding(a.dp(4), a.dp(4), a.dp(4), a.dp(4));
-            TextView name = a.text(track.name, 10, StudioTheme.TEXT);
+            strip.setPadding(a.dp(StudioTheme.SPACE_8), a.dp(StudioTheme.SPACE_8), a.dp(StudioTheme.SPACE_8), a.dp(StudioTheme.SPACE_8));
+            strip.setBackground(StudioTheme.background(a, StudioTheme.RAISED, StudioTheme.CARD_RADIUS, StudioTheme.BORDER));
+            TextView name = a.text(track.name, StudioTheme.TYPE_LABEL, StudioTheme.TEXT);
             name.setGravity(Gravity.CENTER); name.setMaxLines(1); name.setHorizontallyScrolling(false);
             name.setPadding(0,0,0,0); name.setContentDescription(track.name);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             strip.addView(name, new LinearLayout.LayoutParams(-1, a.dp(28)));
             String source = sourceLabel(a, track);
-            TextView type = a.text(source, 9, StudioTheme.MUTED);
+            TextView type = a.text(source, StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
             type.setGravity(Gravity.CENTER); type.setMaxLines(1); type.setHorizontallyScrolling(false);
             type.setPadding(0,0,0,0);
             type.setEllipsize(android.text.TextUtils.TruncateAt.END); type.setContentDescription(source);
-            strip.addView(type, new LinearLayout.LayoutParams(-1, a.dp(22)));
+            strip.addView(type, new LinearLayout.LayoutParams(-1, a.dp(28)));
             Button mute = StudioTheme.styled(a, a.tr("뮤트", "Mute"), StudioButton.STANDARD, () -> {
                 if (!valid(slot, track, createdRevision)) { poll(); return; }
                 session.edit(p -> track.muted = !track.muted, false);
@@ -106,7 +108,9 @@ final class LiveMixerView extends LinearLayout {
             fitStripButton(mute);
             mute.setContentDescription(track.name + a.tr(" 뮤트", " mute"));
             StudioTheme.selected(mute, track.muted);
-            strip.addView(mute, new LinearLayout.LayoutParams(-1, a.dp(48)));
+            LinearLayout.LayoutParams muteLp = new LinearLayout.LayoutParams(-1, a.dp(StudioTheme.TOUCH_TARGET));
+            muteLp.topMargin = a.dp(StudioTheme.SPACE_8);
+            strip.addView(mute, muteLp);
             Button soloButton = StudioTheme.styled(a, a.tr("솔로", "Solo"), StudioButton.STANDARD, () -> {
                 if (!valid(slot, track, createdRevision)) { poll(); return; }
                 solo = solo == slot ? -1 : slot;
@@ -116,16 +120,20 @@ final class LiveMixerView extends LinearLayout {
             fitStripButton(soloButton);
             soloButton.setContentDescription(track.name + a.tr(" 임시 솔로", " temporary solo"));
             StudioTheme.selected(soloButton, solo == slot);
-            strip.addView(soloButton, new LinearLayout.LayoutParams(-1, a.dp(48)));
+            LinearLayout.LayoutParams soloLp = new LinearLayout.LayoutParams(-1, a.dp(StudioTheme.TOUCH_TARGET));
+            soloLp.topMargin = a.dp(StudioTheme.SPACE_8);
+            strip.addView(soloButton, soloLp);
             Gain gain = new Gain(slot, track);
-            strip.addView(gain, new LinearLayout.LayoutParams(-1, a.dp(130)));
-            strips.addView(strip, new LinearLayout.LayoutParams(a.dp(68), -2));
+            strip.addView(gain, new LinearLayout.LayoutParams(-1, a.dp(136)));
+            LinearLayout.LayoutParams stripLp = new LinearLayout.LayoutParams(a.dp(96), -2);
+            if (i > 0) stripLp.leftMargin = a.dp(StudioTheme.SPACE_8);
+            strips.addView(strip, stripLp);
         }
     }
 
     private void fitStripButton(Button button) {
-        button.setPadding(0, 0, 0, 0);
-        button.setTextSize(12);
+        button.setPadding(a.dp(StudioTheme.SPACE_8), 0, a.dp(StudioTheme.SPACE_8), 0);
+        StudioTheme.applyTypography(button, StudioTheme.TYPE_LABEL);
         button.setMaxLines(1);
         button.setHorizontallyScrolling(false);
         button.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -156,10 +164,10 @@ final class LiveMixerView extends LinearLayout {
         }
         @Override protected void onDraw(Canvas canvas) {
             float x = getWidth() / 2f, top = a.dp(28), bottom = getHeight() - a.dp(12);
-            paint.setTypeface(StudioTheme.mono(a)); paint.setTextSize(StudioTheme.sp(a, 11));
+            paint.setTypeface(StudioTheme.mono(a)); paint.setTextSize(StudioTheme.sp(a, StudioTheme.TYPE_LABEL));
             paint.setTextAlign(Paint.Align.CENTER); paint.setColor(StudioTheme.TEXT);
-            canvas.drawText(Math.round(value * 100) + "%", x, a.dp(17), paint);
-            paint.setStrokeWidth(a.dp(5)); paint.setStrokeCap(Paint.Cap.ROUND);
+            canvas.drawText(Math.round(value * 100) + "%", x, a.dp(20), paint);
+            paint.setStrokeWidth(a.dp(StudioTheme.SPACE_4)); paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setColor(StudioTheme.BORDER); canvas.drawLine(x, top, x, bottom, paint);
             float y = bottom - value * (bottom - top);
             paint.setColor(StudioTheme.ACCENT); canvas.drawLine(x, bottom, x, y, paint);

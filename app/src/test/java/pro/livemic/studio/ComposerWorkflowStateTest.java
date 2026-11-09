@@ -61,11 +61,20 @@ public class ComposerWorkflowStateTest {
   screen.retryDraft.performClick();settle();screen.poll();assertEquals(ComposerSession.SaveState.SAVED,s.draftSave.phase);assertEquals(View.GONE,screen.retryDraft.getVisibility());assertEquals(s.project.json().toString(),s.store.draft().json().toString());
   screen.retryLibrary.performClick();settle();screen.poll();assertEquals(ComposerSession.SaveState.SAVED,s.librarySave.phase);assertEquals(View.GONE,screen.retryLibrary.getVisibility());
  }
+ void assertVisibleHistoryTargets(){
+  int width=a.dp(360),height=a.dp(800);
+  a.root.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY));a.root.layout(0,0,width,height);
+  for(android.widget.Button button:new android.widget.Button[]{screen.undoButton,screen.redoButton}){
+   assertTrue(button.getText()+" touch height",button.getHeight()>=a.dp(48));assertTrue(button.getText()+" touch width",button.getWidth()>=a.dp(48));
+   android.graphics.Rect visible=new android.graphics.Rect();assertTrue(button.getText()+" visible",button.isShown()&&button.getGlobalVisibleRect(visible));
+   assertEquals(button.getText()+" fully visible",button.getHeight(),visible.height());
+  }
+ }
  @Test public void undoRedoButtonsExposeHistoryAndLockWhileRecording()throws Exception{
-  assertFalse(screen.undoButton.isEnabled());assertFalse(screen.redoButton.isEnabled());
-  assertEquals(a.dp(48),screen.undoButton.getLayoutParams().height);assertEquals(a.dp(48),screen.redoButton.getLayoutParams().height);
-  s.edit(p->p.name="Changed",false);screen.poll();assertTrue(screen.undoButton.isEnabled());screen.undoButton.performClick();assertTrue(screen.redoButton.isEnabled());
-  screen.redoButton.performClick();assertEquals("Changed",s.project.name);s.capturing=true;screen.poll();assertFalse(screen.undoButton.isEnabled());assertFalse(screen.redoButton.isEnabled());s.capturing=false;
+  assertFalse(screen.undoButton.isEnabled());assertFalse(screen.redoButton.isEnabled());assertVisibleHistoryTargets();
+  String original=s.project.name;
+  s.edit(p->p.name="Changed",false);screen.poll();assertVisibleHistoryTargets();assertTrue(screen.undoButton.isEnabled());screen.undoButton.performClick();assertEquals(original,s.project.name);assertTrue(screen.redoButton.isEnabled());assertVisibleHistoryTargets();
+  screen.redoButton.performClick();assertEquals("Changed",s.project.name);assertVisibleHistoryTargets();s.capturing=true;screen.poll();assertFalse(screen.undoButton.isEnabled());assertFalse(screen.redoButton.isEnabled());s.capturing=false;
  }
  TrackConfig microphone(int midi){TrackConfig t=s.part().tracks.get(0);t.voice=true;t.phraseSource="microphone";t.name="Lead take";VoicePhrase ph=new VoicePhrase();ph.trackId=t.id;VoicePhrase.Note n=new VoicePhrase.Note();n.beat=1;n.length=1;n.midi=midi;n.velocity=90;ph.notes.add(n);s.part().phrases.add(ph);return t;}
  void complete(){StudioScreenshotTest.Composer.performance=new double[]{4,1,72,90,0,.8,0,0,5,0,72,0,0,.8,0,0};StudioScreenshotTest.Composer.current[8]=3;s.poll();}

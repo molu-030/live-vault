@@ -38,16 +38,17 @@ final class StudioDialogs {
     static void choose(Activity activity, String title, String[] items, int selected, IntConsumer onChoose) {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        int pad = StudioTheme.dp(activity, 20);
-        LinearLayout sheet = new LinearLayout(activity);
+        int pad = StudioTheme.dp(activity, StudioTheme.SPACE_16);
+        FormSheet sheet = new FormSheet(activity);
+        sheet.actionGap = StudioTheme.SPACE_8;
         sheet.setOrientation(LinearLayout.VERTICAL);
-        sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
-        sheet.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
+        sheet.setPadding(pad, StudioTheme.dp(activity, StudioTheme.SPACE_12), pad, StudioTheme.dp(activity, StudioTheme.SPACE_16));
+        sheet.setBackground(StudioTheme.background(activity, POPUP_BG, StudioTheme.CARD_RADIUS, POPUP_BORDER));
 
-        sheet.addView(handle(activity), new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
-        TextView heading = StudioTheme.text(activity, title, 18, StudioTheme.TEXT);
+        sheet.addView(handle(activity), new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, StudioTheme.SPACE_24)));
+        TextView heading = StudioTheme.text(activity, title, StudioTheme.TYPE_HEADLINE, StudioTheme.TEXT);
         heading.setTypeface(StudioTheme.bold(activity));
-        heading.setPadding(0, StudioTheme.dp(activity, 10), 0, StudioTheme.dp(activity, 12));
+        heading.setPadding(0, StudioTheme.dp(activity, StudioTheme.SPACE_8), 0, StudioTheme.dp(activity, StudioTheme.SPACE_16));
         sheet.addView(heading);
 
         ScrollView scroll = new ScrollView(activity);
@@ -81,20 +82,13 @@ final class StudioDialogs {
         scroll.addView(choices);
         Rect visible = new Rect();
         activity.getWindow().getDecorView().getWindowVisibleDisplayFrame(visible);
-        int availableHeight = visible.height() > 0 ? visible.height() : activity.getResources().getDisplayMetrics().heightPixels;
         int availableWidth = visible.width() > 0 ? visible.width() : activity.getResources().getDisplayMetrics().widthPixels;
-        int widthSpec = View.MeasureSpec.makeMeasureSpec(
-                Math.max(1, Math.min(availableWidth, StudioTheme.dp(activity, 520)) - 2 * pad),
-                View.MeasureSpec.EXACTLY
-        );
-        heading.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        choices.measure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int fixed = sheet.getPaddingTop() + sheet.getPaddingBottom() + heading.getMeasuredHeight() + StudioTheme.dp(activity, 68);
-        int maxList = Math.max(StudioTheme.dp(activity, 48), (int) (availableHeight * .9f) - fixed);
-        int listHeight = Math.min(maxList, choices.getMeasuredHeight());
-        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, listHeight));
         StudioButton close = StudioTheme.styled(activity, AppLanguage.text(activity, "닫기", "Close"), StudioButton.QUIET, dialog::dismiss);
-        sheet.addView(close, new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 48)));
+        sheet.content = scroll;
+        sheet.addView(scroll, new LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(-1, -2);
+        closeParams.topMargin = StudioTheme.dp(activity, StudioTheme.SPACE_8);
+        sheet.addView(close, closeParams);
         dialog.setContentView(sheet);
         dialog.setCanceledOnTouchOutside(true);
         Window window = dialog.getWindow();
@@ -120,30 +114,32 @@ final class StudioDialogs {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         FormSheet sheet = new FormSheet(activity);
         sheet.setOrientation(LinearLayout.VERTICAL);
-        int pad = StudioTheme.dp(activity, 20);
-        sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
-        sheet.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
-        sheet.addView(handle(activity), new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
-        TextView heading = StudioTheme.text(activity, title, 18, StudioTheme.TEXT);
+        int pad = StudioTheme.dp(activity, StudioTheme.SPACE_16);
+        sheet.setPadding(pad, StudioTheme.dp(activity, StudioTheme.SPACE_12), pad, StudioTheme.dp(activity, StudioTheme.SPACE_16));
+        sheet.setBackground(StudioTheme.background(activity, POPUP_BG, StudioTheme.CARD_RADIUS, POPUP_BORDER));
+        sheet.addView(handle(activity), new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, StudioTheme.SPACE_24)));
+        TextView heading = StudioTheme.text(activity, title, StudioTheme.TYPE_HEADLINE, StudioTheme.TEXT);
         heading.setTypeface(StudioTheme.bold(activity));
-        heading.setPadding(0, StudioTheme.dp(activity, 10), 0, StudioTheme.dp(activity, 16));
+        heading.setPadding(0, StudioTheme.dp(activity, StudioTheme.SPACE_8), 0, StudioTheme.dp(activity, StudioTheme.SPACE_16));
         sheet.addView(heading);
         ScrollView scroll = scrollable(activity, content);
         sheet.content = scroll;
         sheet.addView(scroll, new LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout buttons = new LinearLayout(activity);
+        LinearLayout buttons = activity instanceof MainActivity ? ((MainActivity) activity).row() : new LinearLayout(activity);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 48));
-        row.topMargin = StudioTheme.dp(activity, 20);
+        LinearLayout.LayoutParams row = new LinearLayout.LayoutParams(-1, -2);
+        row.topMargin = StudioTheme.dp(activity, StudioTheme.SPACE_24);
         sheet.addView(buttons, row);
         StudioButton close = StudioTheme.styled(activity, AppLanguage.text(activity, "취소", "Cancel"), StudioButton.QUIET, dialog::cancel);
-        buttons.addView(close, new LinearLayout.LayoutParams(0, -1, 1));
+        buttons.addView(close, new LinearLayout.LayoutParams(0, -2, 1));
         StudioButton apply = StudioTheme.styled(activity, action, StudioButton.STANDARD, () -> {
             dialog.dismiss();
             save.run();
         });
         StudioTheme.selected(apply, true);
-        buttons.addView(apply, new LinearLayout.LayoutParams(0, -1, 1));
+        LinearLayout.LayoutParams applyParams = new LinearLayout.LayoutParams(0, -2, 1);
+        applyParams.leftMargin = StudioTheme.dp(activity, StudioTheme.SPACE_8);
+        buttons.addView(apply, applyParams);
         if (cancel != null) dialog.setOnCancelListener(d -> cancel.run());
         dialog.setContentView(sheet);
         dialog.setCanceledOnTouchOutside(true);
@@ -169,19 +165,42 @@ final class StudioDialogs {
     private static final class FormSheet extends LinearLayout {
         final Activity activity;
         ScrollView content;
+        int actionGap = StudioTheme.SPACE_24;
         FormSheet(Activity activity) { super(activity); this.activity = activity; }
         @Override protected void onMeasure(int widthSpec, int heightSpec) {
             if (content == null) { super.onMeasure(widthSpec, heightSpec); return; }
             Rect available = availableBounds(activity);
-            int limit = Math.round(available.height() * .9f);
-            if (View.MeasureSpec.getMode(heightSpec) != View.MeasureSpec.UNSPECIFIED)
-                limit = Math.min(limit, View.MeasureSpec.getSize(heightSpec));
-            // Re-measure the natural body every time so rotation/IME changes can grow it too.
+            int limit = View.MeasureSpec.getMode(heightSpec) == View.MeasureSpec.UNSPECIFIED
+                    ? Math.round(available.height() * .9f)
+                    : Math.min(available.height(), View.MeasureSpec.getSize(heightSpec));
+            View grip = getChildAt(0), heading = getChildAt(1), actions = getChildAt(getChildCount() - 1);
+            LinearLayout.LayoutParams actionParams = (LinearLayout.LayoutParams) actions.getLayoutParams();
+            grip.getLayoutParams().height = StudioTheme.dp(activity, StudioTheme.SPACE_24);
+            heading.setPadding(0, StudioTheme.dp(activity, StudioTheme.SPACE_8), 0, StudioTheme.dp(activity, StudioTheme.SPACE_16));
+            actionParams.topMargin = StudioTheme.dp(activity, actionGap);
+            setPadding(getPaddingLeft(), StudioTheme.dp(activity, StudioTheme.SPACE_12), getPaddingRight(), StudioTheme.dp(activity, StudioTheme.SPACE_16));
             ViewGroup.LayoutParams body = content.getLayoutParams();
-            body.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-            super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-            int fixed = getMeasuredHeight() - content.getMeasuredHeight();
-            body.height = Math.min(content.getMeasuredHeight(), Math.max(0, limit - fixed));
+            int natural = 0, fixed = 0;
+            // Reserve real action/text heights before assigning the body. When the IME leaves
+            // little room, compact spacing in 4/8dp steps rather than compressing controls.
+            for (int compact = 0; compact <= 4; compact++) {
+                body.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                super.onMeasure(widthSpec, View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+                natural = content.getMeasuredHeight();
+                fixed = getMeasuredHeight() - natural;
+                int minimumBody = Math.min(natural, StudioTheme.dp(activity, StudioTheme.TOUCH_TARGET));
+                if (content.getChildCount() > 0 && content.getChildAt(0) instanceof ViewGroup) {
+                    ViewGroup controls = (ViewGroup) content.getChildAt(0);
+                    if (controls.getChildCount() > 0)
+                        minimumBody = Math.min(natural, Math.max(minimumBody, controls.getChildAt(controls.getChildCount() - 1).getMeasuredHeight()));
+                }
+                if (limit - fixed >= minimumBody || compact == 4) break;
+                if (compact == 0) actionParams.topMargin = StudioTheme.dp(activity, StudioTheme.SPACE_8);
+                else if (compact == 1) heading.setPadding(0, StudioTheme.dp(activity, StudioTheme.SPACE_8), 0, StudioTheme.dp(activity, StudioTheme.SPACE_8));
+                else if (compact == 2) grip.getLayoutParams().height = StudioTheme.dp(activity, StudioTheme.SPACE_16);
+                else setPadding(getPaddingLeft(), StudioTheme.dp(activity, StudioTheme.SPACE_8), getPaddingRight(), StudioTheme.dp(activity, StudioTheme.SPACE_8));
+            }
+            body.height = Math.min(natural, Math.max(0, limit - fixed));
             super.onMeasure(widthSpec, heightSpec);
         }
     }
@@ -232,15 +251,26 @@ final class StudioDialogs {
         track(activity, dialog);
         Window window = dialog.getWindow();
         if (window != null) {
-            window.setBackgroundDrawable(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
+            window.setBackgroundDrawable(StudioTheme.background(activity, POPUP_BG, StudioTheme.CARD_RADIUS, POPUP_BORDER));
             View content = window.getDecorView().findViewById(android.R.id.content);
             if (content != null) {
-                content.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
+                content.setBackground(StudioTheme.background(activity, POPUP_BG, StudioTheme.CARD_RADIUS, POPUP_BORDER));
             }
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
             WindowManager.LayoutParams params = window.getAttributes();
             params.dimAmount = POPUP_DIM;
             window.setAttributes(params);
+        }
+        for (int which : new int[]{AlertDialog.BUTTON_POSITIVE, AlertDialog.BUTTON_NEGATIVE, AlertDialog.BUTTON_NEUTRAL}) {
+            android.widget.Button action = dialog.getButton(which);
+            if (action == null) continue;
+            StudioTheme.applyTypography(action, StudioTheme.TYPE_BODY);
+            action.setAllCaps(false);
+            action.setSingleLine(false);
+            action.setMinHeight(StudioTheme.dp(activity, StudioTheme.TOUCH_TARGET));
+            action.setPadding(StudioTheme.dp(activity, StudioTheme.BUTTON_PADDING_HORIZONTAL), StudioTheme.dp(activity, StudioTheme.BUTTON_PADDING_VERTICAL),
+                    StudioTheme.dp(activity, StudioTheme.BUTTON_PADDING_HORIZONTAL), StudioTheme.dp(activity, StudioTheme.BUTTON_PADDING_VERTICAL));
+            action.setBackground(StudioTheme.background(activity, StudioTheme.RAISED, StudioTheme.BUTTON_RADIUS));
         }
         android.widget.Button pos = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
         if (pos != null) pos.setTextColor(StudioTheme.ACCENT);

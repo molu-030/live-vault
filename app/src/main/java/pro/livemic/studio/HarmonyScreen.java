@@ -124,7 +124,13 @@ final class HarmonyScreen {
                 + new String[]{"4/4", "3/4", AppLanguage.text(a, "6/8 · 큰박", "6/8 · dotted beat")}[s.meter]
                 + " · " + s.bars + AppLanguage.text(a, "마디 ▾", " bars ▾"), this::loop));
 
-        a.add(a.text(AppLanguage.text(a, "성부 · 4", "Parts · 4"), 18, MainActivity.TEXT));
+        TextView partsHeading=a.text(AppLanguage.text(a, "성부 · 4", "Parts · 4"), StudioTheme.TYPE_HEADLINE, MainActivity.TEXT);
+        partsHeading.setTypeface(StudioTheme.bold(a));
+        LinearLayout.LayoutParams headingSpacing=new LinearLayout.LayoutParams(-1,-2);
+        int previousGap=0;
+        if(a.content.getChildCount()>0){View previous=a.content.getChildAt(a.content.getChildCount()-1);if(previous.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)previousGap=((ViewGroup.MarginLayoutParams)previous.getLayoutParams()).bottomMargin;}
+        headingSpacing.topMargin=Math.max(0,a.dp(StudioTheme.SPACE_24)-previousGap);
+        headingSpacing.bottomMargin=a.dp(StudioTheme.SPACE_8);a.content.addView(partsHeading,headingSpacing);
         drawParts();
 
         a.add(a.button(AppLanguage.text(a, "전체 믹스 녹음", "Record full mix"), a::toggleRecord));
@@ -144,11 +150,11 @@ final class HarmonyScreen {
             for (int i = start; i < Math.min(4, start + columns); i++) {
                 LinearLayout tile = partTile(i);
                 LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1);
-                if (i > start) cell.leftMargin = a.dp(12);
+                if (i > start) cell.leftMargin = a.dp(StudioTheme.SPACE_16);
                 row.addView(tile, cell);
             }
             LinearLayout.LayoutParams line = new LinearLayout.LayoutParams(-1, -2);
-            line.bottomMargin = a.dp(12);
+            line.bottomMargin = a.dp(StudioTheme.SPACE_16);
             partsGrid.addView(row, line);
         }
         a.add(partsGrid);
@@ -165,10 +171,11 @@ final class HarmonyScreen {
         heading.addView(selectors[slot], new LinearLayout.LayoutParams(0, -2, 1));
         menuButtons[slot] = a.button("⋯", () -> menu(slot));
         menuButtons[slot].setContentDescription(AppLanguage.text(a, "성부 이름 변경 또는 삭제", "Rename or delete part"));
-        heading.addView(menuButtons[slot], new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
+        LinearLayout.LayoutParams menuSpacing=new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET),a.dp(StudioTheme.TOUCH_TARGET));
+        menuSpacing.leftMargin=a.dp(StudioTheme.SPACE_8);heading.addView(menuButtons[slot],menuSpacing);
         tile.addView(heading);
         tileStates[slot] = a.text("", 14, MainActivity.MUTED);
-        tileStates[slot].setPadding(0, a.dp(8), 0, a.dp(8));
+        tileStates[slot].setPadding(0, a.dp(StudioTheme.SPACE_8), 0, a.dp(StudioTheme.SPACE_8));
         tile.addView(tileStates[slot], new LinearLayout.LayoutParams(-1, -2));
 
         LinearLayout mix = a.row();
@@ -180,9 +187,9 @@ final class HarmonyScreen {
         mixButtons[slot] = a.button("", () -> levels(slot));
         muteButtons[slot].setMaxLines(2);
         mixButtons[slot].setMaxLines(2);
-        LinearLayout.LayoutParams mute = new LinearLayout.LayoutParams(0, -2, 1);
-        LinearLayout.LayoutParams level = new LinearLayout.LayoutParams(0, -2, 2);
-        level.leftMargin = a.dp(8);
+        LinearLayout.LayoutParams mute = new LinearLayout.LayoutParams(0, -1, 1);
+        LinearLayout.LayoutParams level = new LinearLayout.LayoutParams(0, -1, 2);
+        level.leftMargin = a.dp(StudioTheme.SPACE_8);
         mix.addView(muteButtons[slot], mute);
         mix.addView(mixButtons[slot], level);
         tile.addView(mix);
@@ -192,14 +199,14 @@ final class HarmonyScreen {
         });
         recordButtons[slot].setMaxLines(2);
         LinearLayout.LayoutParams action = new LinearLayout.LayoutParams(-1, -2);
-        action.topMargin = a.dp(8);
+        action.topMargin = a.dp(StudioTheme.SPACE_8);
         tile.addView(recordButtons[slot], action);
         restoreButtons[slot] = a.button("", () -> {
             if (!selectionLocked()) { s.undo(slot); poll(); }
         });
         restoreButtons[slot].setMaxLines(2);
         LinearLayout.LayoutParams restore = new LinearLayout.LayoutParams(-1, -2);
-        restore.topMargin = a.dp(8);
+        restore.topMargin = a.dp(StudioTheme.SPACE_8);
         tile.addView(restoreButtons[slot], restore);
         return tile;
     }
@@ -273,6 +280,13 @@ final class HarmonyScreen {
         }
     }
 
+    void peerAction(LinearLayout row,View view){
+        view.setMinimumHeight(a.dp(StudioTheme.TOUCH_TARGET));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);
+        if(row.getChildCount()>0)lp.leftMargin=a.dp(StudioTheme.SPACE_8);
+        row.addView(view,lp);
+    }
+
     void dock() {
         a.actionDock.setVisibility(View.VISIBLE);
         status = a.text("", 12, MainActivity.MUTED);
@@ -294,11 +308,11 @@ final class HarmonyScreen {
             refresh();
         });
         StudioTheme.selected(play, true);
-        a.weighted(row, play, 48);
-        a.weighted(row, a.button(AppLanguage.text(a, "■ 정지", "■ Stop"), () -> {
+        peerAction(row,play);
+        peerAction(row,a.button(AppLanguage.text(a, "■ 정지", "■ Stop"), () -> {
             s.stop();
             refresh();
-        }), 48);
+        }));
         a.actionDock.addView(row);
 
         boolean pending = s.state[4] >= 0 || s.state[5] >= 0;
@@ -367,7 +381,7 @@ final class HarmonyScreen {
         field.setSingleLine();
         field.setTextColor(MainActivity.TEXT);
         field.setTypeface(StudioTheme.body(a));
-        field.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        field.setPadding(a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL), a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL));
         field.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
         field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(40)});
         field.setSelectAllOnFocus(true);
@@ -389,7 +403,7 @@ final class HarmonyScreen {
         float[] before = {s.wet, s.dry, s.spread};
         LinearLayout p = a.column();
         TextView explanation = a.text(AppLanguage.text(a, "자동 화음이 켜져 있을 때 적용됩니다.", "Applies when automatic harmony is on."), 14, MainActivity.MUTED);
-        explanation.setPadding(0, 0, 0, a.dp(12));
+        explanation.setPadding(0, 0, 0, a.dp(StudioTheme.SPACE_12));
         p.addView(explanation);
         p.addView(new StudioFader(a, AppLanguage.text(a, "화음", "Harmony"), 0, 1, s.wet, v -> Math.round(v * 100) + "%", v -> {
             s.wet = v;

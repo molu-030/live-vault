@@ -10,7 +10,7 @@ final class RecentVoiceRecovery {
     private RecentVoiceRecovery(){}
     static void draw(MainActivity a){
         LinearLayout card=a.beginCard();
-        Switch toggle=new Switch(a);toggle.setMinHeight(a.dp(48));toggle.setText(a.tr("직전 마이크 소리 10초 보관","Keep the last 10 seconds of mic audio"));toggle.setTextColor(MainActivity.TEXT);
+        Switch toggle=new Switch(a);StudioTheme.applyTypography(toggle,StudioTheme.TYPE_BODY);toggle.setMinHeight(a.dp(StudioTheme.TOUCH_TARGET));toggle.setPadding(0,a.dp(StudioTheme.SPACE_12),0,a.dp(StudioTheme.SPACE_12));toggle.setText(a.tr("직전 마이크 소리 10초 보관","Keep the last 10 seconds of mic audio"));toggle.setTextColor(MainActivity.TEXT);
         toggle.setChecked(NativeAudio.recentVoiceSeconds()>=0);
         toggle.setOnCheckedChangeListener((v,on)->{NativeAudio.recentVoiceEnabled(on);a.showTab();});a.add(toggle);
         a.note(a.tr("기본 꺼짐. 마이크는 직접 켜야 하며, 마이크나 보관을 끄면 메모리의 목소리를 지웁니다.","Off by default. Turn on the mic yourself; switching off the mic or history clears its memory."));
@@ -20,7 +20,7 @@ final class RecentVoiceRecovery {
                     .setPositiveButton(a.tr("닫기","Close"),null).create();
             StudioDialogs.showDark(a,details);
         }));
-        TextView status=a.text("",13,MainActivity.LIME);a.add(status);
+        TextView status=a.text("",StudioTheme.TYPE_BODY,MainActivity.LIME);a.add(status);
         android.widget.Button recover=a.button(a.tr("직전 목소리 복구","Recover recent voice"),()->StudioDialogs.choose(a,a.tr("새 테이크로 복구","Recover as a new take"),new String[]{a.tr("원음으로 복구","Recover dry voice"),a.tr("현재 보컬 효과로 복구","Recover with current vocal effects")},-1,which->recover(a,which==1)));
         a.add(recover);a.endCard(card);
         Runnable update=new Runnable(){public void run(){if(!status.isAttachedToWindow()||a.tab!=4)return;int seconds=NativeAudio.recentVoiceSeconds();status.setText(seconds<0?a.tr("보관 꺼짐","History off"):!AudioService.active?a.tr("마이크 꺼짐 · 보관된 목소리 없음","Mic off · no voice retained"):seconds+a.tr("초 보관됨 · 최대 10초"," seconds retained · up to 10 seconds"));recover.setEnabled(AudioService.active&&seconds>0);status.postDelayed(this,500);}};

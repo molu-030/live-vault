@@ -235,9 +235,10 @@ public class MainActivity extends Activity {
     }
 
     TextView title(String t) {
-        TextView v = text(t, 22, TEXT);
+        TextView v = text(t, StudioTheme.TYPE_DISPLAY, TEXT);
         v.setTypeface(StudioTheme.bold(this));
-        v.setPadding(0, dp(4), 0, dp(10));
+        v.setPadding(0, 0, 0, dp(StudioTheme.SPACE_8));
+        v.setTag("studio-section-title");
         return v;
     }
 
@@ -247,9 +248,37 @@ public class MainActivity extends Activity {
         return l;
     }
 
+    /** Related form controls use an 8dp rhythm without adding space outside the group. */
+    LinearLayout formColumn() {
+        LinearLayout l = column();
+        GradientDrawable separator = new GradientDrawable();
+        separator.setColor(android.graphics.Color.TRANSPARENT);
+        separator.setSize(1, dp(StudioTheme.SPACE_8));
+        l.setDividerDrawable(separator);
+        l.setShowDividers(LinearLayout.SHOW_DIVIDER_MIDDLE);
+        return l;
+    }
+
     LinearLayout row() {
-        LinearLayout l = new LinearLayout(this);
+        LinearLayout l = new LinearLayout(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                boolean controls = getChildCount() > 1;
+                for (int i = 0; i < getChildCount(); i++) {
+                    View child = getChildAt(i);
+                    controls &= child instanceof Button && ((LinearLayout.LayoutParams) child.getLayoutParams()).weight > 0;
+                }
+                if (!controls) { super.onMeasure(widthSpec, heightSpec); return; }
+                // Equal-role controls share their tallest natural height; large text can wrap.
+                for (int i = 0; i < getChildCount(); i++) getChildAt(i).getLayoutParams().height = -2;
+                super.onMeasure(widthSpec, heightSpec);
+                int height = 0;
+                for (int i = 0; i < getChildCount(); i++) height = Math.max(height, getChildAt(i).getMeasuredHeight());
+                for (int i = 0; i < getChildCount(); i++) getChildAt(i).getLayoutParams().height = height;
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
         l.setGravity(Gravity.CENTER_VERTICAL);
+        l.setBaselineAligned(false);
         return l;
     }
 
@@ -259,36 +288,44 @@ public class MainActivity extends Activity {
 
     void add(View v) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.bottomMargin = dp(8);
+        lp.bottomMargin = dp("studio-card".equals(v.getTag()) ? StudioTheme.SPACE_16 : StudioTheme.SPACE_8);
+        if (content == page && "studio-section-title".equals(v.getTag()) && content.getChildCount() > 0)
+            lp.topMargin = dp(StudioTheme.SPACE_16);
         content.addView(v, lp);
     }
 
     void gap() {
         Space s = new Space(this);
-        content.addView(s, new LinearLayout.LayoutParams(1, dp(4)));
+        content.addView(s, new LinearLayout.LayoutParams(1, dp(StudioTheme.SPACE_16)));
     }
 
     void note(String t) {
-        TextView v = text(t, 12, MUTED);
-        v.setPadding(0, dp(4), 0, dp(4));
+        TextView v = text(t, StudioTheme.TYPE_LABEL, MUTED);
         add(v);
     }
 
     LinearLayout beginCard() {
         LinearLayout previous = content;
         LinearLayout card = StudioTheme.card(this);
+        card.setTag("studio-card");
         add(card);
         content = card;
         return previous;
     }
 
     void endCard(LinearLayout previous) {
+        if (content.getChildCount() > 0) {
+            View last = content.getChildAt(content.getChildCount() - 1);
+            if (last.getLayoutParams() instanceof LinearLayout.LayoutParams)
+                ((LinearLayout.LayoutParams) last.getLayoutParams()).bottomMargin = 0;
+        }
         content = previous;
     }
 
     void weighted(LinearLayout line, View view, int height) {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(height), 1);
-        if (line.getChildCount() > 0) lp.leftMargin = dp(8);
+        view.setMinimumHeight(dp(Math.max(StudioTheme.TOUCH_TARGET, height)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1);
+        if (line.getChildCount() > 0) lp.leftMargin = dp(StudioTheme.SPACE_8);
         line.addView(view, lp);
     }
 
@@ -463,12 +500,12 @@ public class MainActivity extends Activity {
         root.addView(pageScroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         actionDock = column();
-        actionDock.setPadding(0, dp(6), 0, dp(6));
+        actionDock.setPadding(0, dp(StudioTheme.SPACE_8), 0, dp(StudioTheme.SPACE_8));
         actionDock.setVisibility(View.GONE);
         root.addView(actionDock, new LinearLayout.LayoutParams(-1, -2));
 
         transport = row();
-        transport.setPadding(dp(12), dp(10), dp(12), dp(10));
+        transport.setPadding(dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_8), dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_8));
         transport.setBackground(bg(PANEL, 12));
         recButton = button(tr("●  오디오 녹음", "● Audio recording"), this::toggleRecord);
         transport.addView(recButton, new LinearLayout.LayoutParams(0, dp(52), 1));
@@ -802,7 +839,8 @@ public class MainActivity extends Activity {
         s.setText(label);
         s.setTextColor(TEXT);
         s.setTextSize(14);
-        s.setPadding(0, dp(10), 0, dp(10));
+        s.setMinHeight(dp(StudioTheme.TOUCH_TARGET));
+        s.setPadding(0, dp(StudioTheme.SPACE_12), 0, dp(StudioTheme.SPACE_12));
         s.setChecked(values[k] > .5);
         s.setOnCheckedChangeListener((b, on) -> {
             if (k == 11 && on && !AudioService.canMonitor(this)) {
@@ -850,8 +888,8 @@ public class MainActivity extends Activity {
 
     void addModeSelector(boolean video) {
         LinearLayout media = row();
-        media.setPadding(dp(3), dp(3), dp(3), dp(3));
-        media.setBackground(bg(RAISED, 10));
+        media.setPadding(dp(StudioTheme.SPACE_4), dp(StudioTheme.SPACE_4), dp(StudioTheme.SPACE_4), dp(StudioTheme.SPACE_4));
+        media.setBackground(bg(RAISED, StudioTheme.CARD_RADIUS));
         StudioButton audio = StudioTheme.styled(this, tr("오디오", "Audio"), video ? StudioButton.QUIET : StudioButton.STANDARD, () -> chooseTab(0));
         audio.glyph("music");
         audio.setTextColor(video ? MUTED : LIME);
@@ -865,8 +903,8 @@ public class MainActivity extends Activity {
 
     void drawer() {
         LinearLayout panel = column();
-        panel.setPadding(dp(18), dp(18), dp(18), dp(22));
-        panel.setBackground(bg(PANEL, 16));
+        panel.setPadding(dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_24));
+        panel.setBackground(bg(PANEL, StudioTheme.CARD_RADIUS));
         int availableHeight = root.getHeight() - root.getPaddingTop() - root.getPaddingBottom();
         int h = Math.max(dp(160), availableHeight - dp(64));
         ScrollView menuScroll = new ScrollView(this);
@@ -879,7 +917,7 @@ public class MainActivity extends Activity {
                 h,
                 true
         );
-        popup.setBackgroundDrawable(bg(PANEL, 16));
+        popup.setBackgroundDrawable(bg(PANEL, StudioTheme.CARD_RADIUS));
         popup.setElevation(dp(24));
         popup.setOutsideTouchable(true);
         drawerPopup = popup;
@@ -939,7 +977,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < names.length; i++) {
             final int k = i;
             LinearLayout item = row();
-            item.setPadding(dp(8), dp(11), dp(8), dp(11));
+            item.setPadding(dp(StudioTheme.SPACE_8), dp(StudioTheme.SPACE_12), dp(StudioTheme.SPACE_8), dp(StudioTheme.SPACE_12));
             boolean currentItem = (k == 0 && tab == 0)
                     || (k == 1 && tab == 1)
                     || (k == 2 && (tab == 7 || tab == 8))
@@ -952,12 +990,12 @@ public class MainActivity extends Activity {
             item.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
             LinearLayout copy = column();
-            copy.setPadding(dp(14), 0, dp(8), 0);
+            copy.setPadding(dp(StudioTheme.SPACE_16), 0, dp(StudioTheme.SPACE_8), 0);
             TextView itemTitle = text(names[i], 16, currentItem ? LIME : TEXT);
             itemTitle.setTypeface(StudioTheme.bold(this));
             copy.addView(itemTitle);
             TextView detail = text(subtitles[i], 11, MUTED);
-            detail.setPadding(0, dp(3), 0, 0);
+            detail.setPadding(0, dp(StudioTheme.SPACE_4), 0, 0);
             copy.addView(detail);
             item.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -1087,7 +1125,8 @@ public class MainActivity extends Activity {
         agcSw.setText(tr("자동 입력 레벨", "Auto gain control"));
         agcSw.setTextColor(TEXT);
         agcSw.setTextSize(14);
-        agcSw.setPadding(0, dp(10), 0, dp(10));
+        agcSw.setMinHeight(dp(StudioTheme.TOUCH_TARGET));
+        agcSw.setPadding(0, dp(StudioTheme.SPACE_12), 0, dp(StudioTheme.SPACE_12));
         agcSw.setChecked(AudioRouting.autoGainPreferred(this));
         agcSw.setOnCheckedChangeListener((b, on) -> {
             AudioRouting.setAutoGainPreferred(this, on);
@@ -1109,7 +1148,8 @@ public class MainActivity extends Activity {
         echoSw.setText(tr("기기 에코 제거(AEC)", "Device Echo cancellation (AEC)") + " · " + deviceEchoStatus());
         echoSw.setTextColor(TEXT);
         echoSw.setTextSize(14);
-        echoSw.setPadding(0, dp(10), 0, dp(10));
+        echoSw.setMinHeight(dp(StudioTheme.TOUCH_TARGET));
+        echoSw.setPadding(0, dp(StudioTheme.SPACE_12), 0, dp(StudioTheme.SPACE_12));
         echoSw.setChecked(AudioRouting.echoCancellationPreferred(this));
         echoSw.setOnCheckedChangeListener((b, on) -> {
             AudioRouting.setEchoCancellationPreferred(this, on);
@@ -1527,8 +1567,8 @@ public class MainActivity extends Activity {
     }
 
     void monitoringOptions() {
-        LinearLayout panel = column();
-        panel.setPadding(dp(16), dp(8), dp(16), 0);
+        LinearLayout panel = formColumn();
+        panel.setPadding(dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_8), dp(StudioTheme.SPACE_16), 0);
         Button route = button(tr("출력 모드: ", "Output mode: ") + outputName() + "  ›", () -> {});
         panel.addView(route);
 
@@ -1685,8 +1725,8 @@ public class MainActivity extends Activity {
             toast(tr("예약 또는 녹음을 마친 뒤 설정하세요.", "Finish recording or the countdown before changing settings."));
             return;
         }
-        LinearLayout panel = column();
-        panel.setPadding(dp(16), dp(12), dp(16), 0);
+        LinearLayout panel = formColumn();
+        panel.setPadding(dp(StudioTheme.SPACE_16), dp(StudioTheme.SPACE_8), dp(StudioTheme.SPACE_16), 0);
         panel.addView(text(tr("녹음 시작", "Start recording"), 15, TEXT));
         LinearLayout delays = row();
         int[] choice = {recordDelay};
@@ -1914,7 +1954,7 @@ public class MainActivity extends Activity {
 
         TextView heading = text(tr("최근 반주", "Recent backing"), 17, TEXT);
         heading.setTypeface(StudioTheme.bold(this));
-        heading.setPadding(0, dp(10), 0, dp(4));
+        heading.setPadding(0, dp(StudioTheme.SPACE_16), 0, dp(StudioTheme.SPACE_8));
         add(heading);
 
         List<JSONObject> items = recent.list();
@@ -1925,13 +1965,14 @@ public class MainActivity extends Activity {
             Uri uri = Uri.parse(j.optString("uri"));
             String filename = j.optString("name"), ext = extension(filename);
             LinearLayout card = row();
-            card.setPadding(dp(12), dp(10), dp(8), dp(10));
-            card.setBackground(bg(PANEL, 12));
+            card.setPadding(dp(StudioTheme.CARD_PADDING), dp(StudioTheme.CARD_PADDING), dp(StudioTheme.CARD_PADDING), dp(StudioTheme.CARD_PADDING));
+            card.setBackground(bg(PANEL, StudioTheme.CARD_RADIUS));
+            card.setTag("studio-card");
             ImageView icon = new ImageView(this);
-            icon.setPadding(dp(9), dp(9), dp(9), dp(9));
+            icon.setPadding(dp(StudioTheme.SPACE_12), dp(StudioTheme.SPACE_12), dp(StudioTheme.SPACE_12), dp(StudioTheme.SPACE_12));
             icon.setImageDrawable(new StudioGlyph("music", selectedFile.equals(filename) ? LIME : 0xffb8c5da));
             icon.setBackground(bg(RAISED, 8));
-            card.addView(icon, new LinearLayout.LayoutParams(dp(42), dp(48)));
+            card.addView(icon, new LinearLayout.LayoutParams(dp(StudioTheme.TOUCH_TARGET), dp(StudioTheme.TOUCH_TARGET)));
 
             LinearLayout copy = column();
             copy.setPadding(dp(12), 0, dp(4), 0);
@@ -2000,7 +2041,7 @@ public class MainActivity extends Activity {
             copy.addView(name);
             playerTime = text("", 11, MUTED);
             playerTime.setTypeface(StudioTheme.mono(this));
-            playerTime.setPadding(0, dp(6), 0, 0);
+            playerTime.setPadding(0, dp(StudioTheme.SPACE_8), 0, 0);
             copy.addView(playerTime);
             info.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
             info.addView(
@@ -2108,8 +2149,8 @@ public class MainActivity extends Activity {
         link.setTextSize(14);
         link.setTextColor(TEXT);
         link.setHintTextColor(MUTED);
-        link.setPadding(dp(14), dp(12), dp(14), dp(12));
-        link.setBackground(bg(RAISED, 10));
+        link.setPadding(dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), dp(StudioTheme.BUTTON_PADDING_VERTICAL), dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), dp(StudioTheme.BUTTON_PADDING_VERTICAL));
+        link.setBackground(bg(RAISED, StudioTheme.BUTTON_RADIUS));
         link.setHint(tr("YouTube 주소 / 동영상 ID / 검색어", "YouTube URL / video ID / search"));
         if (!youtube.id.isEmpty()) link.setText(youtube.id);
         add(link);
@@ -2232,7 +2273,7 @@ public class MainActivity extends Activity {
             return;
         }
         FrameLayout stage = new FrameLayout(this);
-        stage.setBackground(bg(PANEL, 20));
+        stage.setBackground(bg(PANEL, StudioTheme.CARD_RADIUS));
         stage.setClipToOutline(true);
         content.addView(stage, new LinearLayout.LayoutParams(-1, dp(220)));
         page.flexible(stage, 180, 520);
@@ -2355,8 +2396,9 @@ public class MainActivity extends Activity {
             String id = j.optString("id");
             File audio = store.file(id, ".wav"), video = store.file(id, ".mp4");
             LinearLayout card = column();
-            card.setPadding(dp(14), dp(13), dp(12), dp(12));
-            card.setBackground(bg(PANEL, 12));
+            card.setPadding(dp(StudioTheme.CARD_PADDING), dp(StudioTheme.CARD_PADDING), dp(StudioTheme.CARD_PADDING), dp(StudioTheme.CARD_PADDING));
+            card.setBackground(bg(PANEL, StudioTheme.CARD_RADIUS));
+            card.setTag("studio-card");
 
             LinearLayout heading = row();
             LinearLayout copy = column();
@@ -2371,7 +2413,7 @@ public class MainActivity extends Activity {
                     11,
                     MUTED
             );
-            meta.setPadding(0, dp(5), 0, 0);
+            meta.setPadding(0, dp(StudioTheme.SPACE_4), 0, 0);
             copy.addView(meta);
             if("not-requested".equals(j.optString("sourceRetention")))copy.addView(text(tr("원음 미보관 선택 · 최종 믹스 유지", "Source retention off · Final mix kept"),11,MUTED));
             else if("deleted-by-user".equals(j.optString("sourceRetention")))copy.addView(text(j.optBoolean("sourceDeletionPending")&&TakeStorage.hasSources(store,id)?tr("원음 정리를 다시 시도하세요 · 최종 믹스 유지", "Retry source cleanup · Final mix kept"):tr("원음 삭제됨 · 최종 믹스 유지", "Sources deleted · Final mix kept"),11,MUTED));
@@ -2398,7 +2440,7 @@ public class MainActivity extends Activity {
 
             LinearLayout stage = row();
             LinearLayout.LayoutParams stageParams = new LinearLayout.LayoutParams(-1, dp(78));
-            stageParams.topMargin = dp(10);
+            stageParams.topMargin = dp(StudioTheme.SPACE_12);
             if (video.exists()) {
                 ImageView thumbnail = new ImageView(this);
                 thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
@@ -2453,7 +2495,7 @@ public class MainActivity extends Activity {
             });
             if (!video.exists()) takePlayButtons.put(audio.getAbsolutePath(), play);
             LinearLayout.LayoutParams playParams = new LinearLayout.LayoutParams(dp(48), dp(48));
-            playParams.leftMargin = dp(6);
+            playParams.leftMargin = dp(StudioTheme.SPACE_8);
             stage.addView(play, playParams);
             card.addView(stage, stageParams);
 
