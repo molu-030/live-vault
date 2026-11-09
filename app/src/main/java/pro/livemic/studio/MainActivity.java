@@ -30,6 +30,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -1722,7 +1723,13 @@ public class MainActivity extends Activity {
                 MUTED
         );
         panel.addView(details);
-        panel.addView(text(tr("새 녹음은 원음과 고정 믹스를 함께 보존합니다. 48 kHz에서 추가 약 35 MB/분입니다. 원음은 기기 AEC·소음 처리 후이며, 보관함에서 지원되는 테이크의 보컬 효과를 새 복사본으로 편집할 수 있습니다.", "New recordings retain microphone and fixed-mix sources: about 35 MB extra per minute at 48 kHz. Sources follow device AEC/noise processing. Supported takes can be edited as a new copy in Library."),12,MUTED));
+        CheckBox retainSources = new CheckBox(this);
+        retainSources.setText(tr("원음 보관 · 나중에 효과 편집", "Retain sources for later effect editing"));
+        retainSources.setTextColor(TEXT);retainSources.setMinHeight(dp(48));retainSources.setChecked(TakeStorage.retainSources(this));
+        retainSources.setTag("retain-take-sources");panel.addView(retainSources);
+        panel.addView(text(tr("켜면 마이크·고정 믹스·처리된 보컬을 따로 보관합니다. 48 kHz에서 최종 믹스 외에 약 58 MB/분이 추가됩니다. 끄면 다음 녹음은 최종 믹스만 보관하며, 기존 원음은 그대로 유지됩니다. 원음은 기기 AEC·소음 처리 후입니다.", "When enabled, microphone, fixed-mix and processed-vocal sources are retained: about 58 MB extra per minute at 48 kHz, beyond the final mix. Turning this off saves only the final mix for future recordings; existing sources are kept. Sources follow device AEC/noise processing."),12,MUTED));
+        panel.addView(takeSpaceStatus());
+        panel.addView(text(tr("시작할 때 현재 설정의 1분 예상 용량과 64 MiB의 여유 공간이 필요합니다. 녹음 가능 시간을 보장하지 않으며, 긴 녹음·영상은 더 많은 공간이 필요합니다.", "Starting requires an estimated minute at the current setting plus 64 MiB of free space. This does not guarantee a recording duration; longer recordings and video need more space."),12,MUTED));
 
         TextView gain = text(tr("녹음에 담을 다른 앱 소리: ", "Other app audio in recording: ") + Math.round(captureGain * 100) + "%", 12, TEXT);
         SeekBar slider = new SeekBar(this);
@@ -1754,6 +1761,7 @@ public class MainActivity extends Activity {
                 .setTitle(tr("백그라운드 녹음", "Background recording"))
                 .setView(StudioDialogs.scrollable(this, panel))
                 .setPositiveButton(tr("설정 저장", "Save settings"), (d, w) -> {
+                    if(settingsLocked()||!TakeStorage.setRetainSources(this,retainSources.isChecked())){toast(tr("예약 또는 녹음을 마친 뒤 설정하세요.", "Finish recording or the countdown before changing settings."));return;}
                     recordDelay = choice[0];
                     captureOtherApps = !youtube.selected && CaptureSupport.available() && source.isChecked();
                     captureGain = slider.getProgress() / 100f;
@@ -1771,6 +1779,7 @@ public class MainActivity extends Activity {
 
     void requestRecording() {
         if (exiting()) return;
+        String storageProblem=TakeStorage.startProblem(this,false);if(!storageProblem.isEmpty()){toast(storageProblem);return;}
         finishEffectComparisonForRecording();
         pendingCapture = !youtube.selected && captureOtherApps && CaptureSupport.available();
         captureOtherApps = false;
@@ -2326,6 +2335,7 @@ public class MainActivity extends Activity {
         }
         add(title(tr("보관함", "Library")));
         note(tr("녹음과 연습을 한곳에", "Recordings and practice in one place"));
+        add(takeSpaceStatus());
         RecentVoiceRecovery.draw(this);
         if (busy) note(tr("영상에 보컬 오디오를 합치고 있습니다…", "Merging vocal audio into video…"));
 
@@ -2363,9 +2373,14 @@ public class MainActivity extends Activity {
             );
             meta.setPadding(0, dp(5), 0, 0);
             copy.addView(meta);
-            if(j.optBoolean("cleanSources")||j.optBoolean("sourceRawRetained")||j.optBoolean("sourceFixedRetained")){
-                long sourceBytes=store.file(id,".raw.wav").length()+store.file(id,".fixed.wav").length();
-                copy.addView(text(String.format(Locale.US,(j.optBoolean("sourceFixed",true)||j.optBoolean("sourceFixedRetained"))?tr("원음·고정 믹스 %.1f MB · ","Sources %.1f MB · "):tr("마이크 원음 %.1f MB · ","Mic source %.1f MB · "),sourceBytes/1000000.0)+(j.optBoolean("sourceEditable")?tr("효과 후편집 지원","FX editing available"):!j.optBoolean("cleanSources")?tr("부분 원음 보존 · 저장 오류로 후편집 불가","Partial sources retained · editing unavailable after save error"):tr("처리·보컬 경로·형식으로 후편집 불가","FX editing unavailable: processing/routing/format")),11,MUTED));
+            if("not-requested".equals(j.optString("sourceRetention")))copy.addView(text(tr("원음 미보관 선택 · 최종 믹스 유지", "Source retention off · Final mix kept"),11,MUTED));
+            else if("deleted-by-user".equals(j.optString("sourceRetention")))copy.addView(text(j.optBoolean("sourceDeletionPending")&&TakeStorage.hasSources(store,id)?tr("원음 정리를 다시 시도하세요 · 최종 믹스 유지", "Retry source cleanup · Final mix kept"):tr("원음 삭제됨 · 최종 믹스 유지", "Sources deleted · Final mix kept"),11,MUTED));
+            else if(j.optBoolean("cleanSources")||j.optBoolean("sourceRawRetained")||j.optBoolean("sourceFixedRetained")||j.optBoolean("sourceVocalRetained")){
+                long sourceBytes=TakeStorage.sourceBytes(store,id);
+                boolean actualEditable=TakeAudioFiles.editable(store,j);
+                copy.addView(text(String.format(Locale.US,(j.optBoolean("sourceFixed",true)||j.optBoolean("sourceFixedRetained"))?tr("원음·고정 믹스 %.1f MB · ","Sources %.1f MB · "):tr("마이크 원음 %.1f MB · ","Mic source %.1f MB · "),sourceBytes/1000000.0)
+                        +(actualEditable?(j.optBoolean("sourceEditable")?tr("효과 후편집 지원","FX editing available"):tr("추가 효과 편집 지원","Additional FX editing available"))
+                        :tr("후편집 불가 · 원음·경로·형식 확인","FX editing unavailable · Check sources, routing and format")),11,MUTED));
             }
             heading.addView(copy, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -2499,6 +2514,24 @@ public class MainActivity extends Activity {
         return true;
     }
 
+    TextView takeSpaceStatus(){
+        TextView status=text(tr("저장 공간 확인 중…", "Checking storage…"),12,MUTED);
+        io.execute(()->{String label=TakeStorage.spaceLabel(this,TakeStorage.usage(store.directory),TakeStorage.available(this));runOnUiThread(()->status.setText(label));});
+        return status;
+    }
+
+    void deleteTakeSources(JSONObject take){
+        String id=take.optString("id");
+        if(settingsLocked()||busy||takeFinalizing(id)){toast(tr("녹음·예약 또는 저장을 마친 뒤 원음을 정리하세요.", "Finish recording, the countdown or saving before managing sources."));return;}
+        StudioDialogs.confirmDanger(this,tr("이 테이크의 원음만 삭제할까요?", "Delete only this take's sources?"),
+                take.optString("name")+"\n"+String.format(Locale.US,tr("원음 약 %.1f MB를 삭제하면 이 테이크의 효과 후편집은 사용할 수 없습니다. 최종 믹스·영상·MIDI와 다른 편집 사본은 유지됩니다. 복구할 수 없습니다.", "Deleting about %.1f MB of sources disables effect editing for this take. The final mix, video, MIDI and other edited copies are kept. This cannot be undone."),TakeStorage.sourceBytes(store,id)/1e6),
+                tr("원음만 삭제", "Delete sources only"),()->{
+                    if(settingsLocked()||busy||takeFinalizing(id)){toast(tr("녹음·예약 또는 저장을 마친 뒤 원음을 정리하세요.", "Finish recording, the countdown or saving before managing sources."));return;}
+                    io.execute(()->{try{store.deleteSources(id);runOnUiThread(()->{toast(tr("선택한 테이크의 원음만 삭제했습니다.", "Deleted only the selected take's sources."));showTab();});}
+                        catch(Exception e){runOnUiThread(()->toast(tr("원음 정리 실패: ", "Could not delete sources: ")+e.getMessage()));}});
+                });
+    }
+
     void takeMenu(JSONObject j) {
         String id = j.optString("id");
         if (takeFinalizing(id)) return;
@@ -2531,6 +2564,10 @@ public class MainActivity extends Activity {
         if (video.exists() || wav.exists()) {
             names.add(tr("공유", "Share"));
             actions.add(() -> share(video.exists() ? video : wav));
+        }
+        if(TakeStorage.hasSources(store,id)){
+            names.add(tr("이 테이크 원음만 삭제…", "Delete only this take's sources…"));
+            actions.add(()->deleteTakeSources(j));
         }
         names.add(tr("이름 변경", "Rename"));
         actions.add(() -> {
@@ -2764,6 +2801,7 @@ public class MainActivity extends Activity {
 
     void startVideo() {
         if (exiting()) return;
+        String storageProblem=TakeStorage.startProblem(this,true);if(!storageProblem.isEmpty()){toast(storageProblem);return;}
         youtube.pause();
         if (camera == null || !requireMic()) return;
         stopPlayer();
@@ -2776,7 +2814,7 @@ public class MainActivity extends Activity {
             if (exiting() || camera != target || !target.recording) { target.stop(); return; }
             if (!RecordingManager.start(this, Math.round(values[15]))) {
                 target.stop();
-                toast(tr("오디오를 시작하지 못해 영상 녹화를 중지했습니다.", "Video recording stopped because audio could not start."));
+                toast(RecordingManager.startError.isEmpty()?tr("오디오를 시작하지 못해 영상 녹화를 중지했습니다.", "Video recording stopped because audio could not start."):RecordingManager.startError);
             } else {
                 videoTakeId = RecordingManager.id;
             }
@@ -2816,6 +2854,9 @@ public class MainActivity extends Activity {
             io.execute(() -> {
                 try {
                     MediaTools.makeVideo(source, store.file(saved.id, ".wav"), store.file(saved.id, ".mp4"), offset, voiceDelayUs);
+                    JSONObject videoMetadata = store.read(saved.id);
+                    videoMetadata.put("videoAudioOffsetUs", offset);
+                    store.update(saved.id, videoMetadata);
                     store.finishVideo(saved.id, saved.seconds, saved.warning, source);
                     runOnUiThread(() -> toast(tr("MP4 · WAV · MIDI를 저장했습니다.", "MP4 · WAV · MIDI saved.")));
                 } catch (Exception e) {

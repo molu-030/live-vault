@@ -12,6 +12,7 @@ import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.function.IntConsumer;
@@ -23,6 +24,17 @@ final class StudioDialogs {
     private static final float POPUP_DIM = .82f;
     private StudioDialogs() {}
 
+    /** Decorative grip uses geometry so font scaling cannot clip a text glyph. */
+    private static View handle(Activity activity) {
+        FrameLayout container = new FrameLayout(activity);
+        container.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        View line = new View(activity);
+        line.setBackgroundColor(StudioTheme.MUTED);
+        container.addView(line, new FrameLayout.LayoutParams(
+                StudioTheme.dp(activity, 36), StudioTheme.dp(activity, 4), Gravity.CENTER));
+        return container;
+    }
+
     static void choose(Activity activity, String title, String[] items, int selected, IntConsumer onChoose) {
         Dialog dialog = new Dialog(activity);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -32,9 +44,7 @@ final class StudioDialogs {
         sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
         sheet.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
 
-        TextView handle = StudioTheme.text(activity, "━━━━", 16, StudioTheme.MUTED);
-        handle.setGravity(Gravity.CENTER);
-        sheet.addView(handle, new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
+        sheet.addView(handle(activity), new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
         TextView heading = StudioTheme.text(activity, title, 18, StudioTheme.TEXT);
         heading.setTypeface(StudioTheme.bold(activity));
         heading.setPadding(0, StudioTheme.dp(activity, 10), 0, StudioTheme.dp(activity, 12));
@@ -113,9 +123,7 @@ final class StudioDialogs {
         int pad = StudioTheme.dp(activity, 20);
         sheet.setPadding(pad, StudioTheme.dp(activity, 12), pad, StudioTheme.dp(activity, 18));
         sheet.setBackground(StudioTheme.background(activity, POPUP_BG, 18, POPUP_BORDER));
-        TextView handle = StudioTheme.text(activity, "━━━━", 16, StudioTheme.MUTED);
-        handle.setGravity(Gravity.CENTER);
-        sheet.addView(handle, new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
+        sheet.addView(handle(activity), new LinearLayout.LayoutParams(-1, StudioTheme.dp(activity, 20)));
         TextView heading = StudioTheme.text(activity, title, 18, StudioTheme.TEXT);
         heading.setTypeface(StudioTheme.bold(activity));
         heading.setPadding(0, StudioTheme.dp(activity, 10), 0, StudioTheme.dp(activity, 16));

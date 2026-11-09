@@ -17,6 +17,9 @@ public final class NativeAudio {
     public static native int inputSession();
     public static native int inputDevice();
     public static native boolean beginRecordSources(String mix,String raw,String fixed);
+    public static native boolean beginRecordStems(String mix,String raw,String fixed,String vocal);
+    public static native boolean recordVocalStemValid();
+    public static native boolean renderVocalStem(String vocal,String fixed,String output,float[] values,int syncMs);
     public static native boolean recordSourcesValid();
     public static native boolean recordSourcesEditable();
     public static native boolean renderTakeSources(String raw,String fixed,String output,float[] values,int syncMs);

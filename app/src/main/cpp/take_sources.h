@@ -57,4 +57,41 @@ inline bool renderSourceTake(const std::string& microphone,const std::string& ba
  }
  if(cancel.load())ok=false;if(ok)sourceHeader(out,mic.rate,2,bytes,false);if(ferror(out))ok=false;if(fclose(out)!=0)ok=false;if(!ok)remove(output.c_str());return ok;
 }
+// The stem already contains live DSP/harmony. Add only the requested delta
+// against a neutral DSP baseline, preserving stereo and its existing processing.
+// Direct gain is outside the delta so DC and very low frequencies gain correctly.
+inline bool renderVocalStem(const std::string& vocal,const std::string& backing,const std::string& output,const float* p,int sync,std::atomic<bool>& cancel){
+ if(output==vocal||(!backing.empty()&&output==backing))return false;
+ for(int i=0;i<20;i++)if(!std::isfinite(p[i]))return false;
+ SourceReader voice,bg;if(!voice.open(vocal,2)||!sourceOutputFits(voice.frames,voice.rate,sync))return false;
+ bool music=!backing.empty();if(music&&(!bg.open(backing,2)||bg.rate!=voice.rate||bg.frames!=voice.frames))return false;
+ bool neutral=p[2]==0&&p[4]==0&&p[7]==0&&p[8]==0&&p[9]==0&&p[10]<=.5f&&p[19]<=.5f;
+ float fx[20],base[20];std::copy(p,p+20,fx);std::copy(p,p+20,base);fx[0]=base[0]=1;
+ base[2]=base[4]=base[7]=base[8]=base[9]=base[10]=base[19]=0;
+ DSP left,right,baselineL,baselineR;
+ if(!neutral){for(DSP* d:{&left,&right,&baselineL,&baselineR})d->init(voice.rate);left.configure(fx);right.configure(fx);baselineL.configure(base);baselineR.configure(base);}
+ RecordAlignment align;align.init(voice.rate,sync);
+ FILE* out=fopen(output.c_str(),"wbx");if(!out)return false;sourceHeader(out,voice.rate,2,0,false);
+ uint32_t bytes=0;bool ok=true;uint64_t total=uint64_t(voice.frames)+align.tail();
+ std::array<float,4096> raw{},bed{};std::array<int16_t,4096> pcm{};
+ for(uint64_t position=0;position<total;position+=2048){
+  if(cancel.load()){ok=false;break;}
+  size_t count=std::min<uint64_t>(2048,total-position),read=position<voice.frames?std::min<uint64_t>(count,voice.frames-position):0;
+  if(read&&(fread(raw.data(),4,read*2,voice.f)!=read*2||(music&&fread(bed.data(),4,read*2,bg.f)!=read*2))){ok=false;break;}
+  for(size_t i=0;i<count;i++){
+   float vl=0,vr=0,ml=0,mr=0;
+   if(i<read){
+    vl=raw[i*2];vr=raw[i*2+1];if(music){ml=bed[i*2];mr=bed[i*2+1];}
+    if(!std::isfinite(vl)||!std::isfinite(vr)||!std::isfinite(ml)||!std::isfinite(mr)){ok=false;break;}
+    vl*=p[0];vr*=p[0];
+    if(!neutral){float fl,fr,bl,br;left.process(vl,fx,fl,fr);baselineL.process(vl,base,bl,br);vl+=fl-bl;right.process(vr,fx,fl,fr);baselineR.process(vr,base,bl,br);vr+=fr-br;}
+   }
+   if(!std::isfinite(vl)||!std::isfinite(vr)){ok=false;break;}
+   align.tick(vl,vr,ml,mr);pcm[i*2]=std::lround(limit(vl+ml)*32767);pcm[i*2+1]=std::lround(limit(vr+mr)*32767);
+  }
+  if(!ok||fwrite(pcm.data(),2,count*2,out)!=count*2){ok=false;break;}bytes+=count*4;
+ }
+ if(cancel.load())ok=false;if(ok)sourceHeader(out,voice.rate,2,bytes,false);if(ferror(out))ok=false;if(fclose(out)!=0)ok=false;if(!ok)remove(output.c_str());return ok;
+}
+
 }

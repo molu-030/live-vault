@@ -67,8 +67,8 @@ public:
     Ring<32768> pitchRing;
     Ring<1048576> recordRing;
     Ring<1048576> sourceRing;
-    std::array<float,12288> sourceBuffer{};
-    std::atomic<bool> sourceRecording{false},sourceError{false},sourceEditable{true};
+    std::array<float,20480> sourceBuffer{};
+    std::atomic<bool> sourceRecording{false},sourceError{false},sourceEditable{true},vocalStemError{true};
     RecentVoice recentVoice;
     std::thread analyzer, writer;
     std::mutex notesMutex;
@@ -501,10 +501,14 @@ public:
             float br = mr + capturedBuffer[i * 2 + 1];
             bool micOnly = recordMicOnly.load(std::memory_order_relaxed);
             if (micOnly) { vl = l; vr = r; bl = br = 0; }
-            sourceBuffer[i*3] = inputBuffer[i];
-            sourceBuffer[i*3+1] = micOnly ? 0 : bl + synth + composerVoice[i*2];
-            sourceBuffer[i*3+2] = micOnly ? 0 : br + synth + composerVoice[i*2+1];
-            if (recording && !micOnly && (harmony.enabled() || !mixVocal)) sourceEditable = false;
+            // Preserve the original voice bus and its recording sync. This stem
+            // includes routed voice instruments; loops remain on the fixed bed.
+            sourceBuffer[i*5] = inputBuffer[i];
+            sourceBuffer[i*5+1] = bl;
+            sourceBuffer[i*5+2] = br;
+            sourceBuffer[i*5+3] = vl;
+            sourceBuffer[i*5+4] = vr;
+            if (recording && !micOnly && (harmony.enabled() || !mixVocal || p[12] > .5f || composer.enabled())) sourceEditable = false;
             if (recording && !recordPaused) alignment.tick(vl, vr, bl, br);
             float recL = limit(vl + bl), recR = limit(vr + br);
             float liveGate = p[11] * float(vocalMonitor.load(std::memory_order_relaxed));
@@ -532,8 +536,8 @@ public:
         if (recording.load(std::memory_order_acquire) && !recordPaused.load(std::memory_order_acquire)) {
             if (segmentPending.exchange(false)) segmentSourceStart = base;
             if (recordFrames.load() == 0) recordStartClock = monoSeconds();
-            if (sourceRecording && sourceRing.available() + size_t(n*3) <= 1048576) {
-                if (sourceRing.push(sourceBuffer.data(), n*3) != size_t(n*3)) sourceError = true;
+            if (sourceRecording && sourceRing.available() + size_t(n*5) <= 1048576) {
+                if (sourceRing.push(sourceBuffer.data(), n*5) != size_t(n*5)) sourceError = true;
             } else if (sourceRecording) sourceError = true;
             size_t written = recordRing.push(recordBuffer.data(), n * 2);
             if (written != size_t(n * 2)) overflow = true;
@@ -658,12 +662,15 @@ public:
         le32(f, bytes);
     }
 
-    bool beginRecord(const std::string& path, const std::string& micPath = "", const std::string& fixedPath = "") {
+    bool beginRecord(const std::string& path, const std::string& micPath = "", const std::string& fixedPath = "", const std::string& vocalPath = "") {
         if (!running || recording) return false;
         FILE* f = fopen(path.c_str(), "wb");
         if (!f) return false;
         FILE* raw = micPath.empty() ? nullptr : fopen(micPath.c_str(), "wb");
         FILE* fixed = fixedPath.empty() ? nullptr : fopen(fixedPath.c_str(), "wb");
+        FILE* vocal = vocalPath.empty() ? nullptr : fopen(vocalPath.c_str(), "wb");
+        vocalStemError = !vocal;
+        if(vocal) sourceHeader(vocal,sr,2,0);
         sourceError = !micPath.empty() && (!raw || !fixed);
         if (sourceError) { if(raw) fclose(raw); if(fixed) fclose(fixed); raw=fixed=nullptr; }
         if(raw) sourceHeader(raw,sr,1,0);
@@ -683,13 +690,13 @@ public:
         recordStartTime = double(frames.load()) / sr;
         writerRunning = true;
         recording = true;
-        writer = std::thread([this, f, raw, fixed] {
+        writer = std::thread([this, f, raw, fixed, vocal] {
             std::array<float, 8192> data{};
             std::array<int16_t, 8192> pcm{};
             uint32_t bytes = 0, sourceFrames = 0;
-            std::array<float,12288> sources{};
+            std::array<float,20480> sources{};
             std::array<float,4096> mono{};
-            std::array<float,8192> bed{};
+            std::array<float,8192> bed{}, voice{};
             while (writerRunning || recordRing.available() || sourceRing.available()) {
                 size_t n = recordRing.pop(data.data(), data.size());
                 if (n) {
@@ -699,18 +706,25 @@ public:
                     bytes += written * 2;
                 }
                 size_t available = sourceRing.available();
-                size_t count = sourceRing.pop(sources.data(), std::min(available - available%3, sources.size()));
+                size_t count = sourceRing.pop(sources.data(), std::min(available - available%5, sources.size()));
                 if(count && raw && fixed) {
-                    if(!sourceStorageFits(uint64_t(sourceFrames)+count/3)){sourceError=true;sourceRecording=false;}
-                    for(size_t i=0;i<count/3;i++){mono[i]=sources[i*3];bed[i*2]=sources[i*3+1];bed[i*2+1]=sources[i*3+2];}
-                    if(!sourceError&&(fwrite(mono.data(),4,count/3,raw)!=count/3 || fwrite(bed.data(),4,count/3*2,fixed)!=count/3*2)){sourceError=true;sourceRecording=false;}
-                    if(!sourceStorageFits(uint64_t(sourceFrames)+count/3)){sourceError=true;sourceRecording=false;}
-                    else sourceFrames += count/3;
+                    size_t frames = count/5;
+                    if(!sourceStorageFits(uint64_t(sourceFrames)+frames)){sourceError=true;sourceRecording=false;}
+                    for(size_t i=0;i<frames;i++){
+                        mono[i]=sources[i*5];bed[i*2]=sources[i*5+1];bed[i*2+1]=sources[i*5+2];
+                        voice[i*2]=sources[i*5+3];voice[i*2+1]=sources[i*5+4];
+                    }
+                    if(!sourceError){
+                        if(fwrite(mono.data(),4,frames,raw)!=frames || fwrite(bed.data(),4,frames*2,fixed)!=frames*2){sourceError=true;sourceRecording=false;}
+                        if(vocal&&!vocalStemError&&fwrite(voice.data(),4,frames*2,vocal)!=frames*2)vocalStemError=true;
+                        sourceFrames += frames;
+                    }
                 }
                 if(!n && !count) std::this_thread::sleep_for(std::chrono::milliseconds(4));
             }
             if(raw){sourceHeader(raw,sr,1,sourceFrames*4);if(ferror(raw))sourceError=true;if(fclose(raw)!=0)sourceError=true;}
             if(fixed){sourceHeader(fixed,sr,2,sourceFrames*8);if(ferror(fixed))sourceError=true;if(fclose(fixed)!=0)sourceError=true;}
+            if(vocal){sourceHeader(vocal,sr,2,sourceFrames*8);if(ferror(vocal))vocalStemError=true;if(fclose(vocal)!=0)vocalStemError=true;}
             wavHeader(f, bytes);
             if (fclose(f) != 0) diskError = true;
         });
@@ -963,6 +977,12 @@ JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputDevice(JNIEnv*, 
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_beginRecordSources(JNIEnv* env,jclass,jstring mix,jstring raw,jstring fixed) {
     return engine.beginRecord(str(env,mix),str(env,raw),str(env,fixed));
 }
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_beginRecordStems(JNIEnv* env,jclass,jstring mix,jstring raw,jstring fixed,jstring vocal) {
+    return engine.beginRecord(str(env,mix),str(env,raw),str(env,fixed),str(env,vocal));
+}
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_recordVocalStemValid(JNIEnv*,jclass) {
+    return !engine.sourceError.load() && !engine.vocalStemError.load();
+}
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_recordSourcesValid(JNIEnv*,jclass) {
     return !engine.sourceError.load();
 }
@@ -973,6 +993,11 @@ JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_renderTakeSou
     if(env->GetArrayLength(values)!=20)return false;
     float params[20];env->GetFloatArrayRegion(values,0,20,params);for(float value:params)if(!std::isfinite(value))return false;
     offlineCancel=false;return renderSourceTake(str(env,raw),str(env,fixed),str(env,target),params,sync,offlineCancel);
+}
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_renderVocalStem(JNIEnv* env,jclass,jstring vocal,jstring fixed,jstring target,jfloatArray values,jint sync) {
+    if(!values || env->GetArrayLength(values)!=20)return false;
+    float params[20];env->GetFloatArrayRegion(values,0,20,params);
+    offlineCancel=false;return renderVocalStem(str(env,vocal),str(env,fixed),str(env,target),params,sync,offlineCancel);
 }
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_cancelTakeRender(JNIEnv*,jclass){offlineCancel=true;}
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_recentVoiceEnabled(JNIEnv*,jclass,jboolean on){engine.recentVoice.configure(on);}

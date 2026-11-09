@@ -67,6 +67,9 @@ public class StudioScreenshotTest {
   @Implementation protected static void recordSync(int milliseconds){syncCalls.add(milliseconds);}
   @Implementation protected static boolean beginRecord(String path){return true;}
   @Implementation protected static boolean beginRecordSources(String mix,String raw,String fixed){return NativeAudio.beginRecord(mix);}
+  @Implementation protected static boolean beginRecordStems(String mix,String raw,String fixed,String vocal){return NativeAudio.beginRecordSources(mix,raw,fixed);}
+  @Implementation protected static boolean recordVocalStemValid(){return false;}
+  @Implementation protected static boolean renderVocalStem(String vocal,String fixed,String output,float[] values,int sync){return false;}
   @Implementation protected static boolean recordSourcesValid(){return false;}
   @Implementation protected static boolean recordSourcesEditable(){return false;}
   @Implementation protected static boolean renderTakeSources(String raw,String fixed,String output,float[] values,int sync){return false;}

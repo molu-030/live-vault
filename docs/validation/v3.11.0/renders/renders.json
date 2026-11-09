@@ -1,0 +1,43 @@
+{
+  "kind": "Android view + native Skia rendering with synthetic fixtures; no physical device or video decoding",
+  "matrix": {
+    "windows": [
+      [
+        1480,
+        924
+      ],
+      [
+        960,
+        600
+      ]
+    ],
+    "languages": [
+      "ko",
+      "en"
+    ],
+    "fontScales": [
+      1,
+      1.3
+    ]
+  },
+  "assertions": [
+    "48dp controls",
+    "visible text bounds",
+    "reachable scroll content",
+    "fixed WAV/MP4 save and close",
+    "mode switching",
+    "cancel preserves originals"
+  ],
+  "files": [
+    {
+      "name": "s9ultra-ko-130-additional-effects-SYNTHETIC.png",
+      "bytes": 120669,
+      "sha256": "832585631c97f4dc038ce32fb5e31714680e33a02f1f7a90656677c2231a0aac"
+    },
+    {
+      "name": "short-window-en-130-fixed-actions-SYNTHETIC.png",
+      "bytes": 67144,
+      "sha256": "528d43705f2a5f7d531f3b11a4c5797001c8009d2fbcf1bfb4f9fbece620ab70"
+    }
+  ]
+}

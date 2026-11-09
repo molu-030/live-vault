@@ -645,7 +645,7 @@ public class AudioService extends Service {
     private void checkStart() {
         if (countdown.consumeIfDue(SystemClock.elapsedRealtime())) {
             if (!RecordingManager.start(this, pendingTempo, pendingMicOnly)) {
-                message = error = AppLanguage.text(
+                message = error = !RecordingManager.startError.isEmpty()?RecordingManager.startError:AppLanguage.text(
                         AudioService.this,
                         "녹음을 시작하지 못했습니다. 저장 공간과 마이크 상태를 확인하세요.",
                         "Could not start recording. Check storage and microphone availability."

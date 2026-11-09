@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-public final class TakeStore {
+public class TakeStore {
     public final File directory;
     private final Context context;
 
@@ -31,7 +31,7 @@ public final class TakeStore {
     }
 
     private void recover() {
-        File[] files = directory.listFiles((d, n) -> n.endsWith(".wav") && !n.endsWith(".raw.wav") && !n.endsWith(".fixed.wav"));
+        File[] files = directory.listFiles((d, n) -> n.endsWith(".wav") && !n.endsWith(".raw.wav") && !n.endsWith(".fixed.wav") && !n.endsWith(".vocal.wav"));
         if (files == null) return;
         for (File f : files) {
             String id = f.getName().replace(".wav", "");
@@ -141,10 +141,12 @@ public final class TakeStore {
     }
 
     public void delete(String id) {
-        for (String ext : new String[]{".wav", ".mid", ".mp4", ".json", ".video.mp4", ".aac.m4a", ".mp4.pending.mp4", ".raw.wav", ".fixed.wav"}) {
+        for (String ext : new String[]{".wav", ".mid", ".mp4", ".json", ".video.mp4", ".aac.m4a", ".mp4.pending.mp4", ".raw.wav", ".fixed.wav", ".vocal.wav", ".raw.wav.delete-pending", ".fixed.wav.delete-pending", ".vocal.wav.delete-pending"}) {
             new File(directory, id + ext).delete();
         }
     }
+
+    public void deleteSources(String id)throws Exception { TakeStorage.deleteSources(this,id); }
 
     public File file(String id, String ext) {
         return new File(directory, id + ext);

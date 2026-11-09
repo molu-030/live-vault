@@ -57,4 +57,16 @@ public class TakeAudioUiTest {
         a.onBackPressed();ShadowLooper.idleMainLooper();assertFalse(dialog.isShowing());assertTrue("Dismiss cancels pending offline rendering",Audio.cancels>0);assertArrayEquals(original,Files.readAllBytes(a.store.file(id,".wav").toPath()));assertFalse(AudioService.active);
         a.store.delete(id);
     }
+    @Test public void recordedVoiceModeHasExplicitVideoChoiceAndFixedSaveControls()throws Exception{
+        String id="stem-video-ui";TakeSourcesTest.wav(a.store.file(id,".wav"),false,2);TakeSourcesTest.wav(a.store.file(id,".vocal.wav"),true,2);TakeSourcesTest.wav(a.store.file(id,".fixed.wav"),true,2);Files.write(a.store.file(id,".mp4").toPath(),new byte[]{1});
+        JSONObject take=new JSONObject().put("id",id).put("sourceFixed",true).put("sourceVocalRetained",true).put("vocalStemEditable",true).put("video",true).put("videoAudioOffsetUs",-85000);
+        assertTrue(TakeAudioFiles.editable(a.store,take));a.takeEffectsEditor=new TakeEffectsEditor(a,take);a.takeEffectsEditor.show();
+        Dialog dialog=ShadowDialog.getLatestDialog();View root=dialog.getWindow().getDecorView();
+        Button wav=StudioScreenshotTest.findButtonContaining(root,"Save WAV"),video=StudioScreenshotTest.findButtonContaining(root,"Save MP4");assertNotNull(wav);assertNotNull(video);
+        for(android.view.ViewParent p=wav.getParent();p!=null;p=p.getParent())assertFalse("Save stays outside scrolling effects",p instanceof android.widget.ScrollView);
+        Switch compressor=toggle(root,"Compressor");assertNotNull(compressor);assertTrue(compressor.getMinHeight()>=a.dp(48));
+        dialog.dismiss();take.remove("videoAudioOffsetUs");a.takeEffectsEditor=new TakeEffectsEditor(a,take);a.takeEffectsEditor.show();
+        root=ShadowDialog.getLatestDialog().getWindow().getDecorView();assertNotNull(StudioScreenshotTest.findButtonContaining(root,"Save WAV"));assertNull(StudioScreenshotTest.findButtonContaining(root,"Save MP4"));a.store.delete(id);
+    }
+
 }

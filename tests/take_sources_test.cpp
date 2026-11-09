@@ -31,7 +31,37 @@ static void sourceCase(const std::string& dir,int sync,bool paused,bool micOnly,
  assert(bytes(stem+".wav")==original&&bytes(stem+".raw.wav")==source);
  cancel=true;assert(!renderSourceTake(stem+".raw.wav",stem+".fixed.wav",stem+".cancel.wav",params,sync,cancel));assert(bytes(stem+".cancel.wav").empty());
 }
+static void vocalCase(const std::string& dir,int rate,int sync,bool paused,bool micOnly,bool harmony,bool muted,bool instrument=false){
+ auto e=std::make_unique<Engine>();e->sr=e->inputRate=rate;e->dsp.init(rate);e->feedback.init(rate,false);e->composer.sampleRate(rate);
+ float live[]={1.3f,1,.4f,2,.2f,100,.4f,1,-2,2,1,0,1,0,0,78,0,0,0,0};
+ float additional[]={1,1,0,.3f,0,100,0,0,0,0,0,0,0,0,0,78,0,0,0,0};
+ for(int i=0;i<20;i++)e->params[i]=live[i];e->recordSyncMs=sync;e->recordMicOnly=micOnly;
+ e->harmony.configure(harmony,0,0,1,.5f,1,1);e->frequency=220;e->pitchConfidence=1;e->pitchLevel=.1f;
+ if(muted||instrument)e->composer.settings(true,24,0,0,false,false,0,0,false,!muted,0,0);
+ if(instrument){assert(e->composer.load("app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2"));lv::VoiceCommand note;note.kind=1;note.midi=60;note.velocity=90;note.expression=1;assert(e->composer.voiceCommands.push(note));}
+ std::string stem=dir+"/vocal-"+std::to_string(rate)+"-"+std::to_string(sync)+std::to_string(paused)+std::to_string(micOnly)+std::to_string(harmony)+std::to_string(muted)+std::to_string(instrument);
+ AAudioStream input;input.rate=rate;e->publishedInput=&input;e->running=true;
+ assert(e->beginRecord(stem+".wav",stem+".raw.wav",stem+".fixed.wav",stem+".vocal.wav"));
+ std::array<float,256> raw{};std::array<float,512> out{},bg{};e->playback.configure(true,1);
+ for(int block=0;block<40;block++){
+  if(paused&&block==10)e->pauseRecord(true);if(paused&&block==20)e->pauseRecord(false);
+  for(int i=0;i<256;i++){raw[i]=.08f*std::sin((block*256+i)*.1f);bg[i*2]=.2f;bg[i*2+1]=-.1f;}
+  input.samples=raw.data();input.frames=256;e->playback.push(bg.data(),512);e->render(out.data(),256);
+ }
+ e->stopRecord();e->running=false;assert(!e->sourceError&&!e->vocalStemError);
+ SourceReader voice,fixed;assert(voice.open(stem+".vocal.wav",2));assert(fixed.open(stem+".fixed.wav",2));assert(voice.frames==(paused?30:40)*256);
+ if(muted&&!micOnly&&!instrument){for(uint32_t i=0;i<voice.frames;i++){float v[2],b[2];assert(fread(v,4,2,voice.f)==2&&fread(b,4,2,fixed.f)==2);assert(v[0]==0&&v[1]==0);assert(b[0]==.2f&&b[1]==-.1f);}}
+ auto original=bytes(stem+".wav"),bed=bytes(stem+".fixed.wav"),vocal=bytes(stem+".vocal.wav");std::atomic<bool> cancel{false};
+ assert(renderVocalStem(stem+".vocal.wav",stem+".fixed.wav",stem+".edit.wav",additional,sync,cancel));assert(bytes(stem+".edit.wav")==original);
+ additional[0]=.5f;additional[2]=.2f;additional[7]=4;
+ assert(renderVocalStem(stem+".vocal.wav",stem+".fixed.wav",stem+".fx.wav",additional,sync,cancel));
+ if(!muted||micOnly||instrument)assert(bytes(stem+".fx.wav")!=original);else assert(bytes(stem+".fx.wav")==original);
+ assert(bytes(stem+".fixed.wav")==bed&&bytes(stem+".vocal.wav")==vocal&&bytes(stem+".wav")==original);
+ cancel=true;assert(!renderVocalStem(stem+".vocal.wav",stem+".fixed.wav",stem+".cancel.wav",additional,sync,cancel));assert(bytes(stem+".cancel.wav").empty());
+ assert(!renderVocalStem(stem+".vocal.wav",stem+".fixed.wav",stem+".vocal.wav",additional,sync,cancel));
+}
 int main(int argc,char**argv){assert(argc==2);std::string dir=argv[1];
+ for(int rate:{44100,48000})for(int sync:{-250,0,250}){vocalCase(dir,rate,sync,false,false,true,false);vocalCase(dir,rate,sync,true,true,true,false);vocalCase(dir,rate,sync,false,false,true,true);vocalCase(dir,rate,sync,false,false,true,true,true);vocalCase(dir,rate,sync,false,false,false,false,true);}
  for(int sync:{-250,0,250})sourceCase(dir,sync,false,false,false);
  sourceCase(dir,125,true,false,false);sourceCase(dir,0,false,true,true);sourceCase(dir,0,false,false,true);
  {
@@ -56,6 +86,31 @@ int main(int argc,char**argv){assert(argc==2);std::string dir=argv[1];
  std::string mix=dir+"/disk-retained.wav";assert(e->beginRecord(mix,"/dev/full",dir+"/disk.fixed.wav"));std::array<float,512> out{};e->render(out.data(),256);e->stopRecord();e->running=false;assert(e->sourceError);assert(bytes(mix).size()>44);
  }
  {
+ auto e=std::make_unique<Engine>();e->running=true;e->dsp.init(48000);e->feedback.init(48000,false);
+ std::string mix=dir+"/vocal-failed.wav";assert(e->beginRecord(mix,dir+"/vocal-failed.raw.wav",dir+"/vocal-failed.fixed.wav","/no-such-take-directory/vocal.wav"));
+ std::array<float,512> out{};e->render(out.data(),256);e->stopRecord();e->running=false;
+ assert(!e->sourceError&&e->vocalStemError);assert(bytes(mix).size()>44);
+ }
+ {
+ // Simulate a writer starved source queue; callback must fail closed without
+ // allocating or blocking, and the independently queued final mix survives.
+ auto e=std::make_unique<Engine>();e->running=true;e->dsp.init(48000);e->feedback.init(48000,false);
+ e->recording=true;e->sourceRecording=true;std::vector<float> filled(1048570,0);assert(e->sourceRing.push(filled.data(),filled.size())==filled.size());
+ std::array<float,512> out{};e->render(out.data(),256);assert(e->sourceError);assert(e->recordRing.available()==512);
+ e->recording=false;e->sourceRecording=false;e->running=false;
+ }
+ {
+ std::string original=dir+"/vocal-48000-000100.vocal.wav";
+ // Parse and validate the stereo format with the same strict reader used by
+ // the additive renderer, including truncated frames and non-finite samples.
+ SourceReader reader;assert(reader.open(original,2));auto data=bytes(original);std::string bad=dir+"/bad-vocal.wav",target=dir+"/bad-vocal-out.wav";
+ auto save=[&](const std::vector<char>& value){std::ofstream f(bad,std::ios::binary);f.write(value.data(),value.size());};
+ float p[]={1,1,0,.3f,0,100,0,0,0,0,0,0,0,0,0,78,0,0,0,0};std::atomic<bool> cancel{false};
+ auto invalid=data;invalid.pop_back();save(invalid);assert(!renderVocalStem(bad,"",target,p,0,cancel));
+ invalid=data;float nan=std::numeric_limits<float>::quiet_NaN();memcpy(invalid.data()+44,&nan,4);save(invalid);assert(!renderVocalStem(bad,"",target,p,0,cancel));assert(bytes(target).empty());
+ invalid=data;invalid[22]=1;save(invalid);assert(!renderVocalStem(bad,"",target,p,0,cancel));
+ }
+ {
  RecentVoice recent;assert(recent.seconds()==-1);int rate;float samples[256];std::fill(samples,samples+256,.25f);recent.push(samples,256,48000);assert(recent.snapshot(rate).empty());recent.configure(true);
  for(int i=0;i<2100;i++)recent.push(samples,256,48000);
  auto copy=recent.snapshot(rate);assert(rate==48000&&copy.size()==480000);for(float value:copy)assert(value==.25f);
@@ -69,5 +124,5 @@ int main(int argc,char**argv){assert(argc==2);std::string dir=argv[1];
  while(!done){auto snapshot=recent.snapshot(rate);for(float value:snapshot)assert(value==.25f);}
  producer.join();recent.configure(false);assert(recent.snapshot(rate).empty());
  }
- std::cout<<"PASS: float32 source recording, exact plain-FX rerender, +/-sync, pause frame counts, fixed backing, unsupported harmony, source failure original retention, cancellation and bounded opt-in recent voice\n";
+ std::cout<<"PASS: stereo vocal stem 44.1/48k neutral byte identity including harmony/synth/voice instruments/muted routing, fixed backing, pause, overflow, malformed stereo, vocal failure retention; float32 source recording, exact plain-FX rerender, +/-sync, pause frame counts, fixed backing, unsupported harmony, source failure original retention, cancellation and bounded opt-in recent voice\n";
 }
