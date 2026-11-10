@@ -72,7 +72,7 @@ public class TakeSourcesTest {
         store.delete(id);assertTrue(TakeAudioFiles.editable(store,store.read(copy)));Audio.renderFails=false;assertNotNull(TakeAudioFiles.copy(context,store.read(copy),fx,new AtomicBoolean()));
     }
     @Test public void recoverySkipsSourceSidecarsAndDeletionRemovesAllTakeFiles()throws Exception{
-        wav(store.file("orphan",".raw.wav"),true,1);wav(store.file("orphan",".fixed.wav"),true,2);new TakeStore(context,true);assertFalse(store.file("orphan.raw",".json").exists());assertFalse(store.file("orphan.fixed",".json").exists());
+        wav(store.file("orphan",".raw.wav"),true,1);wav(store.file("orphan",".fixed.wav"),true,2);new TakeStore(context,true).awaitRecovery();assertFalse(store.file("orphan.raw",".json").exists());assertFalse(store.file("orphan.fixed",".json").exists());
         assertTrue(RecordingManager.start(context,78,false));String id=RecordingManager.id;RecordingManager.stop();store.delete(id);assertFalse(store.file(id,".wav").exists());assertFalse(store.file(id,".raw.wav").exists());assertFalse(store.file(id,".fixed.wav").exists());
     }
 }

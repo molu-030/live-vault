@@ -8,7 +8,13 @@ public final class NativeAudio {
     public static native boolean reroute(int inputDevice,int outputDevice,int monitorMode,boolean microphone);
     public static native boolean startPlayback(int outputDevice,int monitorMode);
     public static native void microphoneOff();
+    /** 0 AAudio default, 1 Oboe comparison. Refused while any stream/recording exists. */
+    public static native boolean requestBackend(int provider);
+    /** requested, applied(-1 inactive), platform(-1 unknown/0 AAudio/1 OpenSL ES), fallback reason. */
+    public static native int[] backendInfo();
     public static native int[] latencyInfo();
+    /** Versioned counters only: no captured samples, filenames or addresses. */
+    public static native double[] diagnostics();
     public static native boolean bufferBursts(int bursts);
     public static native void recordSync(int ms);
     public static native void recordMicOnly(boolean enabled);

@@ -30,16 +30,18 @@ public class ExitFlowTest {
     @Implements(value=MediaTools.class,isInAndroidSdk=false)
     public static class VideoMux {
         static boolean fail;
+        static java.io.File corruptMetadataAfterMux;
         @Implementation protected static void makeVideo(java.io.File source,java.io.File wav,java.io.File target,long offset,long delay) throws Exception {
             if(fail)throw new java.io.IOException("test mux failure");
             java.nio.file.Files.write(target.toPath(),new byte[]{1,2,3});
+            if(corruptMetadataAfterMux!=null)java.nio.file.Files.write(corruptMetadataAfterMux.toPath(),new byte[]{'{'});
         }
     }
 
     MainActivity a;
     @Before public void setup() throws Exception {
         ExitCoordinator.resetForLaunch();
-        VideoMux.fail=false;
+        VideoMux.fail=false;VideoMux.corruptMetadataAfterMux=null;
         AudioService.active=false; AudioService.playbackActive=false;
         AudioService.composerRequested=false; AudioService.harmonyRequested=false;
         RecordingManager.active=false;
@@ -83,38 +85,46 @@ public class ExitFlowTest {
     @Test public void confirmationWaitsForQueuedSaveAndIgnoresStalePermissionAndPendingStart() throws Exception {
         CountDownLatch entered=new CountDownLatch(1), release=new CountDownLatch(1);
         a.io.execute(()->{entered.countDown();try{release.await(5,TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}});
-        assertTrue(entered.await(5,TimeUnit.SECONDS));
-        beginAudio();String savedId=RecordingManager.id;
-        AudioService.active=true;AudioService.playbackActive=true;
-        int stopsBefore=StudioScreenshotTest.Audio.stopCalls;
-        a.busy=true;a.pendingAction=4;a.awaitingMicPermission=true;
-        a.onBackPressed();((AlertDialog)ShadowDialog.getLatestDialog()).getButton(AlertDialog.BUTTON_POSITIVE).performClick();
-        ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
-        assertTrue(a.exitInProgress);assertTrue(ExitCoordinator.isExitRequested());assertFalse(a.isFinishing());
-        assertFalse("Recording closes before pending export finishes",RecordingManager.active);
-        assertFalse(AudioService.active);assertFalse(AudioService.playbackActive);
-        assertTrue(StudioScreenshotTest.Audio.stopCalls>stopsBefore);
-        assertTrue(a.store.file(savedId,".wav").exists());assertTrue(a.store.file(savedId,".json").exists());
-        assertNotNull(a.exitProgress);assertTrue(a.exitProgress.isShowing());
-        a.onBackPressed();assertTrue(a.exitProgress.isShowing());
-        org.robolectric.android.controller.ActivityController<MainActivity> duplicateController=Robolectric.buildActivity(MainActivity.class).setup();
-        MainActivity duplicate=duplicateController.get();
-        assertTrue(duplicate.isFinishing());assertNull(duplicate.youtube);
-        assertTrue(ExitCoordinator.isExitRequested());assertTrue(a.exitInProgress);
-        duplicateController.pause().stop().destroy();
-        a.chooseTab(7);assertEquals(0,a.tab);
-        assertEquals(0,a.pendingAction);a.exitApp(); // Repeated requests cannot bypass the save barrier.
-        int starts=StudioScreenshotTest.Audio.microphoneStarts;
-        a.onRequestPermissionsResult(10,new String[]{android.Manifest.permission.RECORD_AUDIO},new int[]{0});
-        a.onActivityResult(30,MainActivity.RESULT_OK,new Intent());a.pendingSource.run();a.tryPendingAction();
-        assertEquals(starts,StudioScreenshotTest.Audio.microphoneStarts);assertFalse(a.isFinishing());
-        release.countDown();awaitExit();assertTrue(a.isFinishing());assertTrue(a.exitCompleted);
-        assertTrue(a.composer.worker.isShutdown());assertTrue(a.harmony.worker.isShutdown());
-        MainActivity next=Robolectric.buildActivity(MainActivity.class).setup().get();next.handler.removeCallbacks(next.tick);
-        assertFalse(ExitCoordinator.isExitRequested());assertFalse(AudioService.active);assertFalse(next.awaitingMicPermission);
-        assertFalse(next.composer.worker.isShutdown());assertFalse(next.composer.voiceOn);
-        a.onRequestPermissionsResult(10,new String[0],new int[0]);assertEquals(starts,StudioScreenshotTest.Audio.microphoneStarts);
-        next.youtube.destroy();next.io.shutdown();next.handler.removeCallbacksAndMessages(null);
+        try {
+            assertTrue(entered.await(5,TimeUnit.SECONDS));
+            beginAudio();String savedId=RecordingManager.id;
+            AudioService.active=true;AudioService.playbackActive=true;
+            int stopsBefore=StudioScreenshotTest.Audio.stopCalls;
+            a.busy=true;a.pendingAction=4;a.awaitingMicPermission=true;
+            a.onBackPressed();((AlertDialog)ShadowDialog.getLatestDialog()).getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+            ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
+            assertTrue(a.exitInProgress);assertTrue(ExitCoordinator.isExitRequested());assertFalse(a.isFinishing());
+            assertFalse("Recording closes before pending export finishes",RecordingManager.active);
+            assertFalse(AudioService.active);assertFalse(AudioService.playbackActive);
+            assertTrue(StudioScreenshotTest.Audio.stopCalls>stopsBefore);
+            assertTrue(a.store.file(savedId,".wav").exists());assertTrue(a.store.file(savedId,".json").exists());
+            assertNotNull(a.exitProgress);assertTrue(a.exitProgress.isShowing());
+            a.onBackPressed();assertTrue(a.exitProgress.isShowing());
+            org.robolectric.android.controller.ActivityController<MainActivity> duplicateController=Robolectric.buildActivity(MainActivity.class).setup();
+            MainActivity duplicate=duplicateController.get();
+            assertTrue(duplicate.isFinishing());assertNull(duplicate.youtube);
+            assertTrue(ExitCoordinator.isExitRequested());assertTrue(a.exitInProgress);
+            duplicateController.pause().stop().destroy();
+            a.chooseTab(7);assertEquals(0,a.tab);
+            assertEquals(0,a.pendingAction);a.exitApp(); // Repeated requests cannot bypass the save barrier.
+            int starts=StudioScreenshotTest.Audio.microphoneStarts;
+            a.onRequestPermissionsResult(10,new String[]{android.Manifest.permission.RECORD_AUDIO},new int[]{0});
+            a.onActivityResult(30,MainActivity.RESULT_OK,new Intent());a.pendingSource.run();a.tryPendingAction();
+            assertEquals(starts,StudioScreenshotTest.Audio.microphoneStarts);assertFalse(a.isFinishing());
+            release.countDown();awaitExit();assertTrue(a.isFinishing());assertTrue(a.exitCompleted);
+            assertTrue(a.composer.worker.isShutdown());assertTrue(a.harmony.worker.isShutdown());
+            MainActivity next=Robolectric.buildActivity(MainActivity.class).setup().get();next.handler.removeCallbacks(next.tick);
+            assertFalse(ExitCoordinator.isExitRequested());assertFalse(AudioService.active);assertFalse(next.awaitingMicPermission);
+            assertFalse(next.composer.worker.isShutdown());assertFalse(next.composer.voiceOn);
+            a.onRequestPermissionsResult(10,new String[0],new int[0]);assertEquals(starts,StudioScreenshotTest.Audio.microphoneStarts);
+            next.youtube.destroy();next.io.shutdown();next.handler.removeCallbacksAndMessages(null);
+        } finally {
+            release.countDown();
+            // Drain exit markers before cleanup can shut workers down, even on assertion failure.
+            if(a.exitInProgress&&!a.exitResourcesStopped)awaitExit();
+            else if(!a.io.isShutdown())a.io.submit(()->{}).get(5,TimeUnit.SECONDS);
+            a.handler.removeCallbacks(a.tick);
+        }
     }
     public static class BlockingExportProvider extends ComposerExportTest.TestProvider {
         static CountDownLatch entered,release;
@@ -250,7 +260,7 @@ public class ExitFlowTest {
     void beginAudio() throws Exception {
         float[] stats=new float[22];stats[10]=1;stats[8]=2;StudioScreenshotTest.Audio.supplied=stats;
         assertTrue(RecordingManager.start(a,90));
-        java.nio.file.Files.write(a.store.file(RecordingManager.id,".wav").toPath(),new byte[128]);
+        TakeSourcesTest.wav(a.store.file(RecordingManager.id,".wav"),false,2);
     }
     @Test public void idleUiAndBackgroundReleaseScreenAndStopTicks() {
         assertEquals(1000,a.uiTickDelay(false));assertEquals(80,a.uiTickDelay(true));

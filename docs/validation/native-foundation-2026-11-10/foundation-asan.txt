@@ -1,0 +1,2 @@
+PASS: bounded256KiB cache/20min sparse, PCM16 stereo/mono44100/48000 exact playback, EOF/replay/latest seek/pause/replacement/suspend, missing-silence clock continuity and recording warning; blocked-read pause nonjoining, failedprime2s prior-source retention; concurrent active/paused seek preserves latest position, callback allocation/fileIO zero
+PASS: production writer independent durable journal watermarks, synced final headers, abrupt exit with stale WAV header and recoverable committed payload, bounded tail admission after writer exit

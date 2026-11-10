@@ -29,9 +29,9 @@ static Result render(Source source,bool effects,bool microphone,int rate,const s
     e->recordSyncMs=sync;
     if(source==Source::Capture)e->playback.configure(true,1);
     if(source==Source::Local){
-        e->localRate=rate;e->localPCM.resize(size_t(frames+1)*2);
-        for(int i=0;i<=frames;i++)for(int c=0;c<2;c++)e->localPCM[i*2+c]=background(i,rate,c,clipping);
-        e->localPlaying=true;
+        e->localRate=rate;std::vector<float> localPCM(size_t(frames+1)*2);
+        for(int i=0;i<=frames;i++)for(int c=0;c<2;c++)localPCM[i*2+c]=background(i,rate,c,clipping);
+        e->localSource->loadMemory(std::move(localPCM));e->localPlaying=true;
     }
     if(source==Source::Composer){
         assert(e->composer.load(soundfont));

@@ -72,6 +72,9 @@ public class AudioService extends Service {
     private static AudioService instance;
     private long playbackRequestedAt;
     private long lastRouteCheck = Long.MIN_VALUE;
+    private long lastStorageCheck = Long.MIN_VALUE;
+    private int rememberedInput,rememberedOutput;
+    private boolean inputLossHandled,outputLossHandled;
     // Device callbacks protect immediately; this catches stream changes without a device event.
     private static final long ROUTE_CHECK_MS = 500;
     private static final long STATUS_PULSE_MS = 250;
@@ -109,6 +112,7 @@ public class AudioService extends Service {
     private final AudioDeviceCallback devices = new AudioDeviceCallback() {
         @Override
         public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
+            if(inputLossHandled||outputLossHandled){message=AppLanguage.text(AudioService.this,"장치가 다시 연결되었습니다. 마이크 또는 반주를 직접 다시 시작하세요.","A device reconnected. Restart the microphone or backing yourself.");revision++;}
             AudioRouting.refreshFeedbackProtection(AudioService.this);
             refreshEchoStatus();
         }
@@ -123,22 +127,29 @@ public class AudioService extends Service {
                 NativeComposer.monitor(false);
                 NativeHarmony.monitor(false);
             }
-            if (routing != null && routing.mode == 2) {
-                for (AudioDeviceInfo d : removed) {
-                    if (d.getId() == routing.output) {
-                        NativeAudio.set(11, 0);
-                        message = error = AppLanguage.text(
-                                AudioService.this,
-                                "블루투스 스피커 연결이 해제되어 마이크를 껐습니다.",
-                                "Bluetooth speaker disconnected; the mic was turned off."
-                        );
-                        stopSelf();
-                        break;
-                    }
-                }
-            }
+            boolean inputLost=active&&(AudioRouting.includesDevice(removed,rememberedInput)||routing!=null&&AudioRouting.includesDevice(removed,routing.input));
+            boolean outputLost=AudioRouting.includesDevice(removed,rememberedOutput)||routing!=null&&AudioRouting.includesDevice(removed,routing.output);
+            if(inputLost||outputLost)deviceLost(outputLost);
         }
     };
+
+    private void rememberRoute(){
+        rememberedInput=NativeAudio.inputDevice();rememberedOutput=NativeAudio.outputDevice();
+        if(routing!=null){if(rememberedInput<=0)rememberedInput=routing.input;if(rememberedOutput<=0)rememberedOutput=routing.output;}
+        inputLossHandled=outputLossHandled=false;
+    }
+    private void monitorOff(){NativeAudio.set(11,0);NativeComposer.monitor(false);NativeHarmony.monitor(false);}
+    private void deviceLost(boolean outputLost){
+        if(destroying||outputLost&&outputLossHandled||!outputLost&&inputLossHandled)return;
+        inputLossHandled=true;outputLossHandled|=outputLost;monitorOff();
+        String reason=AppLanguage.text(this,"장치 연결이 해제되어 녹음을 마쳤습니다. 다른 마이크로 자동 전환하지 않습니다. 다시 연결한 뒤 직접 시작하세요.","The device disconnected; recording was finalized. No microphone is selected automatically. Reconnect, then restart explicitly.");
+        finishRecording(reason);
+        if(practice!=null)practice.stop(false);if(composer.capturing)composer.cancelPhrase();composer.voice(false);harmony.live(false);
+        NativeAudio.microphoneOff();active=false;micForeground=false;if(routing!=null)routing.detachEffects();refreshEchoStatus();
+        if(outputLost){composer.pause();harmony.pause();NativeAudio.playLocal(false);cleanupAudio(true);stopSelf();}
+        else{playbackActive=hasPlaybackOwner(NativeAudio.stats());if(playbackActive)foreground(false);else{cleanupAudio(true);stopSelf();}}
+        message=error=reason;revision++;routeRevision++;
+    }
 
     private final BroadcastReceiver noisy = new BroadcastReceiver() {
         @Override
@@ -374,6 +385,7 @@ public class AudioService extends Service {
                     NativeAudio.playLocal(true);
                 }
                 playbackActive = true;
+                rememberRoute();
                 playbackRequestedAt = SystemClock.elapsedRealtime();
                 keepAwake();
             } catch (Exception e) {
@@ -487,6 +499,7 @@ public class AudioService extends Service {
                     NativeHarmony.monitor(safe);
                 }
                 routeLabel = routing.label;
+                rememberRoute();
                 refreshEchoStatus();
                 routeRevision++;
                 foreground(false);
@@ -513,6 +526,7 @@ public class AudioService extends Service {
                                 NativeHarmony.monitor(safe);
                             }
                             routeLabel = previous.label;
+                            rememberRoute();
                             refreshEchoStatus();
                         }
                     } catch (Exception ignored) {
@@ -569,6 +583,7 @@ public class AudioService extends Service {
                 NativeAudio.set(11, monitor ? 1 : 0);
                 NativeHarmony.monitor(monitor);
                 routeLabel = routing.label;
+                rememberRoute();
                 refreshEchoStatus();
                 routeRevision++;
             }
@@ -611,7 +626,7 @@ public class AudioService extends Service {
 
     private void syncEffects() {
         float[] defaults = {1, .55f, .27f, 2.2f, .14f, 280, .25f, 0, 0, 1, 1, 0, 0, 0, 0, 78, 0, 0, 0, 1};
-        SharedPreferences p = getSharedPreferences("MainActivity", 0);
+        SharedPreferences p = AudioRouting.studioPreferences(this);
         for (int i = 0; i < defaults.length; i++) {
             if (i != 11 && i != 12 && i != 13) {
                 NativeAudio.set(i, p.getFloat("p" + i, defaults[i]));
@@ -748,11 +763,11 @@ public class AudioService extends Service {
             }
             composer.poll();
             harmony.poll();
+            if(active&&rememberedInput>0&&NativeAudio.inputDevice()!=rememberedInput){deviceLost(false);if(destroying)return;}
+            if((active||playbackActive)&&rememberedOutput>0&&NativeAudio.outputDevice()!=rememberedOutput){deviceLost(true);return;}
             float[] stats = NativeAudio.stats();
             if (stats[10] < .5f) {
-                message = error = AppLanguage.text(AudioService.this, "오디오 장치 연결이 중단되어 녹음을 마쳤습니다.", "Recording ended because the audio device disconnected.");
-                cleanupAudio();
-                stopSelf();
+                deviceLost(true);
                 return;
             }
             checkStart();
@@ -763,6 +778,11 @@ public class AudioService extends Service {
                 cleanupAudio(true);
                 stopSelf();
                 return;
+            }
+            if(RecordingManager.active&&(lastStorageCheck==Long.MIN_VALUE||now-lastStorageCheck>=1000)){
+                lastStorageCheck=now;double[] writer=NativeAudio.diagnostics();
+                boolean failed=writer!=null&&writer.length>15&&(writer[14]>0||writer[15]>0);
+                if(failed||TakeStorage.available(AudioService.this)<16L*1024*1024)finishRecording(AppLanguage.text(AudioService.this,"저장 공간 또는 오디오 기록 오류로 녹음을 안전하게 마쳤습니다. 보관함에서 확정된 파일을 확인하세요.","Recording was safely finalized after a storage or audio-write error. Check the committed files in Library."));
             }
             if (RecordingManager.active && stats[8] >= 1800) {
                 finishRecording(AppLanguage.text(AudioService.this, "30분 녹음 한도에 도달해 저장했습니다.", "Saved after reaching the 30-minute recording limit."));

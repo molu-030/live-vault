@@ -30,7 +30,7 @@ public class TakeFinalizationTest {
     @Before public void setup() throws Exception {
         ExitCoordinator.resetForLaunch();
         MainActivity.finalizingVideoTakes.clear();
-        ExitFlowTest.VideoMux.fail=false;
+        ExitFlowTest.VideoMux.fail=false;ExitFlowTest.VideoMux.corruptMetadataAfterMux=null;
         AudioService.active=false;AudioService.playbackActive=false;
         AudioService.composerRequested=false;AudioService.harmonyRequested=false;
         RecordingManager.active=false;RecordingManager.lastResult=null;AudioService.practice=null;
@@ -50,7 +50,7 @@ public class TakeFinalizationTest {
     @After public void cleanup() {
         if(a.camera!=null){a.camera.release();a.camera=null;}
         a.handler.removeCallbacksAndMessages(null);a.youtube.destroy();a.io.shutdown();
-        MainActivity.finalizingVideoTakes.clear();RecordingManager.lastResult=null;
+        MainActivity.finalizingVideoTakes.clear();RecordingManager.lastResult=null;ExitFlowTest.VideoMux.corruptMetadataAfterMux=null;
         AudioService.active=false;AudioService.playbackActive=false;RecordingManager.active=false;
         AudioService.practice=null;ExitCoordinator.resetForLaunch();AppLanguage.set(RuntimeEnvironment.getApplication(),false);
     }
@@ -65,7 +65,8 @@ public class TakeFinalizationTest {
     }
     @Test public void metadataFailureAfterMuxRetainsBothVideoCopies() throws Exception {
         video("metadata-failure");File raw=a.rawVideo;
-        Files.write(a.store.file(a.videoTakeId,".json").toPath(),new byte[]{'{'});
+        // Fail the metadata read only after the mux has produced its finished copy.
+        ExitFlowTest.VideoMux.corruptMetadataAfterMux=a.store.file(a.videoTakeId,".json");
         a.stopVideo();a.io.submit(()->{}).get(5,TimeUnit.SECONDS);ShadowLooper.idleMainLooper();
         assertTrue("Original survives metadata failure",raw.exists());
         assertArrayEquals(new byte[]{1,2,3},Files.readAllBytes(a.store.file("metadata-failure",".mp4").toPath()));

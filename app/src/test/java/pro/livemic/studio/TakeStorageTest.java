@@ -67,6 +67,6 @@ public class TakeStorageTest {
     }
     @Test public void actualSourceFailureKeepsAllFilesAndVocalSidecarIsNotRecoveredAsATake()throws Exception{
         Audio.valid=false;assertTrue(RecordingManager.start(context,78,false));String id=RecordingManager.id;RecordingManager.Result result=RecordingManager.stop();assertFalse(result.warning.isEmpty());assertTrue(store.file(id,".wav").exists());assertTrue(store.file(id,".vocal.wav").exists());
-        TakeSourcesTest.wav(store.file("orphan",".vocal.wav"),true,2);new TakeStore(context,true);assertFalse(store.file("orphan.vocal",".json").exists());
+        TakeSourcesTest.wav(store.file("orphan",".vocal.wav"),true,2);new TakeStore(context,true).awaitRecovery();assertFalse(store.file("orphan.vocal",".json").exists());
     }
 }

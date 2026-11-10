@@ -82,6 +82,7 @@ public:
     // Call only before the stream and capture producer start.
     void reset(){enabled=false;samples.reset();}
     void configure(bool on,float amount){gain=std::clamp(amount,0.f,1.5f);enabled=on;}
+    bool isEnabled() const {return enabled.load();}
     size_t push(const float* data,size_t count){return enabled?samples.push(data,count-count%2):0;}
     void read(float* out,size_t count){
         size_t n=samples.pop(out,count);std::fill(out+n,out+count,0.f);

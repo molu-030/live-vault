@@ -24,7 +24,7 @@ public class AudioServiceRoutingTest {
   StudioScreenshotTest.Audio.statsCalls=StudioScreenshotTest.Audio.stopCalls=StudioScreenshotTest.Audio.suspendCalls=0;
   StudioScreenshotTest.Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};
   StudioScreenshotTest.Audio.actualOutputDevice=0;StudioScreenshotTest.Audio.feedbackProtectionCalls.clear();
-  Context context=RuntimeEnvironment.getApplication();AudioRouting.prefs(context).edit().clear().commit();context.getSharedPreferences("MainActivity",0).edit().clear().commit();AudioService.active=false;AudioService.playbackActive=false;AudioService.composerRequested=false;AudioService.harmonyRequested=false;RecordingManager.active=false;AudioService.error="";StudioScreenshotTest.Audio.supplied=new float[22];StudioScreenshotTest.Audio.changes.clear();StudioScreenshotTest.Audio.rerouteMic.clear();StudioScreenshotTest.Audio.rerouteResults.clear();StudioScreenshotTest.Audio.microphoneStarts=StudioScreenshotTest.Audio.playbackStarts=StudioScreenshotTest.Audio.inputSessions=0;StudioScreenshotTest.Audio.burstCalls.clear();StudioScreenshotTest.Composer.monitorCalls.clear();Field f=AudioService.class.getDeclaredField("countdown");f.setAccessible(true);countdown=(RecordingCountdown)f.get(null);countdown.cancel();controller=Robolectric.buildService(AudioService.class).create();service=controller.get();StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};HarmonySession.get(service).ready=true;HarmonySession.get(service).state=StudioScreenshotTest.Harmony.current.clone();ComposerSession.get(service).capturing=false;
+  Context context=RuntimeEnvironment.getApplication();AudioRouting.prefs(context).edit().clear().commit();AudioRouting.studioPreferences(context).edit().clear().commit();AudioService.active=false;AudioService.playbackActive=false;AudioService.composerRequested=false;AudioService.harmonyRequested=false;RecordingManager.active=false;AudioService.error="";StudioScreenshotTest.Audio.supplied=new float[22];StudioScreenshotTest.Audio.changes.clear();StudioScreenshotTest.Audio.rerouteMic.clear();StudioScreenshotTest.Audio.rerouteResults.clear();StudioScreenshotTest.Audio.microphoneStarts=StudioScreenshotTest.Audio.playbackStarts=StudioScreenshotTest.Audio.inputSessions=0;StudioScreenshotTest.Audio.burstCalls.clear();StudioScreenshotTest.Composer.monitorCalls.clear();Field f=AudioService.class.getDeclaredField("countdown");f.setAccessible(true);countdown=(RecordingCountdown)f.get(null);countdown.cancel();controller=Robolectric.buildService(AudioService.class).create();service=controller.get();StudioScreenshotTest.Harmony.current=new double[]{0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};HarmonySession.get(service).ready=true;HarmonySession.get(service).state=StudioScreenshotTest.Harmony.current.clone();ComposerSession.get(service).capturing=false;
  }
  @After public void cleanup(){ComposerSession.get(service).capturing=false;StudioScreenshotTest.Harmony.current[4]=StudioScreenshotTest.Harmony.current[5]=-1;countdown.cancel();RecordingManager.active=false;RecordingManager.micOnly=false;AudioService.pendingMicOnly=false;AudioService.youtubeSelected=false;if(AudioService.practice!=null)AudioService.practice.active=false;controller.destroy();ExitCoordinator.resetForLaunch();StudioScreenshotTest.Audio.supplied=null;StudioScreenshotTest.Audio.rerouteResults.clear();AudioService.active=false;AudioService.playbackActive=false;}
  void wired(){AudioManager manager=(AudioManager)service.getSystemService(Context.AUDIO_SERVICE);AudioDeviceInfo headset=AudioDeviceInfoBuilder.newBuilder().setType(AudioDeviceInfo.TYPE_WIRED_HEADPHONES).build();Shadows.shadowOf(manager).setOutputDevices(Collections.singletonList(headset));}
@@ -78,7 +78,7 @@ public class AudioServiceRoutingTest {
   for(int index:new int[]{4,5}){StudioScreenshotTest.Harmony.current[index]=0;clearSpies();action(AudioService.ROUTE);assertTrue("harmony state "+index,StudioScreenshotTest.Audio.rerouteMic.isEmpty());assertTrue(AudioService.playbackActive);StudioScreenshotTest.Harmony.current[index]=-1;}
  }
  @Test public void effectsActionReadsServicePreferencesIncludingGainAndNoiseReduction(){
-  service.getSharedPreferences("MainActivity",0).edit().putFloat("p1",.36f).putFloat("p19",0f).commit();StudioScreenshotTest.Audio.changes.clear();action(AudioService.EFFECTS);Map<Integer,Float> applied=new HashMap<>();for(float[] change:StudioScreenshotTest.Audio.changes)applied.put((int)change[0],change[1]);assertEquals(.36f,applied.get(1),.001);assertEquals(0f,applied.get(19),0);assertFalse(applied.containsKey(11));assertEquals(0,StudioScreenshotTest.Audio.microphoneStarts);
+  AudioRouting.studioPreferences(service).edit().putFloat("p1",.36f).putFloat("p19",0f).commit();StudioScreenshotTest.Audio.changes.clear();action(AudioService.EFFECTS);Map<Integer,Float> applied=new HashMap<>();for(float[] change:StudioScreenshotTest.Audio.changes)applied.put((int)change[0],change[1]);assertEquals(.36f,applied.get(1),.001);assertEquals(0f,applied.get(19),0);assertFalse(applied.containsKey(11));assertEquals(0,StudioScreenshotTest.Audio.microphoneStarts);
  }
  @Test public void playbackThenMicrophoneJoinRefreshesActualOutputProtection(){
   AudioManager manager=(AudioManager)service.getSystemService(Context.AUDIO_SERVICE);
@@ -94,11 +94,13 @@ public class AudioServiceRoutingTest {
  @Test public void pulseRefreshesProtectionWithoutChangingRecordingOrEffectGains()throws Exception{
   AudioManager manager=(AudioManager)service.getSystemService(Context.AUDIO_SERVICE);
   AudioDeviceInfo headphones=FeedbackRoutingTest.device(42,AudioDeviceInfo.TYPE_WIRED_HEADPHONES);
-  Shadows.shadowOf(manager).setOutputDevices(Collections.singletonList(headphones));
-  StudioScreenshotTest.Audio.actualOutputDevice=42;action("start mic");
+  AudioDeviceInfo speaker=FeedbackRoutingTest.device(41,AudioDeviceInfo.TYPE_BUILTIN_SPEAKER);
+  Shadows.shadowOf(manager).setOutputDevices(Arrays.asList(speaker,headphones));
+  StudioScreenshotTest.Audio.actualOutputDevice=41;action("start mic");
   StudioScreenshotTest.Audio.supplied[10]=1;RecordingManager.active=true;RecordingManager.micOnly=true;
-  StudioScreenshotTest.Audio.supplied[17]=1; // A safety mute must not end the recording.
-  StudioScreenshotTest.Audio.actualOutputDevice=0;StudioScreenshotTest.Audio.feedbackProtectionCalls.clear();clearSpies();
+  StudioScreenshotTest.Audio.supplied[17]=1; // A safety mute on a connected speaker must not end the recording.
+  // Keep the actual route connected: loss of a remembered route has separate stop semantics.
+  StudioScreenshotTest.Audio.feedbackProtectionCalls.clear();clearSpies();
   Field f=AudioService.class.getDeclaredField("pulse");f.setAccessible(true);((Runnable)f.get(service)).run();
   assertEquals(Collections.singletonList(true),StudioScreenshotTest.Audio.feedbackProtectionCalls);
   assertTrue(RecordingManager.active);assertTrue(RecordingManager.micOnly);assertTrue(AudioService.active);

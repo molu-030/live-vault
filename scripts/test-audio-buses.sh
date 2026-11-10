@@ -15,5 +15,9 @@ fi
 "$TASK_AUDIO_BUS_DIR/profile-test"
 "${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" tests/take_sources_test.cpp -o "$TASK_AUDIO_BUS_DIR/source-test"
 "$TASK_AUDIO_BUS_DIR/source-test" "$TASK_AUDIO_BUS_DIR"
+"${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" tests/record_journal_native_test.cpp -o "$TASK_AUDIO_BUS_DIR/journal-test"
+"$TASK_AUDIO_BUS_DIR/journal-test" "$TASK_AUDIO_BUS_DIR"
+"${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" -Wl,--wrap=fread -Wl,--wrap=fwrite -Wl,--wrap=fseeko tests/local_stream_test.cpp -o "$TASK_AUDIO_BUS_DIR/local-stream-test"
+"$TASK_AUDIO_BUS_DIR/local-stream-test" "$TASK_AUDIO_BUS_DIR"
 "${CXX:-c++}" "${TASK_AUDIO_BUS_FLAGS[@]}" tests/audio_bus_render_test.cpp -o "$TASK_AUDIO_BUS_DIR/test"
 "$TASK_AUDIO_BUS_DIR/test" "$TASK_AUDIO_BUS_DIR" app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2

@@ -8,7 +8,15 @@
 // Stream opening is opt-in for startup-policy tests; render tests supply samples explicitly.
 using aaudio_result_t = int32_t;
 using aaudio_data_callback_result_t = int32_t;
-struct AAudioStream { const float* samples=nullptr; int32_t frames=0,channels=1,rate=48000,device=1,preset=2; bool owned=false; };
+struct AAudioStream {
+    const float* samples=nullptr;
+    int32_t frames=0,channels=1,rate=48000,device=1,preset=2;
+    bool owned=false;
+    // -1 advertises unavailable position counters, exercising bounded fallback.
+    int64_t framesWritten=-1,framesRead=0;
+    int32_t readError=0,maxReadFrames=INT32_MAX,readCalls=0,lastRequested=0,xrunCount=0;
+    int64_t totalRequested=0;
+};
 struct AAudioStreamBuilder { int32_t channels=1,rate=48000,device=0,preset=2,performance=1,direction=1; };
 enum {
     AAUDIO_OK=0,AAUDIO_CALLBACK_RESULT_CONTINUE=0,
@@ -21,13 +29,15 @@ enum {
     AAUDIO_USAGE_MEDIA=1,AAUDIO_USAGE_VOICE_COMMUNICATION=2
 };
 inline int32_t AAudioStream_read(AAudioStream* stream,void* out,int32_t count,int64_t) {
-    int32_t got=std::min(count,stream->frames);
+    ++stream->readCalls;stream->lastRequested=count;stream->totalRequested+=count;
+    if(stream->readError)return stream->readError;
+    int32_t got=std::min({count,stream->frames,stream->maxReadFrames});
     if(got)std::memcpy(out,stream->samples,size_t(got)*stream->channels*sizeof(float));
-    stream->frames-=got;if(got)stream->samples+=got*stream->channels;return got;
+    stream->frames-=got;stream->framesRead+=got;if(got)stream->samples+=got*stream->channels;return got;
 }
 namespace host_audio {
 inline bool openEnabled=false, failCommunication=false;
-inline int actualInput=10, actualOutput=20, actualPreset=0;
+inline int actualInput=10, actualOutput=20, actualPreset=0, actualInputRate=0,actualInputChannels=0;
 inline std::vector<std::pair<int,int>> inputRequests;
 }
 inline aaudio_result_t AAudio_createStreamBuilder(AAudioStreamBuilder** out){*out=new AAudioStreamBuilder;return AAUDIO_OK;}
@@ -42,6 +52,7 @@ inline aaudio_result_t AAudioStreamBuilder_openStream(AAudioStreamBuilder* b,AAu
     (*out)->owned=true;(*out)->channels=b->channels>0?b->channels:1;(*out)->rate=b->rate>0?b->rate:48000;
     (*out)->device=b->direction==AAUDIO_DIRECTION_INPUT?host_audio::actualInput:host_audio::actualOutput;
     (*out)->preset=host_audio::actualPreset?host_audio::actualPreset:b->preset;
+    if(b->direction==AAUDIO_DIRECTION_INPUT){if(host_audio::actualInputRate)(*out)->rate=host_audio::actualInputRate;if(host_audio::actualInputChannels)(*out)->channels=host_audio::actualInputChannels;}
     return AAUDIO_OK;
 }
 inline void AAudioStreamBuilder_delete(AAudioStreamBuilder* b){delete b;}
@@ -61,7 +72,7 @@ inline aaudio_result_t AAudioStream_requestStop(AAudioStream*){return AAUDIO_OK;
 inline int32_t AAudioStream_getBufferCapacityInFrames(AAudioStream*){return 4096;}
 inline int32_t AAudioStream_getBufferSizeInFrames(AAudioStream*){return 256;}
 inline int32_t AAudioStream_getFramesPerBurst(AAudioStream*){return 256;}
-inline int32_t AAudioStream_getXRunCount(AAudioStream*){return 0;}
+inline int32_t AAudioStream_getXRunCount(AAudioStream* stream){return stream->xrunCount;}
 inline int32_t AAudioStream_getDeviceId(AAudioStream* stream){return stream->device;}
 inline int32_t AAudioStream_getInputPreset(AAudioStream* stream){return stream->preset;}
 inline int32_t AAudioStream_getSessionId(AAudioStream*){return 1;}
@@ -69,3 +80,6 @@ inline int32_t AAudioStream_getFormat(AAudioStream*){return AAUDIO_FORMAT_PCM_FL
 inline int32_t AAudioStream_getChannelCount(AAudioStream* stream){return stream->channels;}
 inline int32_t AAudioStream_getSampleRate(AAudioStream* stream){return stream->rate;}
 inline int32_t AAudioStream_setBufferSizeInFrames(AAudioStream*,int32_t count){return count;}
+
+inline int64_t AAudioStream_getFramesWritten(AAudioStream* stream){return stream->framesWritten;}
+inline int64_t AAudioStream_getFramesRead(AAudioStream* stream){return stream->framesWritten<0?-1:stream->framesRead;}

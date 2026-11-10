@@ -13,11 +13,11 @@ import org.json.JSONObject;
 final class TakeAudioFiles {
     static String newId(){return "edit_"+System.currentTimeMillis()+"_"+UUID.randomUUID().toString().substring(0,8);}
     static boolean rawEditable(TakeStore store,JSONObject take){
-        String id=take.optString("id");return id.matches("[A-Za-z0-9_-]+")&& take.optBoolean("cleanSources")&&take.optBoolean("sourceEditable")
+        String id=take.optString("id");return id.matches("[A-Za-z0-9_-]+")&&!store.isRecovering(id)&&!take.optBoolean("integrityRepairPending")&& take.optBoolean("cleanSources")&&take.optBoolean("sourceEditable")
                 &&store.file(id,".raw.wav").length()>44&&(!take.optBoolean("sourceFixed",true)||store.file(id,".fixed.wav").length()>44);
     }
     static boolean stemEditable(TakeStore store,JSONObject take){
-        String id=take.optString("id");return id.matches("[A-Za-z0-9_-]+")&&take.optBoolean("sourceVocalRetained")&&take.optBoolean("vocalStemEditable")
+        String id=take.optString("id");return id.matches("[A-Za-z0-9_-]+")&&!store.isRecovering(id)&&!take.optBoolean("integrityRepairPending")&&take.optBoolean("sourceVocalRetained")&&take.optBoolean("vocalStemEditable")
                 &&store.file(id,".vocal.wav").length()>44&&(!take.optBoolean("sourceFixed",true)||store.file(id,".fixed.wav").length()>44);
     }
     static boolean editable(TakeStore store,JSONObject take){return rawEditable(store,take)||stemEditable(store,take);}
@@ -35,8 +35,11 @@ final class TakeAudioFiles {
     }
     static boolean render(TakeStore store,JSONObject take,float[] settings,boolean vocal,File output){
         String id=take.optString("id"),fixed=take.optBoolean("sourceFixed",true)?store.file(id,".fixed.wav").getAbsolutePath():"";
+        try(TakeRecovery.Lease lease=store.lease(id)){
+        if(store.read(id).optBoolean("integrityRepairPending"))return false;
         return vocal?NativeAudio.renderVocalStem(store.file(id,".vocal.wav").getAbsolutePath(),fixed,output.getAbsolutePath(),settings,take.optInt("syncOffsetMs"))
                 :NativeAudio.renderTakeSources(store.file(id,".raw.wav").getAbsolutePath(),fixed,output.getAbsolutePath(),settings,take.optInt("syncOffsetMs"));
+        }catch(Exception busy){return false;}
     }
     static float[] effects(JSONObject take,float[] fallback){
         float[] result=fallback.clone();JSONArray saved=take.optJSONArray("initialEffects");
@@ -47,6 +50,10 @@ final class TakeAudioFiles {
         return copy(context,take,effects,cancelled,vocalMode(new TakeStore(context,false),take));
     }
     static String copy(Context context,JSONObject take,float[] effects,AtomicBoolean cancelled,boolean vocal)throws Exception{
+        TakeStore store=new TakeStore(context,false);
+        try(TakeRecovery.Lease lease=store.lease(take.getString("id"))){return copyLocked(context,store.read(take.getString("id")),effects,cancelled,vocal);}
+    }
+    private static String copyLocked(Context context,JSONObject take,float[] effects,AtomicBoolean cancelled,boolean vocal)throws Exception{
         TakeStore store=new TakeStore(context,false);String source=take.getString("id");
         if(!(vocal?stemEditable(store,take):rawEditable(store,take)))throw new IOException("This take has no supported editable sources.");
         String storageProblem=TakeStorage.copyProblem(context,store,take,false);
@@ -83,6 +90,10 @@ final class TakeAudioFiles {
         Saved(String id,boolean video,String warning){this.id=id;this.video=video;this.warning=warning;}
     }
     static Saved copyVideo(Context context,JSONObject take,float[] effects,AtomicBoolean cancelled,boolean vocal,java.util.function.IntConsumer progress)throws Exception{
+        TakeStore store=new TakeStore(context,false);
+        try(TakeRecovery.Lease lease=store.lease(take.getString("id"))){return copyVideoLocked(context,store.read(take.getString("id")),effects,cancelled,vocal,progress);}
+    }
+    private static Saved copyVideoLocked(Context context,JSONObject take,float[] effects,AtomicBoolean cancelled,boolean vocal,java.util.function.IntConsumer progress)throws Exception{
         TakeStore store=new TakeStore(context,false);
         if(!videoEditable(store,take))throw new IOException(AppLanguage.text(context,"영상 싱크 정보가 없어 WAV 복사본만 저장할 수 있습니다.","Video timing metadata is unavailable. Save a WAV copy instead."));
         String storageProblem=TakeStorage.copyProblem(context,store,take,true);

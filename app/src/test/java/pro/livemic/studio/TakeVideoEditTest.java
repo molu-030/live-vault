@@ -73,7 +73,7 @@ public class TakeVideoEditTest {
         }
     }
     @Test public void legacyVideoNeedsExplicitTimingMetadataButStillSupportsWavEdits()throws Exception{
-        original.remove("videoAudioOffsetUs");assertFalse(TakeAudioFiles.videoEditable(store,original));
+        original.remove("videoAudioOffsetUs");store.update(original.getString("id"),original);assertFalse(TakeAudioFiles.videoEditable(store,original));
         try{TakeAudioFiles.copyVideo(c,original,settings,new AtomicBoolean(),true,phase->{});fail();}catch(IOException expected){assertTrue(expected.getMessage().contains("timing"));}
         assertEquals(0,Mux.calls);assertEquals(0,Audio.renders);assertNotNull(TakeAudioFiles.copy(c,original,settings,new AtomicBoolean(),true));
     }

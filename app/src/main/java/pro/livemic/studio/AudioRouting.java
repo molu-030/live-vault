@@ -29,6 +29,13 @@ public final class AudioRouting implements AutoCloseable {
     private NoiseSuppressor noise;
     private AutomaticGainControl automaticGain;
 
+    static SharedPreferences studioPreferences(Context context){
+        String name=MainActivity.class.getName(),prefix=context.getPackageName()+".";
+        if(name.startsWith(prefix))name=name.substring(prefix.length());
+        return context.getSharedPreferences(name,0);
+    }
+    static boolean includesDevice(AudioDeviceInfo[] devices,int id){if(id<=0||devices==null)return false;for(AudioDeviceInfo device:devices)if(device!=null&&device.getId()==id)return true;return false;}
+
     public static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("routing", 0);
     }

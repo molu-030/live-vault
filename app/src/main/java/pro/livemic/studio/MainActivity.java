@@ -87,6 +87,12 @@ public class MainActivity extends Activity {
     private Switch deviceEchoSwitch;
     private TextView protectionStatusLabel;
     private AlertDialog protectionDialog;
+    static final int EXPORT_AUDIO_DIAGNOSTICS = 73;
+    final AudioDiagnostics audioDiagnostics = new AudioDiagnostics();
+    private AudioBackendSettings audioBackendSettings;
+    private String pendingAudioDiagnostics;
+    private TextView diagnosticsReadout;
+    private Runnable diagnosticsRefresh;
     StudioVisual visual;
 
     int sourceTab = 1, genre = 0, selectedPreset = -1, pendingAction = 0;
@@ -159,10 +165,12 @@ public class MainActivity extends Activity {
             return;
         }
         if (state != null) {
+            pendingAudioDiagnostics = state.getString("audioDiagnosticsExport");
             String pendingExport = state.getString("takeExportFile");
             if (pendingExport != null) exportFile = new File(pendingExport);
             selectedLiveEffect = Math.max(0, Math.min(5, state.getInt("selectedLiveEffect", 0)));
         }
+        audioBackendSettings = new AudioBackendSettings(this);
         youtube = new YouTubePlayer(this);
         exchange = new ComposerExchange(this);
         exchange.restoreState(state);
@@ -170,7 +178,10 @@ public class MainActivity extends Activity {
         composerScreen = new ComposerScreen(this, composer);
         harmony = HarmonySession.get(this);
         harmonyScreen = new HarmonyScreen(this, harmony);
-        store = new TakeStore(this);
+        store = new TakeStore(this, false);
+        store.recoverAsync(io, () -> runOnUiThread(() -> {
+            if (!isDestroyed() && !exiting() && tab == 4 && libraryFilter == 0) showTab();
+        }));
         recent = new RecentBackings(this);
         updateScreenAwake(false);
 
@@ -199,6 +210,7 @@ public class MainActivity extends Activity {
         BackNavigation.Page restored = navigation.restore(state);
         if (restored != null) applyPage(restored);
         build();
+        audioBackendSettings.restoreIfStopped(backendChangeAllowed());
         if (restored != null) restorePageScroll(restored);
         if (Build.VERSION.SDK_INT >= 33) modernBack = new ModernBack(this);
         handler.post(tick);
@@ -208,6 +220,7 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         out.putInt("selectedLiveEffect", selectedLiveEffect);
+        if (pendingAudioDiagnostics != null) out.putString("audioDiagnosticsExport", pendingAudioDiagnostics);
         if (exportFile != null) out.putString("takeExportFile", exportFile.getAbsolutePath());
         navigation.save(out, currentPage());
         if (exchange == null) return;
@@ -1196,7 +1209,10 @@ public class MainActivity extends Activity {
             }
         });
         add(buffer);
-        note(tr("표시는 실제 적용된 출력 버퍼입니다. 장치가 요청값을 제한할 수 있습니다.", "The display shows the applied output buffer. The device may limit the requested value."));
+        note(tr("표시는 실제 적용된 출력 버퍼 길이이며 왕복 지연 측정값이 아닙니다. 장치가 요청값을 제한할 수 있습니다.", "This is the applied output buffer duration, not measured round-trip latency. The device may limit the requested value."));
+        add(button(tr("오디오 진단 · 상세", "Audio diagnostics · details"), this::audioDiagnosticsSheet));
+        add(button(tr("오디오 백엔드 · 비교 설정", "Audio backend · comparison"), this::audioBackendOptions));
+        note(tr("기본은 AAudio입니다. Oboe는 선택형 비교 기능이며 오디오가 완전히 멈춘 동안만 바꿀 수 있습니다. 지연·안정성의 실기기 비교 결과는 아직 없습니다.", "AAudio is the default. Oboe is an opt-in comparison; change only while audio is fully stopped. Device latency and stability have not been compared."));
 
         add(text(tr("녹음 싱크 보정", "Recording sync adjustment"), 16, TEXT));
         RecordingSyncProfiles.Profile syncProfile = RecordingSyncProfiles.current(this);
@@ -1330,6 +1346,106 @@ public class MainActivity extends Activity {
                         )
                         : tr("마이크를 켜면 적용 버퍼를 확인할 수 있습니다.", "Turn on the microphone to see the applied buffer.")
         );
+    }
+
+    boolean backendChangeAllowed() {
+        return !settingsLocked() && !AudioService.active && !AudioService.playbackActive
+                && !starting && !awaitingMicPermission && !recordPermissionPending && pendingAction == 0
+                && (camera == null || !camera.recording);
+    }
+
+    void audioBackendOptions() {
+        if (!backendChangeAllowed()) {
+            toast(tr("녹음·예약·연습·캡처와 재생을 마치고 마이크를 끈 뒤 변경하세요.", "Finish recording, countdown, practice, capture and playback, then turn off the mic before changing."));
+            return;
+        }
+        StudioDialogs.choose(this, tr("오디오 백엔드 · 실기기 비교 전", "Audio backend · device comparison pending"),
+                new String[]{tr("AAudio · 기본", "AAudio · default"), tr("Oboe · 실험적 비교", "Oboe · experimental comparison")},
+                audioBackendSettings.savedChoice(), this::applyAudioBackendChoice);
+    }
+
+    boolean applyAudioBackendChoice(int provider) {
+        boolean changed=audioBackendSettings.choose(provider,backendChangeAllowed());
+        toast(changed ? tr("다음 오디오 시작에 사용할 백엔드를 선택했습니다.", "Selected the backend for the next audio start.")
+                : tr("오디오가 완전히 멈춘 상태에서만 지원하는 백엔드를 선택할 수 있습니다.", "Select a supported backend only while audio is fully stopped."));
+        return changed;
+    }
+
+    private String audioDiagnosticsText() {
+        boolean english=AppLanguage.english(this);
+        return audioBackendSettings.info().text(english)+"\n\n"+audioDiagnostics.sample().text(english,RecordingSyncProfiles.current(this).offsetMs);
+    }
+
+    /** Read-only counters: opening this sheet never starts a stream or calibration recording. */
+    void audioDiagnosticsSheet() {
+        LinearLayout panel = formColumn();
+        panel.addView(text(tr("1초마다 갱신하며 경로·소스 재시작 시 카운터가 초기화될 수 있습니다. —는 확인 불가입니다. 읽기 요청 미충족은 실제 음성 손실을 뜻하지 않습니다. FIFO 보정량은 큐 점유량을 유지하는 추정값으로 USB 클록이나 실제 왕복 지연의 실측값이 아닙니다. 실제 USB 장치 검증은 보류 상태입니다.",
+                "Updates once a second; restarting streams or sources may reset counters. — means unavailable. Unfilled read requests do not prove audio loss. FIFO correction estimates queue occupancy control, not a measured USB clock or round-trip latency. Physical USB validation is pending."), StudioTheme.TYPE_LABEL, MUTED));
+        final TextView readout = text("", StudioTheme.TYPE_BODY, TEXT);
+        readout.setTag("audio-diagnostics-readout");
+        readout.setText(audioDiagnosticsText());
+        panel.addView(readout);
+        panel.addView(text(tr("JSON에는 카운터·버퍼·수동 보정값만 저장하며 경로, 장치 주소, 원음과 다른 앱 정보는 포함하지 않습니다.",
+                "JSON includes counters, buffers and the manual offset; no file paths, device addresses, audio or other-app information."), StudioTheme.TYPE_LABEL, MUTED));
+        final Runnable refresh = new Runnable() {
+            @Override public void run() {
+                if (isDestroyed() || !activityVisible || !readout.isAttachedToWindow()) return;
+                readout.setText(audioDiagnosticsText());
+                handler.postDelayed(this, AudioDiagnostics.INTERVAL_MS);
+            }
+        };
+        readout.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) {
+                if (diagnosticsRefresh != null) handler.removeCallbacks(diagnosticsRefresh);
+                diagnosticsReadout = readout; diagnosticsRefresh = refresh; handler.post(refresh);
+            }
+            @Override public void onViewDetachedFromWindow(View view) {
+                handler.removeCallbacks(refresh);
+                if (diagnosticsReadout == readout) { diagnosticsReadout = null; diagnosticsRefresh = null; }
+            }
+        });
+        StudioDialogs.form(this, tr("오디오 진단", "Audio diagnostics"), panel,
+                tr("JSON 저장", "Save JSON"), this::exportAudioDiagnostics, null);
+    }
+
+    void exportAudioDiagnostics() {
+        try {
+            pendingAudioDiagnostics = audioDiagnostics.sample().json(RecordingSyncProfiles.current(this).offsetMs)
+                    .put("audio_backend", audioBackendSettings.info().json()).toString(2);
+            startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json")
+                    .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "live-vault-audio-diagnostics.json"), EXPORT_AUDIO_DIAGNOSTICS);
+        } catch (Exception unavailable) {
+            pendingAudioDiagnostics = null;
+            toast(tr("진단 저장 위치를 열지 못했습니다.", "Could not open the diagnostics save location."));
+        }
+    }
+
+    private void finishAudioDiagnosticsExport(int result, Intent data) {
+        final String snapshot = pendingAudioDiagnostics;
+        pendingAudioDiagnostics = null;
+        if (result != RESULT_OK || data == null || data.getData() == null) {
+            toast(tr("진단 저장을 취소했습니다.", "Diagnostics save canceled.")); return;
+        }
+        if (snapshot == null) {
+            toast(tr("진단 화면에서 다시 저장해 주세요.", "Open diagnostics and save again.")); return;
+        }
+        final Uri destination = data.getData();
+        try {
+            io.execute(() -> {
+                boolean saved = false;
+                try (OutputStream out = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (out == null) throw new IOException("No document output stream");
+                    out.write(snapshot.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    out.flush(); saved = true;
+                } catch (Exception unavailable) { saved = false; /* Do not expose document paths or provider details. */ }
+                final boolean complete = saved;
+                runOnUiThread(() -> {
+                    if (!isDestroyed() && !exiting()) toast(complete ? tr("진단 JSON을 저장했습니다.", "Diagnostics JSON saved.") : tr("진단 JSON을 저장하지 못했습니다.", "Could not save diagnostics JSON."));
+                });
+            });
+        } catch (java.util.concurrent.RejectedExecutionException closing) {
+            toast(tr("종료 중에는 진단을 저장할 수 없습니다.", "Cannot save diagnostics while closing."));
+        }
     }
 
     void applyLatency(int mode, int n, TextView label) {
@@ -2377,6 +2493,8 @@ public class MainActivity extends Activity {
         add(title(tr("보관함", "Library")));
         note(tr("녹음과 연습을 한곳에", "Recordings and practice in one place"));
         add(takeSpaceStatus());
+        if (store.recovering()) note(tr("녹음 파일을 확인·복구하고 있습니다…", "Checking and recovering recording files…"));
+        else if (!store.recoveryFailure().isEmpty()) note(tr("일부 녹음 파일을 복구하지 못했습니다. 기존 파일은 보존되며 다음 실행에 다시 확인합니다.", "Some recording files could not be recovered. Existing files are retained and will be checked next launch."));
         RecentVoiceRecovery.draw(this);
         if (busy) note(tr("영상에 보컬 오디오를 합치고 있습니다…", "Merging vocal audio into video…"));
 
@@ -2489,7 +2607,7 @@ public class MainActivity extends Activity {
                 });
             }
             StudioButton play = (StudioButton) StudioTheme.icon(this, "play", tr("테이크 재생", "Play take"), () -> {
-                if (takeFinalizing(id)) return;
+                if (takeFinalizing(id) || takeNeedsRecovery(id)) return;
                 if (video.exists()) openFile(video);
                 else play(audio);
             });
@@ -2550,7 +2668,22 @@ public class MainActivity extends Activity {
         return levels;
     }
 
+    boolean takeNeedsRecovery(String id) {
+        try {
+            if (!store.read(id).optBoolean("integrityRepairPending")) return false;
+        } catch (Exception unavailable) {
+            toast(tr("이 테이크의 파일 상태를 확인하지 못했습니다. 기존 파일은 유지됩니다.", "Could not verify this take's file state. Existing files are retained."));
+            return true;
+        }
+        toast(tr("이 테이크의 파일 복구가 끝날 때까지 기다려 주세요.", "Wait until this take finishes recovering."));
+        return true;
+    }
+
     boolean takeFinalizing(String id) {
+        if (store.isRecovering(id)) {
+            toast(tr("이 테이크의 파일 복구가 끝날 때까지 기다려 주세요.", "Wait until this take finishes recovering."));
+            return true;
+        }
         if (!finalizingVideoTakes.contains(id)) return false;
         toast(tr("이 영상의 저장이 끝날 때까지 기다려 주세요.", "Wait until this video finishes saving."));
         return true;
@@ -2582,30 +2715,30 @@ public class MainActivity extends Activity {
         List<Runnable> actions = new ArrayList<>();
         if (wav.exists()) {
             names.add(tr("오디오 재생 / 일시정지", "Play / pause audio"));
-            actions.add(() -> play(wav));
+            actions.add(() -> { if (!takeNeedsRecovery(id)) play(wav); });
             names.add(tr("WAV 저장", "Save WAV"));
-            actions.add(() -> export(wav));
+            actions.add(() -> { if (!takeNeedsRecovery(id)) export(wav); });
         }
         if (TakeAudioFiles.editable(store,j)) {
             names.add(tr("보컬 효과 후편집 · 새 복사본", "Edit vocal effects · new copy"));
-            actions.add(() -> {takeEffectsEditor=new TakeEffectsEditor(this,j);takeEffectsEditor.show();});
+            actions.add(() -> {if (takeNeedsRecovery(id)) return;takeEffectsEditor=new TakeEffectsEditor(this,j);takeEffectsEditor.show();});
         } else if(j.optBoolean("cleanSources")){
             names.add(tr("효과 후편집 지원 안내", "Vocal editing availability"));
             actions.add(() -> toast(tr("자동화음·보컬 경로 변경 또는 지원하지 않는 형식이 포함되어 후편집을 지원하지 않습니다. 원래 믹스와 원음은 유지됩니다.", "Live harmony, voice routing changes or an unsupported format prevent vocal editing. The original mix and sources are retained.")));
         }
         if (midi.exists()) {
             names.add(tr("MIDI 저장", "Save MIDI"));
-            actions.add(() -> export(midi));
+            actions.add(() -> { if (!takeNeedsRecovery(id)) export(midi); });
         }
         if (video.exists()) {
             names.add(tr("영상 재생", "Play video"));
-            actions.add(() -> openFile(video));
+            actions.add(() -> { if (!takeNeedsRecovery(id)) openFile(video); });
             names.add(tr("MP4 저장", "Save MP4"));
-            actions.add(() -> export(video));
+            actions.add(() -> { if (!takeNeedsRecovery(id)) export(video); });
         }
         if (video.exists() || wav.exists()) {
             names.add(tr("공유", "Share"));
-            actions.add(() -> share(video.exists() ? video : wav));
+            actions.add(() -> { if (!takeNeedsRecovery(id)) share(video.exists() ? video : wav); });
         }
         if(TakeStorage.hasSources(store,id)){
             names.add(tr("이 테이크 원음만 삭제…", "Delete only this take's sources…"));
@@ -2641,12 +2774,15 @@ public class MainActivity extends Activity {
                 tr("오디오·MIDI·영상이 기기에서 삭제됩니다.", "Audio, MIDI and video will be deleted from this device."),
                 tr("삭제", "Delete"),
                 () -> {
+                    if (takeFinalizing(id)) return;
+                    if (!store.delete(id)) {
+                        toast(tr("이 테이크의 파일 복구가 끝날 때까지 기다려 주세요.", "Wait until this take finishes recovering.")); return;
+                    }
                     stopPlayer();
-                    store.delete(id);
                     showTab();
                 }
         ));
-        StudioDialogs.choose(this, j.optString("name"), names.toArray(new String[0]), -1, w -> actions.get(w).run());
+        StudioDialogs.choose(this, j.optString("name"), names.toArray(new String[0]), -1, w -> { if (!takeFinalizing(id)) actions.get(w).run(); });
     }
 
     void requestMicToggle() {
@@ -2895,6 +3031,9 @@ public class MainActivity extends Activity {
             toast(tr("영상을 저장하고 있습니다…", "Saving video…"));
             io.execute(() -> {
                 try {
+                    store.awaitRecovery();
+                    if (store.read(saved.id).optBoolean("integrityRepairPending"))
+                        throw new IOException("Audio file recovery is incomplete; original video retained.");
                     MediaTools.makeVideo(source, store.file(saved.id, ".wav"), store.file(saved.id, ".mp4"), offset, voiceDelayUs);
                     JSONObject videoMetadata = store.read(saved.id);
                     videoMetadata.put("videoAudioOffsetUs", offset);
@@ -3379,6 +3518,7 @@ public class MainActivity extends Activity {
     public void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (exiting()) return;
+        if (request == EXPORT_AUDIO_DIAGNOSTICS) { finishAudioDiagnosticsExport(result, data); return; }
         if (exchange.onActivityResult(request, result, data)) return;
         if (request == 30) {
             if (youtube.selected || recordingRequestStage != 2) {
@@ -3545,6 +3685,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (diagnosticsRefresh != null) handler.removeCallbacks(diagnosticsRefresh);
         if (youtube == null) { super.onPause(); return; }
         youtube.pause();
         if (youtube.web != null) youtube.web.onPause();
@@ -3570,6 +3711,7 @@ public class MainActivity extends Activity {
         super.onResume();
         if (exiting()) return;
         activityVisible = true;
+        if (diagnosticsReadout != null && diagnosticsReadout.isAttachedToWindow() && diagnosticsRefresh != null) handler.post(diagnosticsRefresh);
         if (youtube.web != null) { youtube.web.onResume(); youtube.checkVisibility(); }
         handler.removeCallbacks(pendingSource);
         handler.removeCallbacks(tick);
@@ -3579,6 +3721,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (diagnosticsRefresh != null) handler.removeCallbacks(diagnosticsRefresh);
+        diagnosticsReadout = null; diagnosticsRefresh = null;
         if(takeEffectsEditor!=null)takeEffectsEditor.close();
         handler.removeCallbacks(adaptWindow);
         if (modernBack != null) modernBack.unregister();

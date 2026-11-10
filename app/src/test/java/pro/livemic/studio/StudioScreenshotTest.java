@@ -45,6 +45,7 @@ public class StudioScreenshotTest {
   @Implementation protected static boolean reroute(int input,int output,int mode,boolean microphone){rerouteMic.add(microphone);return rerouteResults.isEmpty()||rerouteResults.removeFirst();}
   @Implementation protected static boolean bufferBursts(int n){burstCalls.add(n);return true;}
   @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
+  @Implementation protected static double[] diagnostics(){double[] values=new double[21];values[0]=1;return values;}
   @Implementation protected static int inputSession(){inputSessions++;return 0;}
   static int actualOutputDevice,feedbackResets,inputProfile,echoInputConfigurations;
   static boolean echoInputSupported,echoDefaultSafe;

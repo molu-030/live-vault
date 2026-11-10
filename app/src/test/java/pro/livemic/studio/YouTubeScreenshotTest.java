@@ -59,7 +59,7 @@ public class YouTubeScreenshotTest {
         assertTrue("Main knob targets do not overlap",reverb.right<=echo.left);
         assertEquals("Normal I/O row remains intact",2,((ViewGroup)a.liveScreen.micButton.getParent()).getChildCount());
         assertEquals("Normal route row remains intact",2,((ViewGroup)a.liveScreen.inputButton.getParent()).getChildCount());
-        assertTrue("LCD keeps its normal readable minimum",a.liveScreen.display.getHeight()>=a.dp(151));
+        assertTrue("LCD keeps its normal readable minimum",a.liveScreen.display.getHeight()>=a.dp(120));
         assertTrue("Recording footer clears system navigation",footer.bottom<=a.root.getHeight()-a.root.getPaddingBottom());
     }
     static void consentCapture(MainActivity a,View content,int width,int height,File output)throws Exception {
@@ -92,8 +92,9 @@ public class YouTubeScreenshotTest {
                     a.root.dispatchApplyWindowInsets(new WindowInsets.Builder().setInsets(WindowInsets.Type.systemBars(),Insets.of(0,36,0,24)).build());
                     String prefix="v386-youtube-layout-"+(english?"en":"ko")+"-"+width+(scale==1?"-default":"-large");
                     StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-native-live.png"),false);
-                    int normalPanels=a.page.getChildCount(),normalMicHeight=a.liveScreen.micButton.getHeight(),normalFxHeight=a.liveScreen.echoVolume.getHeight();
-                    assertTrue("Native source uses the shared readable LCD minimum",a.liveScreen.display.getHeight()>=a.dp(151));
+                    int normalPanels=a.page.getChildCount(),normalMicHeight=a.liveScreen.micButton.getHeight(),normalFxHeight=a.liveScreen.echoVolume.getHeight(),normalDisplayHeight=a.liveScreen.display.getHeight();
+                    // LiveScreen configures a 120..300dp LCD; StudioPageLayout allocates remaining viewport height.
+                    assertTrue("Native LCD stays within its configured responsive bounds",normalDisplayHeight>=a.dp(120)&&normalDisplayHeight<=a.dp(300));
                     a.sourceTab=2;a.chooseTab(1);StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-source.png"),false);
                     assertNull(a.youtube.web);a.selectYouTube("M7lc1UVf-VE");AlertDialog consent=(AlertDialog)ShadowDialog.getLatestDialog();assertTrue(consent.isShowing());
                     consentCapture(a,consent.getWindow().getDecorView(),width,height,new File(out,prefix+"-consent.png"));
@@ -106,6 +107,9 @@ public class YouTubeScreenshotTest {
                     java.nio.file.Files.write(new File(out,"v386-youtube-embed.html").toPath(),pages.get(pages.size()-1).getBytes(java.nio.charset.StandardCharsets.UTF_8));
                     TextView fixture=offlinePlayer(a);StudioScreenshotTest.capture(a,width,height,new File(out,prefix+"-live-OFFLINE-fixture.png"),false);
                     assertEquals("Selecting video keeps the same Live card hierarchy",normalPanels,a.page.getChildCount());
+                    // Added video consumes body space, so the LCD may compact while retaining its shared minimum.
+                    assertTrue("Video LCD keeps the shared readable minimum",a.liveScreen.display.getHeight()>=a.dp(120));
+                    assertTrue("Video LCD adapts to added content without exceeding the native height",a.liveScreen.display.getHeight()<=normalDisplayHeight);
                     assertEquals("Selecting video retains full microphone control height",normalMicHeight,a.liveScreen.micButton.getHeight());
                     assertEquals("Selecting video retains full FX knob height",normalFxHeight,a.liveScreen.echoVolume.getHeight());
                     android.graphics.Rect playerBounds=StudioScreenshotTest.bounds(a,fixture);

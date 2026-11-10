@@ -2,16 +2,22 @@
 #include "feedback_guard.h"
 #include "record_alignment.h"
 #include "local_seek.h"
+#include "local_pcm_source.h"
+#include "recording_journal.h"
 #include "input_resampler.h"
 #include "echo_input_profile.h"
 #include "take_sources.h"
 #include "recent_voice.h"
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+#include "audio_backend.h"
+#endif
 #include <aaudio/AAudio.h>
 #include <jni.h>
 #include <android/log.h>
 #include <chrono>
 #include <cstdio>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <thread>
 #include <unistd.h>
@@ -31,6 +37,14 @@ class Engine {
 public:
     std::atomic<float> params[20];
     AAudioStream *input = nullptr, *output = nullptr;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+    std::unique_ptr<lv::OboeBackend> oboe;
+    std::atomic<int> requestedBackend{0},appliedBackend{-1},platformApi{-1},backendFallback{0};
+    bool suppressOboeAttempt=false;
+    std::atomic<bool> oboeInputActive{false};
+#endif
+    std::recursive_mutex streamControl;
+    std::atomic<int> inputDeviceSnapshot{0},inputSessionSnapshot{0},outputDeviceSnapshot{0};
     std::atomic<AAudioStream*> publishedInput{nullptr};
     lv::ComposerEngine composer;
     vh::Harmony harmony;
@@ -83,7 +97,16 @@ public:
     uint32_t noiseState = 12345678;
     double transport = 0;
     bool bandWasOn = false;
-    std::vector<float> localPCM;
+    std::unique_ptr<LocalPcmSource> localSource{new LocalPcmSource},retiredLocalSource;
+    std::mutex localControl;
+    bool localLoadInProgress=false;
+    std::atomic<uint64_t> localLoadEpoch{0};
+    std::atomic<bool> localDesiredPlay{false};
+    std::atomic<uint64_t> localMissingFrames{0},localRecordingMissingFrames{0};
+    std::atomic<uint64_t> writerDroppedFrames{0},writerIoErrors{0};
+    std::array<std::atomic<double>,21> diagnostic{};
+    std::atomic<int> outputBurstSnapshot{0},outputCapacitySnapshot{0},outputBufferSnapshot{0},outputRateSnapshot{48000},outputXrunsSnapshot{0};
+    std::atomic<uint64_t> inputShortReads{0},inputMissingFrames{0};
     std::atomic<double> localDurationSeconds{0};
     int localRate = 48000;
     std::atomic<bool> localPlaying{false};
@@ -96,6 +119,14 @@ public:
     std::atomic<int> inputProfile{0};
 
     Engine() {
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        oboe=std::make_unique<lv::OboeBackend>(
+                [](void* user,float* stereo,int32_t frames){static_cast<Engine*>(user)->render(stereo,frames);},
+                [](void* user,int32_t code){auto* self=static_cast<Engine*>(user);self->params[11]=0;self->fault=code;self->running=false;self->diagnostic[7]=-1;self->diagnostic[8]=0;},this);
+#endif
+        for(auto& value:diagnostic)value=-1;
+        diagnostic[0]=1;diagnostic[3]=diagnostic[4]=diagnostic[5]=diagnostic[6]=diagnostic[8]=0;
+        diagnostic[9]=diagnostic[10]=diagnostic[12]=diagnostic[13]=0;diagnostic[11]=LocalPcmSource::pageFrames*LocalPcmSource::pageCount;
         float defaults[] = {1, .55f, .27f, 2.2f, .14f, 280, .25f, 0, 0, 1, 1, 0, 0, 0, 0, 78, 0, 0, 0, 1};
         for (int i = 0; i < 20; i++) params[i] = defaults[i];
     }
@@ -104,23 +135,61 @@ public:
         stop();
     }
 
-    static aaudio_data_callback_result_t data(AAudioStream*, void* user, void* buffer, int32_t n) {
-        return static_cast<Engine*>(user)->render(static_cast<float*>(buffer), n);
+    static aaudio_data_callback_result_t data(AAudioStream* stream, void* user, void* buffer, int32_t n) {
+        auto* self=static_cast<Engine*>(user);
+        self->outputXrunsSnapshot=AAudioStream_getXRunCount(stream);
+        self->outputBufferSnapshot=AAudioStream_getBufferSizeInFrames(stream);
+        self->outputRateSnapshot=AAudioStream_getSampleRate(stream);
+        self->diagnostic[1]=self->outputXrunsSnapshot.load();
+        self->diagnostic[19]=self->outputBufferSnapshot.load();self->diagnostic[20]=self->outputRateSnapshot.load();
+        return self->render(static_cast<float*>(buffer),n);
     }
 
     static void error(AAudioStream*, void* user, aaudio_result_t e) {
         auto* self = static_cast<Engine*>(user);
         self->params[11] = 0;
         self->fault = e;
-        self->running = false;
+        self->running = false;self->diagnostic[7]=-1;self->diagnostic[8]=0;
     }
 
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+    bool usingOboe() const {return appliedBackend.load()==1 && oboe->hasOutput();}
+    void refreshOboeSnapshots() {
+        if(!usingOboe())return;
+        auto info=oboe->outputInfo();
+        outputBurstSnapshot=info.framesPerBurst;outputCapacitySnapshot=info.bufferCapacity;
+        outputBufferSnapshot=info.bufferSize;outputRateSnapshot=info.sampleRate;
+        outputXrunsSnapshot=info.xruns;
+        diagnostic[1]=info.xruns;diagnostic[19]=info.bufferSize;diagnostic[20]=info.sampleRate;
+    }
+    bool fallbackStart(int device,int outputDevice,int mode,bool withMic,bool preserve,int reason){
+        stop(preserve);
+        backendFallback=reason;
+        suppressOboeAttempt=true;
+        bool started=start(device,outputDevice,mode,withMic,preserve);
+        suppressOboeAttempt=false;
+        return started;
+    }
+#endif
+
     bool start(int device, int outputDevice, int mode, bool withMic = true, bool preserve = false) {
+        std::lock_guard<std::recursive_mutex> control(streamControl);
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if ((output || usingOboe()) && running) {
+            if (withMic && !input && !oboe->hasInput()) return openMicrophone(device, mode);
+            return true;
+        }
+        if (output || usingOboe()) stop(preserve);
+#else
         if (output && running) {
             if (withMic && !input) return openMicrophone(device, mode);
             return true;
         }
         if (output) stop(preserve);
+#endif
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(!suppressOboeAttempt)backendFallback=0;
+#endif
         guideFrequency = 0;
         guideEnvelope = 0;
         pitchConfidence = 0;
@@ -149,6 +218,19 @@ public:
             candidateCount = 0;
         }
 
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        bool oboeOpened=false;
+        if(requestedBackend==1 && !suppressOboeAttempt){
+            int result=oboe->openOutput(outputDevice,mode);
+            if(result==0){
+                oboeOpened=true;appliedBackend=1;platformApi=0;
+            }else{
+                backendFallback=1;fault=result;
+            }
+        }
+        if(!oboeOpened){appliedBackend=-1;platformApi=-1;}
+        if(!oboeOpened){
+#endif
         AAudioStreamBuilder* b = nullptr;
         AAudio_createStreamBuilder(&b);
         AAudioStreamBuilder_setDirection(b, AAUDIO_DIRECTION_OUTPUT);
@@ -191,51 +273,123 @@ public:
             fault = AAUDIO_ERROR_INVALID_FORMAT;
             return false;
         }
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        appliedBackend=0;platformApi=0;
+        }
+#endif
 
         int oldRate = sr;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        sr = oboeOpened ? oboe->outputInfo().sampleRate : AAudioStream_getSampleRate(output);
+#else
         sr = AAudioStream_getSampleRate(output);
+#endif
         if (oldRate > 0 && oldRate != sr && localCursor.load() > 0) {
             localCursor = uint64_t(std::llround(double(localCursor.load()) * sr / oldRate));
         }
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(oboeOpened)oboe->setOutputBufferBursts(requestedBursts.load());
+        else
+#endif
         AAudioStream_setBufferSizeInFrames(
                 output,
                 std::min(AAudioStream_getBufferCapacityInFrames(output), AAudioStream_getFramesPerBurst(output) * requestedBursts.load())
         );
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(oboeOpened){outputDeviceSnapshot=oboe->outputInfo().deviceId;refreshOboeSnapshots();}
+        else{
+#endif
+        outputDeviceSnapshot=AAudioStream_getDeviceId(output);
+        outputBurstSnapshot=AAudioStream_getFramesPerBurst(output);outputCapacitySnapshot=AAudioStream_getBufferCapacityInFrames(output);
+        outputBufferSnapshot=AAudioStream_getBufferSizeInFrames(output);outputRateSnapshot=sr;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        }
+#endif
+        diagnostic[19]=outputBufferSnapshot.load();diagnostic[20]=sr;
         dsp.init(sr);
         feedback.init(sr, true, preserve);
         composer.sampleRate(sr);
         {
             std::lock_guard<std::mutex> lock(vocalControl);
             if (!vocalLooper.sampleRate(sr)) {
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+                if(oboeOpened)oboe->closeOutput();else
+#endif
                 AAudioStream_close(output);
                 output = nullptr;
                 fault = AAUDIO_ERROR_INTERNAL;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+                appliedBackend=-1;platformApi=-1;
+#endif
                 return false;
             }
         }
         running = true;
         if (withMic && !openMicrophone(device, mode)) {
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+            if(oboeOpened)return fallbackStart(device,outputDevice,mode,withMic,preserve,backendFallback.load());
+#endif
             stop(preserve);
             return false;
         }
-        result = AAudioStream_requestStart(output);
-        if (result != AAUDIO_OK) {
-            fault = result;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(oboeOpened){
+            int started=oboe->startOutput();
+            if(started!=0){fault=started;return fallbackStart(device,outputDevice,mode,withMic,preserve,3);}
+        }else{
+#endif
+        auto startResult = AAudioStream_requestStart(output);
+        if (startResult != AAUDIO_OK) {
+            fault = startResult;
             stop(preserve);
             return false;
         }
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        }
+#endif
+        fault=0; // A successful fallback has no active fault; retain backendFallback separately.
         analyzer = std::thread([this] { analyze(); });
         voiceAnalyzer = std::thread([this] { composer.analyze(running); });
         return true;
     }
 
     bool openMicrophone(int device, int mode) {
+        std::lock_guard<std::recursive_mutex> control(streamControl);
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(oboe->hasInput())return true;
+#endif
         if (input) return true;
         EchoInputProfile profile;
         {
             std::lock_guard<std::mutex> lock(echoInputControl);
             profile = echoInputConfig;
         }
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(usingOboe()){
+            bool speakerEcho=mode==0 && profile.useFor(device,outputDeviceSnapshot.load());
+            bool communication=mode>0 || speakerEcho;
+            int result=oboe->openInput(device,sr,communication,speakerEcho,
+                    [](void* user,int32_t id){
+                        auto* self=static_cast<Engine*>(user);
+                        std::lock_guard<std::mutex> lock(self->echoInputControl);
+                        return self->echoInputConfig.builtinMicrophone(id);
+                    });
+            if(result!=0){fault=result;backendFallback=2;return false;}
+            auto info=oboe->inputInfo();
+            inputShortReads=0;inputMissingFrames=0;
+            diagnostic[3]=diagnostic[4]=diagnostic[5]=diagnostic[6]=0;
+            inputResampler.reset(info.sampleRate,sr,true);
+            inputChannels=info.channels;inputRate=info.sampleRate;monitorMode=mode;
+            if(!monitorLevelChosen)monitorLevel=feedback.isEnabled()?.18f:1.f;
+            result=oboe->startInput();
+            if(result!=0){oboe->closeInput();fault=result;backendFallback=3;return false;}
+            inputProfile=info.inputPreset==AAUDIO_INPUT_PRESET_VOICE_RECOGNITION?1
+                    :info.inputPreset==AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION?(speakerEcho?3:2):0;
+            inputDeviceSnapshot=info.deviceId;inputSessionSnapshot=info.sessionId;
+            oboeInputActive.store(true,std::memory_order_release);
+            return true;
+        }
+#endif
         bool speakerEcho = mode == 0 && output && profile.useFor(device, AAudioStream_getDeviceId(output));
         bool communication = mode > 0 || speakerEcho;
         AAudioStreamBuilder* b = nullptr;
@@ -297,7 +451,9 @@ public:
             fault = AAUDIO_ERROR_INVALID_FORMAT;
             return false;
         }
-        inputResampler.reset(rate, sr);
+        inputShortReads=0;inputMissingFrames=0;
+        diagnostic[3]=diagnostic[4]=diagnostic[5]=diagnostic[6]=0;
+        inputResampler.reset(rate, sr, true);
         inputChannels = ch;
         inputRate = rate;
         monitorMode = mode;
@@ -312,13 +468,20 @@ public:
         int actualPreset = AAudioStream_getInputPreset(input);
         inputProfile = actualPreset == AAUDIO_INPUT_PRESET_VOICE_RECOGNITION ? 1
                 : actualPreset == AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION ? (speakerEcho ? 3 : 2) : 0;
+        inputDeviceSnapshot=AAudioStream_getDeviceId(input);inputSessionSnapshot=AAudioStream_getSessionId(input);
         publishedInput.store(input, std::memory_order_release);
         return true;
     }
 
     void microphoneOff(bool preserve = false) {
+        std::lock_guard<std::recursive_mutex> control(streamControl);
+        inputDeviceSnapshot=inputSessionSnapshot=0;
         inputProfile = 0;
+        diagnostic[2]=-1;diagnostic[7]=-1;diagnostic[8]=0;diagnostic[17]=-1;diagnostic[18]=-1;
         publishedInput.store(nullptr, std::memory_order_release);
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        oboeInputActive.store(false,std::memory_order_release);
+#endif
         params[11] = 0;
         if (!preserve) harmony.disable();
         harmony.clearPitch();
@@ -327,6 +490,9 @@ public:
         pitchLevel = 0;
         if (!preserve) vocalLooper.cancel();
         while (recordWriters.load() > 0) std::this_thread::yield();
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(oboe->hasInput())oboe->closeInput();
+#endif
         if (input) {
             AAudioStream_requestStop(input);
             AAudioStream_close(input);
@@ -337,6 +503,8 @@ public:
     }
 
     void stop(bool preserve = false) {
+        std::lock_guard<std::recursive_mutex> control(streamControl);
+        outputDeviceSnapshot=0;
         guideFrequency = 0;
         running = false;
         if (!preserve) {
@@ -349,6 +517,12 @@ public:
             AAudioStream_close(output);
             output = nullptr;
         }
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if(oboe->hasOutput())oboe->closeOutput();
+        appliedBackend=-1;platformApi=-1;
+#endif
+        outputBurstSnapshot=outputCapacitySnapshot=outputBufferSnapshot=outputXrunsSnapshot=0;
+        diagnostic[1]=diagnostic[19]=diagnostic[20]=-1;
         microphoneOff(preserve);
         if (voiceAnalyzer.joinable()) voiceAnalyzer.join();
         if (analyzer.joinable()) analyzer.join();
@@ -356,7 +530,10 @@ public:
         inRms = 0;
         outRms = 0;
         params[11] = 0;
-        if (!preserve) localPlaying = false;
+        if (!preserve) {
+            localDesiredPlay=false;localPlaying=false;localLoadEpoch.fetch_add(1);
+            std::unique_lock<std::mutex> lock(localControl,std::try_to_lock);if(lock.owns_lock())localSource->idle();
+        }
     }
 
     float noise() {
@@ -418,37 +595,57 @@ public:
         }
         recordWriters.fetch_add(1);
         AAudioStream* mic = publishedInput.load(std::memory_order_acquire);
-        if (!mic) {
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        bool oboeMic=oboeInputActive.load(std::memory_order_acquire);
+        bool haveMic=mic || oboeMic;
+#else
+        bool haveMic=mic;
+#endif
+        if (!haveMic) {
             std::fill(inputBuffer.begin(), inputBuffer.begin() + n, 0);
-        } else if (inputRate == sr && inputChannels == 1) {
-            int got = AAudioStream_read(mic, inputBuffer.data(), n, 0);
-            if (got < 0) {
-                fault = got;
-                params[11] = 0;
-                running = false;
-                got = 0;
-            }
-            std::fill(inputBuffer.begin() + got, inputBuffer.begin() + n, 0);
         } else {
-            size_t needed = inputResampler.needed(n);
-            while (needed) {
-                int requested = int(std::min<size_t>(needed, 4096));
-                int got = AAudioStream_read(mic, rawInputBuffer.data(), requested, 0);
-                if (got < 0) {
-                    fault = got;
-                    params[11] = 0;
-                    running = false;
-                    inputResampler.reset(inputRate, sr);
-                    break;
-                }
-                inputResampler.push(rawInputBuffer.data(), size_t(got), inputChannels);
-                if (got < requested) break;
-                needed = inputResampler.needed(n);
+            int nominal=std::max(1,int(std::ceil(double(n)*inputRate/sr)));
+            int target=std::max(1,int(std::lround(inputRate*.008)));
+            int64_t written=-1,read=-1;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+            int32_t oboeAvailable=oboeMic?oboe->availableInputFrames():-1;
+            if(oboeMic && oboeAvailable>=0){written=oboeAvailable;read=0;}
+            else if(!oboeMic){written=AAudioStream_getFramesWritten(mic);read=AAudioStream_getFramesRead(mic);}
+#else
+            written=AAudioStream_getFramesWritten(mic);read=AAudioStream_getFramesRead(mic);
+#endif
+            size_t budget=size_t(nominal+target*2);
+            if(written>=0&&read>=0&&written>=read)budget=std::min<uint64_t>(budget,uint64_t(written-read));
+            budget=std::min<size_t>(budget,std::min<size_t>(8192,inputResampler.freeFrames()));
+            while(budget){
+                int requested=int(std::min<size_t>(budget,4096));
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+                int got=oboeMic?oboe->readInput(rawInputBuffer.data(),requested):AAudioStream_read(mic,rawInputBuffer.data(),requested,0);
+#else
+                int got=AAudioStream_read(mic,rawInputBuffer.data(),requested,0);
+#endif
+                if(got<0){fault=got;params[11]=0;running=false;inputResampler.reset(inputRate,sr,true);break;}
+                if(got<requested){inputShortReads.fetch_add(1,std::memory_order_relaxed);inputMissingFrames.fetch_add(requested-got,std::memory_order_relaxed);}
+                inputResampler.push(rawInputBuffer.data(),size_t(got),inputChannels);
+                budget-=size_t(got);if(got<requested)break;
             }
-            inputResampler.render(inputBuffer.data(), n);
+            inputResampler.render(inputBuffer.data(),n);
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+            diagnostic[2]=oboeMic?-1:AAudioStream_getXRunCount(mic);
+#else
+            diagnostic[2]=AAudioStream_getXRunCount(mic);
+#endif
+            diagnostic[3]=inputShortReads.load();diagnostic[4]=inputMissingFrames.load();
+            diagnostic[5]=inputResampler.underflowFrames();diagnostic[6]=inputResampler.overflowFrames();
+            diagnostic[7]=running?inputResampler.correctionPpm():-1;diagnostic[8]=running?inputResampler.driftState():0;
+            diagnostic[17]=running?inputResampler.targetDelayMs()*sr/1000.:-1;diagnostic[18]=running?sr:-1;
         }
 
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+        if (mic || oboeMic) recentVoice.push(inputBuffer.data(), n, sr);
+#else
         if (mic) recentVoice.push(inputBuffer.data(), n, sr);
+#endif
         pitchRing.push(inputBuffer.data(), n);
         composer.microphone.push(inputBuffer.data(), n);
         composer.render(composerMusic.data(), composerVoice.data(), composerCount.data(), n);
@@ -461,9 +658,12 @@ public:
         bool local = localPlaying.load(std::memory_order_acquire);
         localBusy = true;
         local = local && localPlaying.load(std::memory_order_acquire);
-        uint64_t cursor = localCursor;
-        double target = localSeek.consume();
-        if (target >= 0) cursor = uint64_t(target * sr);
+        bool localSourceUsed=local;
+        uint64_t cursor=local?localCursor.load():0;
+        double target=local?localSeek.consume():-1;
+        if(target>=0){cursor=uint64_t(target*sr);if(local)localSource->seek(uint64_t(target*localRate));}
+        if(local)localSource->prefetch(uint64_t(double(cursor)*localRate/sr));
+        bool cacheMiss=false;
         playback.read(capturedBuffer.data(), n * 2);
 
         for (int i = 0; i < n; i++) {
@@ -472,25 +672,22 @@ public:
             float music = band(p, base + i);
             float ml = music + composerMusic[i * 2] * p[1];
             float mr = music + composerMusic[i * 2 + 1] * p[1];
-            if (local) {
-                double pos = double(cursor) * localRate / sr;
-                size_t index = size_t(pos);
-                float mix = pos - index;
-                if ((index + 1) * 2 + 1 < localPCM.size()) {
-                    ml += (localPCM[index * 2] * (1 - mix) + localPCM[(index + 1) * 2] * mix) * p[1];
-                    mr += (localPCM[index * 2 + 1] * (1 - mix) + localPCM[(index + 1) * 2 + 1] * mix) * p[1];
-                    cursor++;
-                } else {
-                    local = false;
-                    localPlaying = false;
-                }
+            if(local){
+                double pos=double(cursor)*localRate/sr;
+                if(pos+1<localSource->frames()){
+                    float sampleL=0,sampleR=0;
+                    if(localSource->sample(pos,sampleL,sampleR)){ml+=sampleL*p[1];mr+=sampleR*p[1];}
+                    else {cacheMiss=true;localMissingFrames.fetch_add(1,std::memory_order_relaxed);if(recording&&!recordPaused)localRecordingMissingFrames.fetch_add(1,std::memory_order_relaxed);}
+                    ++cursor; // Output clock remains master, including missing data.
+                    if(localSource->ioErrors()){local=false;localPlaying=false;localSource->idle();}
+                }else{local=false;localPlaying=false;localSource->idle();}
             }
             float synth = 0, f = frequency.load(std::memory_order_relaxed);
             if (p[12] > .5 && f > 0) {
                 synth = std::sin(2 * PI * hz(int(std::round(69 + 12 * std::log2(f / 440)))) * double(base + i) / sr) * .07f;
             }
             float vocalL, vocalR, loopL, loopR, loopClick;
-            harmony.tick(l, r, mic ? f : 0, mic ? pitchConfidence.load(std::memory_order_relaxed) : 0, mic ? pitchLevel.load(std::memory_order_relaxed) : 0, sr, vocalL, vocalR);
+            harmony.tick(l, r, haveMic ? f : 0, haveMic ? pitchConfidence.load(std::memory_order_relaxed) : 0, haveMic ? pitchLevel.load(std::memory_order_relaxed) : 0, sr, vocalL, vocalR);
             vocalLooper.tick(vocalL, vocalR, loopL, loopR, &loopClick);
             ml += loopL;
             mr += loopR;
@@ -528,7 +725,9 @@ public:
             inE += inputBuffer[i] * inputBuffer[i];
             outE += out[i * 2] * out[i * 2];
         }
-        localCursor = cursor;
+        if(cacheMiss)localSource->underrun();
+        if(localSourceUsed)localCursor=cursor;
+        if(localSourceUsed)cacheLocalDiagnostics();
         localBusy = false;
         frames.fetch_add(n, std::memory_order_relaxed);
         inRms = std::sqrt(inE / n);
@@ -540,7 +739,7 @@ public:
                 if (sourceRing.push(sourceBuffer.data(), n*5) != size_t(n*5)) sourceError = true;
             } else if (sourceRecording) sourceError = true;
             size_t written = recordRing.push(recordBuffer.data(), n * 2);
-            if (written != size_t(n * 2)) overflow = true;
+            if(written!=size_t(n*2)){overflow=true;writerDroppedFrames.fetch_add((size_t(n*2)-written)/2,std::memory_order_relaxed);}
             recordFrames.fetch_add(n);
         }
         recordWriters.fetch_sub(1);
@@ -662,6 +861,58 @@ public:
         le32(f, bytes);
     }
 
+    void cacheLocalDiagnostics(){diagnostic[9]=localSource->underruns();diagnostic[10]=localSource->readyFrames();diagnostic[12]=localSource->ioErrors();diagnostic[13]=localSource->seekGeneration();}
+    bool reclaimLocal(){
+        if(!retiredLocalSource)return true;
+        if(!retiredLocalSource->readerStopped())return false;
+        retiredLocalSource.reset();return true;
+    }
+    void retireLocal(std::unique_ptr<LocalPcmSource> source){
+        source->requestClose();if(!source->readerStopped())retiredLocalSource=std::move(source);
+    }
+    // Caller holds localControl. The old source is detached only after its
+    // callback stops reading it; its cancelled worker never joins this caller.
+    void commitLocal(std::unique_ptr<LocalPcmSource> candidate,int rate){
+        localPlaying=false;while(localBusy.load())std::this_thread::yield();
+        auto old=std::move(localSource);localSource=std::move(candidate);retireLocal(std::move(old));
+        localRate=rate;localDurationSeconds=double(localSource->frames())/rate;
+        localCursor=0;localMissingFrames=0;localSeek.clear();localDesiredPlay=false;cacheLocalDiagnostics();
+    }
+    bool loadLocalFile(const std::string& path,int rate,int channels){
+        if(rate<8000||rate>192000||channels<1||channels>2)return false;
+        uint64_t epoch;
+        {std::lock_guard<std::mutex> lock(localControl);if(localLoadInProgress||!reclaimLocal())return false;localLoadInProgress=true;epoch=localLoadEpoch.fetch_add(1)+1;}
+        std::unique_ptr<LocalPcmSource> candidate;bool loaded=false;
+        try{candidate=std::make_unique<LocalPcmSource>();loaded=candidate->openPcm16(path.c_str(),rate,channels);}catch(...){loaded=false;}
+        std::lock_guard<std::mutex> lock(localControl);localLoadInProgress=false;
+        if(!loaded||epoch!=localLoadEpoch.load()) {if(candidate)retireLocal(std::move(candidate));return false;}
+        commitLocal(std::move(candidate),rate);return true;
+    }
+    bool loadLocalMemory(std::vector<float> samples,int rate){
+        if(rate<8000||rate>192000||samples.size()<4||samples.size()%2)return false;
+        std::lock_guard<std::mutex> lock(localControl);if(localLoadInProgress||!reclaimLocal())return false;
+        auto candidate=std::make_unique<LocalPcmSource>();candidate->loadMemory(std::move(samples));localLoadEpoch.fetch_add(1);commitLocal(std::move(candidate),rate);return true;
+    }
+    void playLocal(bool play){
+        localDesiredPlay=play;
+        if(!play){localPlaying=false;std::unique_lock<std::mutex> lock(localControl,std::try_to_lock);if(lock.owns_lock())localSource->idle();return;}
+        std::lock_guard<std::mutex> lock(localControl);if(localSource->empty())return;
+        localPlaying=false;while(localBusy.load())std::this_thread::yield();
+        double target=localSeek.consume();if(target>=0){localCursor=uint64_t(target*sr);localSource->seek(uint64_t(target*localRate));}
+        if(double(localCursor.load())*localRate/sr>=localSource->frames()-1){localCursor=0;localSource->seek(0);}
+        bool ready=localSource->prime(uint64_t(double(localCursor.load())*localRate/sr));
+        if(!ready||!localDesiredPlay.load()){localSource->idle();return;}
+        params[13]=0;localPlaying=true;
+    }
+    void seekLocal(double seconds){
+        localSeek.request(seconds,localDurationSeconds.load());
+        if(!running||!localPlaying.load()){
+            std::unique_lock<std::mutex> lock(localControl,std::try_to_lock);if(!lock.owns_lock()||localPlaying.load())return;
+            while(localBusy.load())std::this_thread::yield();double target=localSeek.consume();
+            if(target>=0){localCursor=uint64_t(target*sr);localSource->seek(uint64_t(target*localRate));}
+        }
+    }
+
     bool beginRecord(const std::string& path, const std::string& micPath = "", const std::string& fixedPath = "", const std::string& vocalPath = "") {
         if (!running || recording) return false;
         FILE* f = fopen(path.c_str(), "wb");
@@ -686,47 +937,65 @@ public:
         recordFrames = 0;
         recordStartClock = 0;
         overflow = false;
-        diskError = false;
+        diskError=false;writerDroppedFrames=0;writerIoErrors=0;localRecordingMissingFrames=0;
         recordStartTime = double(frames.load()) / sr;
         writerRunning = true;
         recording = true;
-        writer = std::thread([this, f, raw, fixed, vocal] {
-            std::array<float, 8192> data{};
-            std::array<int16_t, 8192> pcm{};
-            uint32_t bytes = 0, sourceFrames = 0;
-            std::array<float,20480> sources{};
-            std::array<float,4096> mono{};
-            std::array<float,8192> bed{}, voice{};
-            while (writerRunning || recordRing.available() || sourceRing.available()) {
-                size_t n = recordRing.pop(data.data(), data.size());
-                if (n) {
-                    for (size_t i = 0; i < n; i++) pcm[i] = std::lround(limit(data[i]) * 32767);
-                    size_t written = fwrite(pcm.data(), 2, n, f);
-                    if (written != n) diskError = true;
-                    bytes += written * 2;
+        writer=std::thread([this,f,raw,fixed,vocal,path]{
+            std::array<float,8192> data{};std::array<int16_t,8192> pcm{};
+            std::array<float,20480> sources{};std::array<float,4096> mono{};std::array<float,8192> bed{},voice{};
+            uint64_t mixSamples=0,rawSamples=0,fixedSamples=0,vocalSamples=0,sourceFrames=0;
+            uint64_t mixDurable=0,rawDurable=0,fixedDurable=0,vocalDurable=0;
+            auto error=[this]{writerIoErrors.fetch_add(1,std::memory_order_relaxed);};
+            auto durable=[&](FILE* stream,uint64_t frames,uint64_t& confirmed){
+                if(!stream)return true;
+                if(fflush(stream)!=0||ferror(stream)||fdatasync(fileno(stream))!=0){error();return false;}
+                confirmed=frames;return true;
+            };
+            auto checkpoint=[&](bool final){
+                bool ok=durable(f,mixSamples/2,mixDurable);
+                bool rawOk=durable(raw,rawSamples,rawDurable),fixedOk=durable(fixed,fixedSamples/2,fixedDurable),vocalOk=durable(vocal,vocalSamples/2,vocalDurable);
+                if(!ok)diskError=true;if(!rawOk||!fixedOk)sourceError=true;if(!vocalOk)vocalStemError=true;
+                std::vector<recording::JournalStream> streams={{"mix",sr,2,16,1,mixDurable}};
+                if(raw)streams.push_back({"raw",sr,1,32,3,rawDurable});if(fixed)streams.push_back({"fixed",sr,2,32,3,fixedDurable});if(vocal)streams.push_back({"vocal",sr,2,32,3,vocalDurable});
+                if(!recording::RecordJournal::write(path+".journal",final&&ok&&rawOk&&fixedOk&&vocalOk,streams)){diskError=true;error();}
+            };
+            checkpoint(false);auto nextCheckpoint=std::chrono::steady_clock::now()+std::chrono::seconds(1);
+            while(writerRunning||recordRing.available()||sourceRing.available()){
+                size_t n=recordRing.pop(data.data(),data.size());
+                if(n){
+                    uint64_t maximumSamples=(uint64_t(UINT32_MAX)-36)/4*2;
+                    size_t allowed=size_t(std::min<uint64_t>(n,maximumSamples-mixSamples));allowed-=allowed%2;
+                    for(size_t i=0;i<allowed;i++)pcm[i]=std::lround(limit(data[i])*32767);
+                    size_t written=fwrite(pcm.data(),2,allowed,f);mixSamples+=written;
+                    if(written!=n){diskError=true;error();writerDroppedFrames.fetch_add((n-written+1)/2,std::memory_order_relaxed);}
                 }
-                size_t available = sourceRing.available();
-                size_t count = sourceRing.pop(sources.data(), std::min(available - available%5, sources.size()));
-                if(count && raw && fixed) {
-                    size_t frames = count/5;
-                    if(!sourceStorageFits(uint64_t(sourceFrames)+frames)){sourceError=true;sourceRecording=false;}
-                    for(size_t i=0;i<frames;i++){
-                        mono[i]=sources[i*5];bed[i*2]=sources[i*5+1];bed[i*2+1]=sources[i*5+2];
-                        voice[i*2]=sources[i*5+3];voice[i*2+1]=sources[i*5+4];
-                    }
+                size_t available=sourceRing.available(),count=sourceRing.pop(sources.data(),std::min(available-available%5,sources.size()));
+                if(count&&raw&&fixed){
+                    size_t frames=count/5;
+                    if(!sourceStorageFits(sourceFrames+frames)){sourceError=true;sourceRecording=false;error();}
+                    for(size_t i=0;i<frames;i++){mono[i]=sources[i*5];bed[i*2]=sources[i*5+1];bed[i*2+1]=sources[i*5+2];voice[i*2]=sources[i*5+3];voice[i*2+1]=sources[i*5+4];}
                     if(!sourceError){
-                        if(fwrite(mono.data(),4,frames,raw)!=frames || fwrite(bed.data(),4,frames*2,fixed)!=frames*2){sourceError=true;sourceRecording=false;}
-                        if(vocal&&!vocalStemError&&fwrite(voice.data(),4,frames*2,vocal)!=frames*2)vocalStemError=true;
-                        sourceFrames += frames;
+                        size_t rawWritten=fwrite(mono.data(),4,frames,raw);rawSamples+=rawWritten;
+                        size_t fixedWritten=fwrite(bed.data(),4,frames*2,fixed);fixedSamples+=fixedWritten;
+                        if(rawWritten!=frames||fixedWritten!=frames*2){sourceError=true;sourceRecording=false;error();}
+                        if(vocal&&!vocalStemError){size_t written=fwrite(voice.data(),4,frames*2,vocal);vocalSamples+=written;if(written!=frames*2){vocalStemError=true;error();}}
+                        sourceFrames+=frames;
                     }
                 }
-                if(!n && !count) std::this_thread::sleep_for(std::chrono::milliseconds(4));
+                if(std::chrono::steady_clock::now()>=nextCheckpoint){checkpoint(false);nextCheckpoint=std::chrono::steady_clock::now()+std::chrono::seconds(1);}
+                if(!n&&!count)std::this_thread::sleep_for(std::chrono::milliseconds(4));
             }
-            if(raw){sourceHeader(raw,sr,1,sourceFrames*4);if(ferror(raw))sourceError=true;if(fclose(raw)!=0)sourceError=true;}
-            if(fixed){sourceHeader(fixed,sr,2,sourceFrames*8);if(ferror(fixed))sourceError=true;if(fclose(fixed)!=0)sourceError=true;}
-            if(vocal){sourceHeader(vocal,sr,2,sourceFrames*8);if(ferror(vocal))vocalStemError=true;if(fclose(vocal)!=0)vocalStemError=true;}
-            wavHeader(f, bytes);
-            if (fclose(f) != 0) diskError = true;
+            auto truncate=[&](FILE* stream,uint64_t samples,int sampleBytes,int channels){
+                if(!stream)return true;
+                if(fflush(stream)!=0||ftruncate(fileno(stream),off_t(44+(samples/channels)*channels*sampleBytes))!=0){error();return false;}return true;
+            };
+            if(!truncate(f,mixSamples,2,2))diskError=true;wavHeader(f,uint32_t(mixSamples/2*4));
+            if(raw){if(!truncate(raw,rawSamples,4,1))sourceError=true;sourceHeader(raw,sr,1,uint32_t(rawSamples*4));}
+            if(fixed){if(!truncate(fixed,fixedSamples,4,2))sourceError=true;sourceHeader(fixed,sr,2,uint32_t(fixedSamples/2*8));}
+            if(vocal){if(!truncate(vocal,vocalSamples,4,2))vocalStemError=true;sourceHeader(vocal,sr,2,uint32_t(vocalSamples/2*8));}
+            checkpoint(!diskError&&(!raw||!sourceError)&&(!fixed||!sourceError)&&(!vocal||!vocalStemError));
+            if(raw&&fclose(raw)!=0){sourceError=true;error();}if(fixed&&fclose(fixed)!=0){sourceError=true;error();}if(vocal&&fclose(vocal)!=0){vocalStemError=true;error();}if(fclose(f)!=0){diskError=true;error();}
         });
         return true;
     }
@@ -755,11 +1024,14 @@ public:
         if (wasRecording && !recordPaused) closeRecordedSpan();
         recordPaused = false;
         if (wasRecording) {
+            auto tailDeadline=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
             for (int i = 0; i < alignment.tail(); i++) {
                 float vl = 0, vr = 0, ml = 0, mr = 0;
                 alignment.tick(vl, vr, ml, mr);
                 float pair[] = {limit(vl + ml), limit(vr + mr)};
-                while (recordRing.push(pair, 2) != 2) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                bool admitted=false;
+                while(!(admitted=recordRing.push(pair,2)==2)&&writerRunning&&std::chrono::steady_clock::now()<tailDeadline)std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                if(!admitted){overflow=true;writerDroppedFrames.fetch_add(alignment.tail()-i);break;}
                 recordFrames++;
             }
         }
@@ -813,6 +1085,9 @@ JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_set(JNIEnv*, jclass, 
     if (k >= 0 && k < 20 && std::isfinite(v)) engine.params[k] = v;
 }
 JNI(jfloatArray) jfloatArray JNICALL Java_pro_livemic_studio_NativeAudio_stats(JNIEnv* e, jclass) {
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+    engine.refreshOboeSnapshots();
+#endif
     float f = engine.frequency;
     float mf = f > 0 ? 69 + 12 * std::log2(f / 440) : 0;
     float values[] = {
@@ -823,13 +1098,13 @@ JNI(jfloatArray) jfloatArray JNICALL Java_pro_livemic_studio_NativeAudio_stats(J
         engine.outRms,
         engine.beat,
         float(engine.sr),
-        engine.output ? 1000.f * AAudioStream_getBufferSizeInFrames(engine.output) / engine.sr : 0,
+        1000.f*engine.outputBufferSnapshot.load()/engine.outputRateSnapshot.load(),
         float(double(engine.recordFrames.load()) / engine.sr),
-        engine.output ? float(AAudioStream_getXRunCount(engine.output)) : 0,
+        float(engine.outputXrunsSnapshot.load()),
         engine.running ? 1.f : 0,
         engine.recording ? 1.f : 0,
         float(engine.noteCount()),
-        engine.overflow || engine.diskError ? 1.f : 0,
+        engine.overflow || engine.diskError || engine.localRecordingMissingFrames.load()>0 ? 1.f : 0,
         float(engine.fault),
         float(double(engine.frames.load()) / engine.sr),
         engine.localPlaying ? 1.f : 0,
@@ -874,69 +1149,12 @@ JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_clearNotes(JNIEnv*, j
 JNI(jdouble) jdouble JNICALL Java_pro_livemic_studio_NativeAudio_recordClock(JNIEnv*, jclass) {
     return engine.recordStartClock;
 }
-JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_loadLocal(JNIEnv* e, jclass, jfloatArray pcm, jint rate) {
-    engine.localPlaying = false;
-    while (engine.localBusy.load()) std::this_thread::yield();
-    int n = e->GetArrayLength(pcm);
-    engine.localPCM.resize(n);
-    e->GetFloatArrayRegion(pcm, 0, n, engine.localPCM.data());
-    engine.localRate = rate;
-    engine.localDurationSeconds = double(n) / (2 * rate);
-    engine.localCursor = 0;
-    engine.localSeek.clear();
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_loadLocal(JNIEnv* e,jclass,jfloatArray pcm,jint rate){
+    if(!pcm||rate<8000||rate>192000)return;int n=e->GetArrayLength(pcm);if(n<4||n%2)return;
+    try{std::vector<float> samples(size_t(n),0.f);e->GetFloatArrayRegion(pcm,0,n,samples.data());engine.loadLocalMemory(std::move(samples),rate);}catch(...){return;}
 }
-JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_playLocal(JNIEnv*, jclass, jboolean play) {
-    if (play && !engine.localPCM.empty()) {
-        double target = engine.localSeek.consume();
-        if (target >= 0) engine.localCursor = uint64_t(target * engine.sr);
-        if (double(engine.localCursor.load()) * engine.localRate / engine.sr >= engine.localPCM.size() / 2 - 1) {
-            engine.localCursor = 0;
-        }
-        engine.params[13] = 0;
-        engine.localPlaying = true;
-    } else {
-        engine.localPlaying = false;
-    }
-}
-JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_loadLocalFile(JNIEnv* e, jclass, jstring path, jint rate, jint channels) {
-    if (rate < 8000 || rate > 192000 || channels < 1 || channels > 2) return false;
-    engine.localPlaying = false;
-    while (engine.localBusy.load()) std::this_thread::yield();
-    FILE* f = fopen(str(e, path).c_str(), "rb");
-    if (!f) return false;
-    fseek(f, 0, SEEK_END);
-    long length = ftell(f);
-    rewind(f);
-    if (length <= 0 || length > long(rate) * channels * 2 * 20 * 60) {
-        fclose(f);
-        return false;
-    }
-    size_t count = length / (channels * 2);
-    try {
-        engine.localPCM.resize(count * 2);
-    } catch (...) {
-        fclose(f);
-        return false;
-    }
-    std::array<int16_t, 4096> buffer{};
-    size_t pos = 0;
-    while (pos < count) {
-        size_t n = fread(buffer.data(), channels * 2, std::min(size_t(4096 / channels), count - pos), f);
-        if (!n) break;
-        for (size_t i = 0; i < n; i++) {
-            engine.localPCM[(pos + i) * 2] = buffer[i * channels] / 32768.f;
-            engine.localPCM[(pos + i) * 2 + 1] = buffer[i * channels + (channels == 2 ? 1 : 0)] / 32768.f;
-        }
-        pos += n;
-    }
-    fclose(f);
-    engine.localPCM.resize(pos * 2);
-    engine.localRate = rate;
-    engine.localDurationSeconds = double(pos) / rate;
-    engine.localCursor = 0;
-    engine.localSeek.clear();
-    return pos > 0;
-}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_playLocal(JNIEnv*,jclass,jboolean play){engine.playLocal(play);}
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_loadLocalFile(JNIEnv* e,jclass,jstring path,jint rate,jint channels){return engine.loadLocalFile(str(e,path),rate,channels);}
 
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_enablePlaybackCapture(JNIEnv*, jclass, jboolean enable, jfloat gain) {
     engine.playback.configure(enable, gain);
@@ -972,7 +1190,7 @@ JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_configureEchoInput(
     engine.echoInputConfig = std::move(config);
 }
 JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputDevice(JNIEnv*, jclass) {
-    return engine.input ? AAudioStream_getDeviceId(engine.input) : 0;
+    return engine.inputDeviceSnapshot.load();
 }
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_beginRecordSources(JNIEnv* env,jclass,jstring mix,jstring raw,jstring fixed) {
     return engine.beginRecord(str(env,mix),str(env,raw),str(env,fixed));
@@ -1014,10 +1232,10 @@ JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputProfile(JNIEnv*,
 }
 
 JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_inputSession(JNIEnv*, jclass) {
-    return engine.input ? AAudioStream_getSessionId(engine.input) : 0;
+    return engine.inputSessionSnapshot.load();
 }
 JNI(jint) jint JNICALL Java_pro_livemic_studio_NativeAudio_outputDevice(JNIEnv*, jclass) {
-    return engine.output ? AAudioStream_getDeviceId(engine.output) : 0;
+    return engine.outputDeviceSnapshot.load();
 }
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_feedbackProtection(JNIEnv*, jclass, jboolean risky) {
     bool changed = engine.feedback.isEnabled() != bool(risky);
@@ -1043,20 +1261,32 @@ JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_resetFeedback(JNIEnv*
 }
 
 JNI(jintArray) jintArray JNICALL Java_pro_livemic_studio_NativeAudio_latencyInfo(JNIEnv* e, jclass) {
-    int v[] = {
-        engine.output ? AAudioStream_getFramesPerBurst(engine.output) : 0,
-        engine.output ? AAudioStream_getBufferCapacityInFrames(engine.output) : 0,
-        engine.output ? AAudioStream_getBufferSizeInFrames(engine.output) : 0,
-        engine.sr,
-        engine.output ? AAudioStream_getXRunCount(engine.output) : 0
-    };
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+    engine.refreshOboeSnapshots();
+#endif
+    int v[]={engine.outputBurstSnapshot.load(),engine.outputCapacitySnapshot.load(),engine.outputBufferSnapshot.load(),engine.outputRateSnapshot.load(),engine.outputXrunsSnapshot.load()};
     auto a = e->NewIntArray(5);
     e->SetIntArrayRegion(a, 0, 5, v);
     return a;
 }
+JNI(jdoubleArray) jdoubleArray JNICALL Java_pro_livemic_studio_NativeAudio_diagnostics(JNIEnv* env,jclass){
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+    engine.refreshOboeSnapshots();
+#endif
+    double values[21];for(size_t i=0;i<21;i++)values[i]=engine.diagnostic[i].load(std::memory_order_relaxed);
+    values[14]=double(engine.writerDroppedFrames.load());values[15]=double(engine.writerIoErrors.load());values[16]=double(engine.localMissingFrames.load());
+    auto result=env->NewDoubleArray(21);env->SetDoubleArrayRegion(result,0,21,values);return result;
+}
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_bufferBursts(JNIEnv*, jclass, jint bursts) {
+    std::lock_guard<std::recursive_mutex> control(engine.streamControl);
     bursts = std::clamp(int(bursts), 1, 8);
     if (engine.recording) return false;
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+    if(engine.usingOboe()){
+        if(!engine.oboe->setOutputBufferBursts(bursts))return false;
+        engine.requestedBursts=bursts;engine.refreshOboeSnapshots();return true;
+    }
+#endif
     if (engine.output) {
         int n = std::min(AAudioStream_getBufferCapacityInFrames(engine.output), AAudioStream_getFramesPerBurst(engine.output) * bursts);
         if (AAudioStream_setBufferSizeInFrames(engine.output, n) < 0) return false;
@@ -1064,6 +1294,20 @@ JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_bufferBursts(
     engine.requestedBursts = bursts;
     return true;
 }
+#if defined(__ANDROID__) || defined(LV_TEST_OBOE)
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_requestBackend(JNIEnv*,jclass,jint provider){
+    std::lock_guard<std::recursive_mutex> control(engine.streamControl);
+    if(provider!=0&&provider!=1)return false;
+    if(engine.running || engine.output || engine.input || engine.oboe->hasOutput() || engine.oboe->hasInput() ||
+            engine.recording || engine.writerRunning || engine.sourceRecording || engine.playback.isEnabled())return false;
+    engine.requestedBackend=provider;
+    return true;
+}
+JNI(jintArray) jintArray JNICALL Java_pro_livemic_studio_NativeAudio_backendInfo(JNIEnv* env,jclass){
+    int values[]={engine.requestedBackend.load(),engine.appliedBackend.load(),engine.platformApi.load(),engine.backendFallback.load()};
+    auto result=env->NewIntArray(4);env->SetIntArrayRegion(result,0,4,values);return result;
+}
+#endif
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_recordSync(JNIEnv*, jclass, jint ms) {
     if (!engine.recording) engine.recordSyncMs = std::clamp(int(ms), -500, 500);
 }
@@ -1077,13 +1321,7 @@ JNI(jfloatArray) jfloatArray JNICALL Java_pro_livemic_studio_NativeAudio_pitchFr
     return a;
 }
 
-JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_seekLocal(JNIEnv*, jclass, jdouble seconds) {
-    engine.localSeek.request(seconds, engine.localDurationSeconds.load());
-    if (!engine.running || !engine.localPlaying.load()) {
-        double target = engine.localSeek.consume();
-        if (target >= 0) engine.localCursor = uint64_t(target * engine.sr);
-    }
-}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_seekLocal(JNIEnv*,jclass,jdouble seconds){engine.seekLocal(seconds);}
 JNI(jdoubleArray) jdoubleArray JNICALL Java_pro_livemic_studio_NativeAudio_localPlaybackInfo(JNIEnv* e, jclass) {
     double target = engine.localSeek.peek();
     double values[] = {target >= 0 ? target : double(engine.localCursor.load()) / engine.sr, engine.localDurationSeconds.load()};
@@ -1093,6 +1331,7 @@ JNI(jdoubleArray) jdoubleArray JNICALL Java_pro_livemic_studio_NativeAudio_local
 }
 
 JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeAudio_reroute(JNIEnv*, jclass, jint input, jint out, jint mode, jboolean mic) {
+    std::lock_guard<std::recursive_mutex> control(engine.streamControl);
     engine.stop(true);
     return engine.start(input, out, mode, mic, true);
 }

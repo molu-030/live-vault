@@ -4,10 +4,12 @@ import java.io.*;
 import java.text.*;
 import java.util.*;
 public final class RecordingManager {
-    public static volatile boolean active=false,paused=false,micOnly=false;public static String id=null;public static int bpm=78;
+    public static volatile boolean active=false,paused=false,micOnly=false;public static volatile String id=null;public static int bpm=78;
     public static String extraWarning="";public static volatile Result lastResult=null;
     public static int syncMs=0;public static org.json.JSONObject practiceResult=null;
     private static Context context;
+    private static volatile boolean preparing,finalizing;
+    static boolean isWritingId(String takeId){return takeId.equals(id)&&(active||preparing||finalizing);}
     private static int savedSyncMs;
     private static boolean savedRetainSources;
     public static String startError="";
@@ -19,20 +21,25 @@ public final class RecordingManager {
         if(active||NativeAudio.stats()[10]<.5f)return false;
         startError=TakeStorage.startProblem(c,false);if(!startError.isEmpty())return false;
         context=c.getApplicationContext();bpm=tempo;savedRetainSources=TakeStorage.retainSources(c);
+        preparing=true;
         id=new SimpleDateFormat("yyyyMMdd_HHmmss_SSS",Locale.US).format(new Date())+"_"+UUID.randomUUID().toString().substring(0,8);TakeStore store=new TakeStore(context,false);
         savedSyncProfile=RecordingSyncProfiles.current(c);savedSyncMs=microphoneOnly?0:savedSyncProfile.offsetMs;syncMs=savedSyncMs;
         savedEffects=new org.json.JSONArray();float[] defaults={1,.55f,.27f,2.2f,.14f,280,.25f,0,0,1,1,0,0,0,0,78,0,0,0,1};
-        // Match Activity.getPreferences when the personal application ID differs from the activity package.
-        String effectsPreferences=MainActivity.class.getName(),packagePrefix=c.getPackageName()+".";
-        if(effectsPreferences.startsWith(packagePrefix))effectsPreferences=effectsPreferences.substring(packagePrefix.length());
-        android.content.SharedPreferences effectValues=c.getSharedPreferences(effectsPreferences,0);
+        android.content.SharedPreferences effectValues=AudioRouting.studioPreferences(c);
         for(int i=0;i<20;i++)savedEffects.put((Object)Double.valueOf(effectValues.getFloat("p"+i,defaults[i])));
-        micOnly=microphoneOnly;NativeAudio.recordMicOnly(micOnly);NativeAudio.recordSync(savedSyncMs);practiceResult=null;extraWarning="";lastResult=null;paused=false;active=savedRetainSources?NativeAudio.beginRecordStems(store.file(id,".wav").getAbsolutePath(),store.file(id,".raw.wav").getAbsolutePath(),store.file(id,".fixed.wav").getAbsolutePath(),store.file(id,".vocal.wav").getAbsolutePath()):NativeAudio.beginRecord(store.file(id,".wav").getAbsolutePath());if(!active){NativeAudio.recordMicOnly(false);micOnly=false;}return active;
+        try{RecordingIntegrity.writeState(store,id,new org.json.JSONObject().put("syncOffsetMs",savedSyncMs).put("microphoneOnly",microphoneOnly)
+                .put("syncProfileKey",savedSyncProfile.key).put("syncProfileConfirmed",savedSyncProfile.confirmed).put("syncProfileInherited",savedSyncProfile.inherited)
+                .put("sourceRetention",savedRetainSources?"retained":"not-requested").put("initialEffects",savedEffects));}
+        catch(Exception e){preparing=false;startError=AppLanguage.text(c,"녹음 복구 정보를 저장하지 못했습니다: ","Could not save recording recovery information: ")+e.getMessage();return false;}
+        try{
+        micOnly=microphoneOnly;NativeAudio.recordMicOnly(micOnly);NativeAudio.recordSync(savedSyncMs);practiceResult=null;extraWarning="";lastResult=null;paused=false;active=savedRetainSources?NativeAudio.beginRecordStems(store.file(id,".wav").getAbsolutePath(),store.file(id,".raw.wav").getAbsolutePath(),store.file(id,".fixed.wav").getAbsolutePath(),store.file(id,".vocal.wav").getAbsolutePath()):NativeAudio.beginRecord(store.file(id,".wav").getAbsolutePath());if(!active){NativeAudio.recordMicOnly(false);micOnly=false;if(store.file(id,".wav").length()<=44){RecordingIntegrity.cleanup(store,id);for(String suffix:RecordingIntegrity.SUFFIXES)if(store.file(id,suffix).length()<=44)store.file(id,suffix).delete();}}return active;
+        }finally{preparing=false;}
     }
     public static synchronized void pause(boolean value){if(active){NativeAudio.pauseRecord(value);paused=value;}}
     public static synchronized Result stop()throws Exception{
-        if(!active)return null;android.util.Log.i("LiveMicRecord","Closing audio writer");boolean savedMicOnly=micOnly;NativeAudio.endRecord();NativeAudio.recordMicOnly(false);micOnly=false;android.util.Log.i("LiveMicRecord","Audio closed; finalizing take");active=false;paused=false;float[] s=NativeAudio.stats();double clock=NativeAudio.recordClock();
-        TakeStore store=new TakeStore(context,false);boolean midi=NativeAudio.exportMidi(store.file(id,".mid").getAbsolutePath(),bpm,true);
+        if(!active)return null;finalizing=true;TakeStore finishingStore=null;boolean repairPending=false;String finishedId=id;
+        try{android.util.Log.i("LiveMicRecord","Closing audio writer");boolean savedMicOnly=micOnly;NativeAudio.endRecord();NativeAudio.recordMicOnly(false);micOnly=false;android.util.Log.i("LiveMicRecord","Audio closed; finalizing take");active=false;paused=false;float[] s=NativeAudio.stats();double clock=NativeAudio.recordClock();
+        TakeStore store=new TakeStore(context,false);finishingStore=store;boolean midi=NativeAudio.exportMidi(store.file(id,".mid").getAbsolutePath(),bpm,true);
         String warning=s[13]>.5?AppLanguage.text(context,"오디오 버퍼 또는 저장 오류가 감지되었습니다. 재생 상태를 확인하세요.","An audio buffer or save error was detected. Check playback."):!midi?AppLanguage.text(context,"MIDI 파일을 저장하지 못했습니다.","Could not save the MIDI file."):"";
         if(!extraWarning.isEmpty())warning+=(warning.isEmpty()?"":"\n")+extraWarning;
         boolean vocal=savedRetainSources&&NativeAudio.recordVocalStemValid()&&store.file(id,".vocal.wav").length()>44;
@@ -48,7 +55,8 @@ public final class RecordingManager {
                 .put("cleanSources",sources).put("sourceFloat32",sources).put("sourceEditable",editable).put("sourceFixed",sources)
                 .put("sourceEditReason",sources&&!editable?"live-harmony-or-voice-routing-or-format":"").put("initialEffects",savedEffects);if(practiceResult!=null)extras.put("practice",practiceResult);
         store.save(id,"Take "+new SimpleDateFormat("MM.dd HH:mm",Locale.KOREA).format(new Date()),s[8],false,warning,extras);
-        android.util.Log.i("LiveMicRecord","Take metadata saved");lastResult=new Result(id,s[8],clock,warning,savedSyncMs);return lastResult;
+        android.util.Log.i("LiveMicRecord","Take metadata saved");org.json.JSONObject committed=store.read(id);repairPending=committed.optBoolean("integrityRepairPending");lastResult=new Result(id,committed.optDouble("seconds",s[8]),clock,committed.optString("warning",warning),savedSyncMs);return lastResult;
+        }finally{finalizing=false;if(repairPending&&finishingStore!=null)finishingStore.queueRecovery(finishedId);}
     }
     public static class Result {public final String id,warning;public final double seconds,clock;public final int offsetMs;Result(String i,double s,double c,String w){this(i,s,c,w,0);}Result(String i,double s,double c,String w,int offset){id=i;seconds=s;clock=c;warning=w;offsetMs=offset;}}
 }
