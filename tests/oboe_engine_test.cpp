@@ -24,9 +24,20 @@ extern "C" int __wrap_pthread_mutex_trylock(pthread_mutex_t* p){if(watchCallback
 [[gnu::noinline]] void operator delete(void* p,std::size_t)noexcept{std::free(p);}
 namespace fake_oboe {
 int outputOpenError=0,inputOpenError=0,outputStartError=0,inputStartError=0,opens=0,reads=0;
-bool available=true;
+bool available=true,probeInputPublication=false;
+int publicationCallbacks=0,metadataBeforeStart=0,inputFormat=AAUDIO_FORMAT_PCM_FLOAT;
+void probe(void* user){
+    if(!probeInputPublication)return;
+    auto* engine=static_cast<Engine*>(user);
+    assert(!engine->oboeInputActive.load(std::memory_order_acquire));
+    std::array<float,512> out{};
+    int readsBefore=reads;
+    watchCallback=true;engine->render(out.data(),256);watchCallback=false;
+    assert(reads==readsBefore);
+    ++publicationCallbacks;
+}
 AAudioStream input;
-void reset(){outputOpenError=inputOpenError=outputStartError=inputStartError=opens=reads=0;available=true;input=AAudioStream{};input.channels=1;input.rate=48000;}
+void reset(){outputOpenError=inputOpenError=outputStartError=inputStartError=opens=reads=0;available=true;probeInputPublication=false;publicationCallbacks=metadataBeforeStart=0;inputFormat=AAUDIO_FORMAT_PCM_FLOAT;input=AAudioStream{};input.channels=1;input.rate=48000;}
 }
 namespace lv {
 class OboeBackend::Impl {
@@ -39,14 +50,14 @@ OboeBackend::~OboeBackend()=default;
 int32_t OboeBackend::openOutput(int32_t,int){++fake_oboe::opens;if(fake_oboe::outputOpenError)return fake_oboe::outputOpenError;impl_->output=true;return 0;}
 int32_t OboeBackend::openInput(int32_t,int32_t,bool,bool,BuiltinMic){if(fake_oboe::inputOpenError)return fake_oboe::inputOpenError;impl_->input=true;return 0;}
 int32_t OboeBackend::startOutput(){return fake_oboe::outputStartError;}
-int32_t OboeBackend::startInput(){if(fake_oboe::inputStartError)return fake_oboe::inputStartError;impl_->started=true;return 0;}
+int32_t OboeBackend::startInput(){if(fake_oboe::inputStartError)return fake_oboe::inputStartError;impl_->started=true;fake_oboe::probe(impl_->user);return 0;}
 void OboeBackend::closeOutput(){impl_->output=false;}
 void OboeBackend::closeInput(){impl_->input=impl_->started=false;}
 int32_t OboeBackend::readInput(float* p,int32_t n){++fake_oboe::reads;return AAudioStream_read(&fake_oboe::input,p,n,0);}
 int32_t OboeBackend::availableInputFrames()const{return fake_oboe::available?fake_oboe::input.frames:-1;}
 bool OboeBackend::setOutputBufferBursts(int32_t n){impl_->bursts=n;return impl_->output;}
 OboeBackend::StreamInfo OboeBackend::outputInfo()const{StreamInfo i;if(impl_->output){i.deviceId=20;i.sampleRate=48000;i.channels=2;i.format=2;i.framesPerBurst=192;i.bufferCapacity=4096;i.bufferSize=192*impl_->bursts;i.xruns=7;i.platformApi=2;}return i;}
-OboeBackend::StreamInfo OboeBackend::inputInfo()const{StreamInfo i;if(impl_->input){i.deviceId=10;i.sampleRate=fake_oboe::input.rate;i.channels=fake_oboe::input.channels;i.format=2;i.inputPreset=AAUDIO_INPUT_PRESET_VOICE_RECOGNITION;i.sessionId=42;i.platformApi=2;}return i;}
+OboeBackend::StreamInfo OboeBackend::inputInfo()const{StreamInfo i;if(!impl_->started)++fake_oboe::metadataBeforeStart;fake_oboe::probe(impl_->user);if(impl_->started){i.deviceId=10;i.sampleRate=fake_oboe::input.rate;i.channels=fake_oboe::input.channels;i.format=fake_oboe::inputFormat;i.inputPreset=AAUDIO_INPUT_PRESET_VOICE_RECOGNITION;i.sessionId=42;i.platformApi=2;}return i;}
 bool OboeBackend::hasOutput()const{return impl_->output;}
 bool OboeBackend::hasInput()const{return impl_->started;}
 }
@@ -102,6 +113,37 @@ static void failedMicJoin(){
     }
     std::cout<<"PASS failed microphone join retains Oboe backing output, captured/local playback and transport/frame clocks\n";
 }
+static void microphonePublication(){
+    {
+        Fixture f;f.start(false);f.quietAnalyzers();
+        fake_oboe::input.rate=44100;fake_oboe::input.channels=2;
+        fake_oboe::probeInputPublication=true;
+        assert(f.e->openMicrophone(10,0));
+        fake_oboe::probeInputPublication=false;
+        assert(fake_oboe::publicationCallbacks==2&&fake_oboe::metadataBeforeStart==0);
+        assert(f.e->oboeInputActive.load(std::memory_order_acquire)&&f.e->oboe->hasInput());
+        assert(f.e->inputDeviceSnapshot==10&&f.e->inputSessionSnapshot==42&&f.e->inputProfile==1);
+        assert(f.e->inputRate==44100&&f.e->inputChannels==2);
+        f.feed(941);for(int i=0;i<941;i++){f.hardware[i*2]=.25f;f.hardware[i*2+1]=-.75f;}
+        f.render(1024);
+        assert(f.e->inputBuffer[383]==0&&f.e->inputBuffer[384]==-.25f&&fake_oboe::reads==1);
+    }
+    for(int invalid=0;invalid<4;invalid++){
+        Fixture f;f.start(false);f.quietAnalyzers();
+        if(invalid==0)fake_oboe::input.rate=0;
+        if(invalid==1)fake_oboe::input.channels=0;
+        if(invalid==2)fake_oboe::input.channels=3;
+        if(invalid==3)fake_oboe::inputFormat=0;
+        assert(!f.e->openMicrophone(10,0));
+        assert(!f.e->oboeInputActive.load()&&!f.e->oboe->hasInput());
+        assert(f.e->inputDeviceSnapshot==0&&f.e->inputSessionSnapshot==0);
+        assert(f.e->fault==AAUDIO_ERROR_INVALID_FORMAT&&f.e->backendFallback==3);
+        assert(f.e->usingOboe()&&f.e->running);
+        f.render(256);assert(fake_oboe::reads==0);
+    }
+    assert(allocations==0&&locks==0);
+    std::cout<<"PASS Oboe metadata follows successful start; render gate holds through start/metadata callbacks; negotiated device/session/stereo 44.1kHz SRC published together; invalid metadata closes input and preserves backing output\n";
+}
 static void renderAndReopen(const char* path){
     Fixture f;f.start();f.quietAnalyzers();assert(f.e->usingOboe()&&f.e->platformApi==0&&f.e->input==nullptr);
     assert(f.e->inputDeviceSnapshot==10&&f.e->inputSessionSnapshot==42&&f.e->inputProfile==1);
@@ -127,4 +169,4 @@ static void renderAndReopen(const char* path){
     assert(allocations==0&&locks==0);
     std::cout<<"PASS real Oboe Engine render shares adaptive FIFO/downmix/SRC, Harmony pitch, analyzers and exact 2048-frame WAV writer; counter reset on reopen; read-error fail-closed; callback malloc/new/mutex/trylock=0\n";
 }
-int main(int argc,char** argv){assert(argc==2);selection();initialFallbacks();failedMicJoin();renderAndReopen(argv[1]);}
+int main(int argc,char** argv){assert(argc==2);selection();initialFallbacks();failedMicJoin();microphonePublication();renderAndReopen(argv[1]);}

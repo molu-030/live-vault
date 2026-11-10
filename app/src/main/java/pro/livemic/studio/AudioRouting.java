@@ -20,6 +20,7 @@ public final class AudioRouting implements AutoCloseable {
     private final AudioManager manager;
     private int previousMode;
     private final int savedInput, savedOutput, savedMode, savedBluetooth;
+    private final String savedInputIdentity, savedOutputIdentity;
     private boolean changedMode = false, communicationDevice = false;
     public enum EchoStatus { OFF, UNAVAILABLE, ACTIVE, ERROR }
 
@@ -98,19 +99,90 @@ public final class AudioRouting implements AutoCloseable {
     }
 
     public static int selectedInput(Context c) {
-        return prefs(c).getInt("inputDevice", 0);
+        return selectedDevice(c, "inputDevice", listInputs(c));
     }
 
     public static int selectedOutput(Context c) {
-        return prefs(c).getInt("outputDevice", 0);
+        return selectedDevice(c, "outputDevice", listOutputs(c));
     }
 
     public static void chooseInput(Context c, int id) {
-        prefs(c).edit().putInt("inputDevice", id).apply();
+        chooseDevice(c, "inputDevice", id, listInputs(c));
     }
 
     public static void chooseOutput(Context c, int id) {
-        prefs(c).edit().putInt("outputDevice", id).putInt("mode", 0).apply();
+        chooseDevice(c, "outputDevice", id, listOutputs(c));
+        prefs(c).edit().putInt("mode", 0).apply();
+    }
+
+    private static String identity(AudioDeviceInfo device) {
+        org.json.JSONArray value = new org.json.JSONArray();
+        value.put(device.getType());
+        value.put(device.getProductName() == null ? "" : device.getProductName().toString().trim());
+        value.put(device.getAddress() == null ? "" : device.getAddress());
+        return value.toString();
+    }
+
+    private static void chooseDevice(Context c, String key, int id, List<AudioDeviceInfo> devices) {
+        SharedPreferences.Editor edit = prefs(c).edit().putInt(key, id).remove(key + "Identity");
+        for (AudioDeviceInfo device : devices) {
+            if (device.getId() == id) { edit.putString(key + "Identity", identity(device)); break; }
+        }
+        edit.apply();
+    }
+
+    // Android assigns a new port ID after USB reconnection. Retain the selected
+    // device's identity, while refusing an ambiguous replacement or a fallback mic.
+    private static int selectedDevice(Context c, String key, List<AudioDeviceInfo> devices) {
+        SharedPreferences preferences = prefs(c);
+        int id = preferences.getInt(key, 0);
+        if (id <= 0) return id;
+        String saved = preferences.getString(key + "Identity", "");
+        if (saved.isEmpty()) {
+            // Upgrade an old ID-only preference only while that port is present.
+            for (AudioDeviceInfo device : devices) if (device.getId() == id) {
+                preferences.edit().putString(key + "Identity", identity(device)).apply();
+                break;
+            }
+            return id;
+        }
+        AudioDeviceInfo resolved = resolveIdentity(saved, devices, id);
+        if (resolved != null && resolved.getId() != id) {
+            id = resolved.getId();
+            preferences.edit().putInt(key, id).apply();
+        }
+        return id;
+    }
+
+    private static AudioDeviceInfo resolveIdentity(String saved, List<AudioDeviceInfo> devices, int currentId) {
+        try {
+            org.json.JSONArray value = new org.json.JSONArray(saved);
+            int type = value.getInt(0);
+            String name = value.getString(1), address = value.getString(2);
+            AudioDeviceInfo named = null, addressed = null;
+            int names = 0, addresses = 0;
+            for (AudioDeviceInfo device : devices) {
+                String product = device.getProductName() == null ? "" : device.getProductName().toString().trim();
+                if (device.getType() != type || !name.equals(product)) continue;
+                String currentAddress = device.getAddress() == null ? "" : device.getAddress();
+                if (device.getId() == currentId && address.equals(currentAddress)) return device;
+                if (address.isEmpty() && (device.getAddress() == null || device.getAddress().isEmpty())) { named = device; names++; }
+                if (!address.isEmpty() && address.equals(device.getAddress())) { addressed = device; addresses++; }
+            }
+            return addresses == 1 ? addressed : address.isEmpty() && names == 1 && !name.isEmpty() ? named : null;
+        } catch (org.json.JSONException malformed) {
+            return null;
+        }
+    }
+
+    private static boolean selectionAvailable(Context c, String key, int id, List<AudioDeviceInfo> devices) {
+        String saved = prefs(c).getString(key + "Identity", "");
+        if (!saved.isEmpty()) {
+            AudioDeviceInfo resolved = resolveIdentity(saved, devices, id);
+            return resolved != null && resolved.getId() == id;
+        }
+        for (AudioDeviceInfo device : devices) if (device.getId() == id) return true;
+        return false;
     }
 
     private static boolean isRoutableDevice(AudioDeviceInfo d) {
@@ -196,12 +268,19 @@ public final class AudioRouting implements AutoCloseable {
     }
 
     public static String inputLabel(Context c) {
-        return selectedLabel(c, selectedInput(c), listInputs(c));
+        int id = selectedInput(c);
+        List<AudioDeviceInfo> devices = listInputs(c);
+        return selectedLabel(c, id, id != 0 && !selectionAvailable(c, "inputDevice", id, devices)
+                ? java.util.Collections.emptyList() : devices);
     }
 
     public static String outputLabel(Context c) {
         int id = selectedOutput(c);
-        if (id != 0) return selectedLabel(c, id, listOutputs(c));
+        if (id != 0) {
+            List<AudioDeviceInfo> devices = listOutputs(c);
+            return selectedLabel(c, id, selectionAvailable(c, "outputDevice", id, devices)
+                    ? devices : java.util.Collections.emptyList());
+        }
         int mode = selected(c);
         if (mode == 1) return AppLanguage.text(c, "휴대폰 스피커", "Phone speaker");
         if (mode == 2) return AppLanguage.text(c, "블루투스 스피커", "Bluetooth speaker");
@@ -231,29 +310,27 @@ public final class AudioRouting implements AutoCloseable {
         savedOutput = selectedOutput(c);
         savedMode = prefs(c).getInt("mode", 0);
         savedBluetooth = prefs(c).getInt("bluetoothDevice", 0);
+        savedInputIdentity = prefs(c).getString("inputDeviceIdentity", "");
+        savedOutputIdentity = prefs(c).getString("outputDeviceIdentity", "");
 
         int in = selectedInput(c);
         if (in == 0 && requestedInput > 0 && !prefs(c).contains("inputDevice")) {
             in = requestedInput;
         }
-        if (withMic && in > 0) {
-            boolean found = false;
-            for (AudioDeviceInfo d : listInputs(c)) {
-                if (d.getId() == in) found = true;
-            }
-            if (!found) {
+        if (withMic && in != 0) {
+            if (!selectionAvailable(c, "inputDevice", in, listInputs(c))) {
                 throw new IllegalStateException(AppLanguage.text(c, "선택한 입력 장치가 연결되지 않았습니다.", "The selected input device is disconnected."));
             }
         }
 
         int out = selectedOutput(c), resolvedMode = selected(c);
         String name = outputLabel(c);
-        if (out > 0) {
+        if (out != 0) {
             AudioDeviceInfo chosen = null;
             for (AudioDeviceInfo d : listOutputs(c)) {
                 if (d.getId() == out) chosen = d;
             }
-            if (chosen == null) {
+            if (chosen == null || !selectionAvailable(c, "outputDevice", out, listOutputs(c))) {
                 throw new IllegalStateException(AppLanguage.text(c, "선택한 출력 장치가 연결되지 않았습니다.", "The selected output device is disconnected."));
             }
             int type = chosen.getType();
@@ -302,6 +379,8 @@ public final class AudioRouting implements AutoCloseable {
                 .edit()
                 .putInt("inputDevice", savedInput)
                 .putInt("outputDevice", savedOutput)
+                .putString("inputDeviceIdentity", savedInputIdentity)
+                .putString("outputDeviceIdentity", savedOutputIdentity)
                 .putInt("mode", savedMode)
                 .putInt("bluetoothDevice", savedBluetooth)
                 .apply();

@@ -80,4 +80,13 @@ public class AudioDeviceLossTest {
         StudioScreenshotTest.Audio.rerouteResults.add(false);StudioScreenshotTest.Audio.rerouteResults.add(true);action(AudioService.ROUTE);assertTrue(AudioService.active);assertEquals(.63f,lastEffect(2),.0001);
     }
     float lastEffect(int key){float value=Float.NaN;for(float[] change:StudioScreenshotTest.Audio.changes)if(change[0]==key)value=change[1];return value;}
+    @Test public void streamFailureReportsFaultWithoutClaimingPhysicalDisconnect()throws Exception{
+        startTake();StudioScreenshotTest.Audio.supplied[10]=0;StudioScreenshotTest.Audio.supplied[14]=-899;
+        pulse();
+        assertFalse(AudioService.active);assertFalse(RecordingManager.active);assertEquals(1,Audio.ends);
+        assertTrue(AudioService.error.contains("audio stream stopped"));assertTrue(AudioService.error.contains("-899"));
+        assertFalse(AudioService.error.contains("device disconnected"));
+        pulse();assertEquals(1,Audio.ends);
+    }
+
 }

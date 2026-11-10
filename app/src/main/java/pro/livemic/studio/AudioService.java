@@ -143,9 +143,16 @@ public class AudioService extends Service {
     }
     private void monitorOff(){NativeAudio.set(11,0);NativeComposer.monitor(false);NativeHarmony.monitor(false);}
     private void deviceLost(boolean outputLost){
+        stopForRouteFailure(outputLost, AppLanguage.text(this,"장치 연결이 해제되어 녹음을 마쳤습니다. 다른 마이크로 자동 전환하지 않습니다. 다시 연결한 뒤 직접 시작하세요.","The device disconnected; recording was finalized. No microphone is selected automatically. Reconnect, then restart explicitly."));
+    }
+    private void streamStopped(float[] stats){
+        String reason=AppLanguage.text(this,"오디오 스트림이 중단되어 녹음을 마쳤습니다. 오디오 설정을 확인한 뒤 직접 다시 시작하세요.","The audio stream stopped; recording was finalized. Check audio settings, then restart explicitly.");
+        if(stats.length>14 && stats[14]!=0)reason+=AppLanguage.text(this," 오류 코드: "," Error code: ")+(int)stats[14];
+        stopForRouteFailure(true,reason);
+    }
+    private void stopForRouteFailure(boolean outputLost,String reason){
         if(destroying||outputLost&&outputLossHandled||!outputLost&&inputLossHandled)return;
         inputLossHandled=true;outputLossHandled|=outputLost;monitorOff();
-        String reason=AppLanguage.text(this,"장치 연결이 해제되어 녹음을 마쳤습니다. 다른 마이크로 자동 전환하지 않습니다. 다시 연결한 뒤 직접 시작하세요.","The device disconnected; recording was finalized. No microphone is selected automatically. Reconnect, then restart explicitly.");
         if(session!=null)session.routeLost();
         finishRecording(reason);
         if(practice!=null)practice.stop(false);if(composer.capturing)composer.cancelPhrase();composer.voice(false);harmony.live(false);
@@ -793,7 +800,7 @@ public class AudioService extends Service {
             if((active||playbackActive)&&rememberedOutput>0&&NativeAudio.outputDevice()!=rememberedOutput){deviceLost(true);return;}
             float[] stats = NativeAudio.stats();
             if (stats[10] < .5f) {
-                deviceLost(true);
+                streamStopped(stats);
                 return;
             }
             checkStart();

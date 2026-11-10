@@ -380,14 +380,19 @@ public:
                         return self->echoInputConfig.builtinMicrophone(id);
                     });
             if(result!=0){fault=result;backendFallback=2;return false;}
+            result=oboe->startInput();
+            if(result!=0){oboe->closeInput();fault=result;backendFallback=3;return false;}
+            // Oboe exposes input metadata only after startInput publishes its stream.
+            // Keep the render gate closed until the negotiated format and SRC are ready.
             auto info=oboe->inputInfo();
+            if(info.format!=AAUDIO_FORMAT_PCM_FLOAT || info.channels<1 || info.channels>2 || info.sampleRate<=0){
+                oboe->closeInput();fault=AAUDIO_ERROR_INVALID_FORMAT;backendFallback=3;return false;
+            }
             inputShortReads=0;inputMissingFrames=0;
             diagnostic[3]=diagnostic[4]=diagnostic[5]=diagnostic[6]=0;
             inputResampler.reset(info.sampleRate,sr,true);
             inputChannels=info.channels;inputRate=info.sampleRate;monitorMode=mode;
             if(!monitorLevelChosen)monitorLevel=feedback.isEnabled()?.18f:1.f;
-            result=oboe->startInput();
-            if(result!=0){oboe->closeInput();fault=result;backendFallback=3;return false;}
             inputProfile=info.inputPreset==AAUDIO_INPUT_PRESET_VOICE_RECOGNITION?1
                     :info.inputPreset==AAUDIO_INPUT_PRESET_VOICE_COMMUNICATION?(speakerEcho?3:2):0;
             inputDeviceSnapshot=info.deviceId;inputSessionSnapshot=info.sessionId;
