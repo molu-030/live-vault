@@ -3,6 +3,7 @@
 #include "record_alignment.h"
 #include "local_seek.h"
 #include "local_pcm_source.h"
+#include "session_transport.h"
 #include "recording_journal.h"
 #include "input_resampler.h"
 #include "echo_input_profile.h"
@@ -44,9 +45,13 @@ public:
     std::atomic<bool> oboeInputActive{false};
 #endif
     std::recursive_mutex streamControl;
+    // Control-only lifecycle lock. Ordering is streamControl -> recordControl.
+    std::mutex recordControl;
     std::atomic<int> inputDeviceSnapshot{0},inputSessionSnapshot{0},outputDeviceSnapshot{0};
     std::atomic<AAudioStream*> publishedInput{nullptr};
     lv::ComposerEngine composer;
+    SessionTransport session;
+    std::atomic<bool> sessionRecordBus{false};
     vh::Harmony harmony;
     vh::Looper vocalLooper;
     std::mutex vocalControl;
@@ -648,7 +653,11 @@ public:
 #endif
         pitchRing.push(inputBuffer.data(), n);
         composer.microphone.push(inputBuffer.data(), n);
-        composer.render(composerMusic.data(), composerVoice.data(), composerCount.data(), n);
+        bool sessionActive=session.begin(sr);
+        bool sessionSuppressed=session.isEnabled();
+        bool callbackRecording=recording.load()&&!recordPaused.load()&&(!sessionRecordBus.load()||(sessionActive&&session.playing()&&session.captureArmed()));
+        if(sessionSuppressed&&!sessionActive){std::fill(composerMusic.begin(),composerMusic.begin()+n*2,0);std::fill(composerVoice.begin(),composerVoice.begin()+n*2,0);std::fill(composerCount.begin(),composerCount.begin()+n,0);}
+        if(!sessionSuppressed)composer.render(composerMusic.data(), composerVoice.data(), composerCount.data(), n);
         float p[20];
         for (int i = 0; i < 20; i++) p[i] = params[i].load(std::memory_order_relaxed);
         dsp.configure(p);
@@ -669,10 +678,14 @@ public:
         for (int i = 0; i < n; i++) {
             float l, r;
             dsp.process(inputBuffer[i], p, l, r);
-            float music = band(p, base + i);
+            if(sessionActive)composer.render(composerMusic.data()+i*2,composerVoice.data()+i*2,composerCount.data()+i,1,true,session.beat(),session.playing(),i==0);
+            float sessionL=0,sessionR=0;
+            if(sessionActive)session.sample(sessionL,sessionR,callbackRecording);
+            float music = sessionSuppressed?0:band(p, base + i);
             float ml = music + composerMusic[i * 2] * p[1];
             float mr = music + composerMusic[i * 2 + 1] * p[1];
-            if(local){
+            ml+=sessionL;mr+=sessionR;
+            if(local&&!sessionSuppressed){
                 double pos=double(cursor)*localRate/sr;
                 if(pos+1<localSource->frames()){
                     float sampleL=0,sampleR=0;
@@ -689,8 +702,7 @@ public:
             float vocalL, vocalR, loopL, loopR, loopClick;
             harmony.tick(l, r, haveMic ? f : 0, haveMic ? pitchConfidence.load(std::memory_order_relaxed) : 0, haveMic ? pitchLevel.load(std::memory_order_relaxed) : 0, sr, vocalL, vocalR);
             vocalLooper.tick(vocalL, vocalR, loopL, loopR, &loopClick);
-            ml += loopL;
-            mr += loopR;
+            if(!sessionSuppressed){ml += loopL;mr += loopR;}
             bool mixVocal = !composer.enabled() || composer.mixVoice.load();
             float vl = (mixVocal ? vocalL + synth : 0) + composerVoice[i * 2];
             float vr = (mixVocal ? vocalR + synth : 0) + composerVoice[i * 2 + 1];
@@ -698,6 +710,7 @@ public:
             float br = mr + capturedBuffer[i * 2 + 1];
             bool micOnly = recordMicOnly.load(std::memory_order_relaxed);
             if (micOnly) { vl = l; vr = r; bl = br = 0; }
+            if(sessionRecordBus.load(std::memory_order_relaxed))bl=br=0;
             // Preserve the original voice bus and its recording sync. This stem
             // includes routed voice instruments; loops remain on the fixed bed.
             sourceBuffer[i*5] = inputBuffer[i];
@@ -706,7 +719,7 @@ public:
             sourceBuffer[i*5+3] = vl;
             sourceBuffer[i*5+4] = vr;
             if (recording && !micOnly && (harmony.enabled() || !mixVocal || p[12] > .5f || composer.enabled())) sourceEditable = false;
-            if (recording && !recordPaused) alignment.tick(vl, vr, bl, br);
+            if (callbackRecording) alignment.tick(vl, vr, bl, br);
             float recL = limit(vl + bl), recR = limit(vr + br);
             float liveGate = p[11] * float(vocalMonitor.load(std::memory_order_relaxed));
             float liveL = (mixVocal ? (vocalL + synth) * liveGate : 0) + composerVoice[i * 2] * composer.monitoring();
@@ -725,6 +738,7 @@ public:
             inE += inputBuffer[i] * inputBuffer[i];
             outE += out[i * 2] * out[i * 2];
         }
+        session.end();
         if(cacheMiss)localSource->underrun();
         if(localSourceUsed)localCursor=cursor;
         if(localSourceUsed)cacheLocalDiagnostics();
@@ -732,7 +746,7 @@ public:
         frames.fetch_add(n, std::memory_order_relaxed);
         inRms = std::sqrt(inE / n);
         outRms = std::sqrt(outE / n);
-        if (recording.load(std::memory_order_acquire) && !recordPaused.load(std::memory_order_acquire)) {
+        if (callbackRecording) {
             if (segmentPending.exchange(false)) segmentSourceStart = base;
             if (recordFrames.load() == 0) recordStartClock = monoSeconds();
             if (sourceRecording && sourceRing.available() + size_t(n*5) <= 1048576) {
@@ -914,6 +928,7 @@ public:
     }
 
     bool beginRecord(const std::string& path, const std::string& micPath = "", const std::string& fixedPath = "", const std::string& vocalPath = "") {
+        std::lock_guard<std::mutex> recordLock(recordControl);
         if (!running || recording) return false;
         FILE* f = fopen(path.c_str(), "wb");
         if (!f) return false;
@@ -927,7 +942,7 @@ public:
         if(raw) sourceHeader(raw,sr,1,0);
         if(fixed) sourceHeader(fixed,sr,2,0);
         sourceRing.reset(); sourceRecording = raw && fixed; sourceEditable = sr>=8000 && sr<=192000;
-        alignment.init(sr, recordSyncMs);
+        alignment.init(sr, sessionRecordBus.load()?0:recordSyncMs);
         wavHeader(f, 0);
         recordRing.reset();
         recordPaused = false;
@@ -1007,6 +1022,7 @@ public:
     }
 
     void pauseRecord(bool pause) {
+        std::lock_guard<std::mutex> recordLock(recordControl);
         if (!recording || recordPaused.load() == pause) return;
         if (pause) {
             recordPaused = true;
@@ -1019,6 +1035,7 @@ public:
     }
 
     void stopRecord() {
+        std::lock_guard<std::mutex> recordLock(recordControl);
         bool wasRecording = recording.exchange(false);
         while (recordWriters.load() > 0) std::this_thread::yield();
         if (wasRecording && !recordPaused) closeRecordedSpan();
@@ -1469,3 +1486,18 @@ JNI(jdoubleArray) jdoubleArray JNICALL Java_pro_livemic_studio_NativeHarmony_sta
 JNI(void) void JNICALL Java_pro_livemic_studio_NativeAudio_recordMicOnly(JNIEnv*, jclass, jboolean enabled) {
     if (!engine.recording) engine.recordMicOnly = bool(enabled);
 }
+
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeSession_prepare(JNIEnv* e,jclass,jobjectArray paths,jlongArray data,jdoubleArray gains,jlong duration,jdouble bpm){
+ if(!paths||!data||!gains||duration<0)return false;jsize count=e->GetArrayLength(paths);if(count>32||e->GetArrayLength(data)!=count*7||e->GetArrayLength(gains)!=count*2)return false;
+ try{std::vector<jlong> d(size_t(count)*7);std::vector<jdouble> g(size_t(count)*2);e->GetLongArrayRegion(data,0,count*7,d.data());e->GetDoubleArrayRegion(gains,0,count*2,g.data());if(e->ExceptionCheck())return false;
+ auto p=std::make_unique<SessionTransport::Plan>();p->duration=uint64_t(duration);p->bpm=bpm;
+ for(int i=0;i<count;i++){for(int k=0;k<7;k++)if(d[i*7+k]<0)return false;if(d[i*7]>7||d[i*7+4]>1)return false;SessionTransport::Clip c;c.track=int(d[i*7]);c.start=d[i*7+1];c.offset=d[i*7+2];c.length=d[i*7+3];c.loop=d[i*7+4]!=0;c.loopLength=d[i*7+5];c.gain=float(g[i*2]);c.pan=float(g[i*2+1]);auto path=static_cast<jstring>(e->GetObjectArrayElement(paths,i));if(!path)return false;std::string value=str(e,path);e->DeleteLocalRef(path);c.source=std::make_unique<LocalPcmSource>();if(!c.source->openWav(value.c_str())||c.source->sampleRate()!=d[i*7+6])return false;p->clips.push_back(std::move(c));}
+ return engine.session.prepare(std::move(p));}catch(...){return false;}
+}
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeSession_transport(JNIEnv*,jclass,jint command){return engine.session.transport(command);}
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeSession_seek(JNIEnv*,jclass,jlong frame){return frame>=0&&engine.session.seek(uint64_t(frame));}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeSession_setEnabled(JNIEnv*,jclass,jboolean enabled){engine.session.setEnabled(enabled);if(!enabled)engine.composer.transport(0);}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeSession_recordBus(JNIEnv*,jclass,jboolean enabled){engine.sessionRecordBus=enabled;}
+JNI(jboolean) jboolean JNICALL Java_pro_livemic_studio_NativeSession_armCapture(JNIEnv*,jclass,jlong token){return engine.session.armCapture(token);}
+JNI(void) void JNICALL Java_pro_livemic_studio_NativeSession_finishCapture(JNIEnv*,jclass){engine.session.finishCapture();}
+JNI(jlongArray) jlongArray JNICALL Java_pro_livemic_studio_NativeSession_state(JNIEnv* e,jclass){int64_t raw[11]{};engine.session.state(raw);jlong values[11];for(int i=0;i<11;i++)values[i]=raw[i];jlongArray result=e->NewLongArray(11);if(result)e->SetLongArrayRegion(result,0,11,values);return result;}

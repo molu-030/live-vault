@@ -19,9 +19,9 @@ final class BackNavigation {
             b.putInt("filter", filter); b.putInt("scroll", scroll); return b;
         }
         static Page restore(Bundle b) {
-            return new Page(Math.max(0, Math.min(9, b.getInt("tab"))),
+            return new Page(Math.max(0, Math.min(10, b.getInt("tab"))),
                     Math.max(0, Math.min(2, b.getInt("source", 1))),
-                    Math.max(0, Math.min(1, b.getInt("filter"))), Math.max(0, b.getInt("scroll")));
+                    Math.max(0, Math.min(2, b.getInt("filter"))), Math.max(0, b.getInt("scroll")));
         }
     }
     final ArrayList<Page> history = new ArrayList<>();

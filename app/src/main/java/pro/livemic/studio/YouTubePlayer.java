@@ -62,6 +62,7 @@ final class YouTubePlayer {
 
     /** All native source entrypoints call this before taking playback ownership. */
     static boolean beforeNativePlayback() {
+        if (SessionController.legacyBlocked()) return false;
         if ((RecordingManager.active && RecordingManager.micOnly) || (AudioService.waiting() && AudioService.pendingMicOnly)) return false;
         if (current != null && current.selected) current.a.leaveYouTube();
         return true;

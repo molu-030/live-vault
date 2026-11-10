@@ -107,6 +107,9 @@ public class MainActivity extends Activity {
     ComposerExchange exchange;
     HarmonySession harmony;
     HarmonyScreen harmonyScreen;
+    SessionController session;
+    SessionScreen sessionScreen;
+    int lastSessionRevision = -1;
     int lastHarmonyRevision = -1;
     int libraryFilter = 0, lastComposerRevision = -1;
 
@@ -131,7 +134,7 @@ public class MainActivity extends Activity {
     boolean exitInProgress = false, exitCompleted = false, exitResourcesStopped = false;
     volatile String exitSaveError = "";
     AlertDialog exitDialog, exitProgress;
-    String composerErrorBeforeExit = "", harmonyErrorBeforeExit = "";
+    String composerErrorBeforeExit = "", harmonyErrorBeforeExit = "", sessionErrorBeforeExit = "";
 
     PopupWindow drawerPopup;
     int drawerLeft, drawerTop;
@@ -178,6 +181,8 @@ public class MainActivity extends Activity {
         composerScreen = new ComposerScreen(this, composer);
         harmony = HarmonySession.get(this);
         harmonyScreen = new HarmonyScreen(this, harmony);
+        session = SessionController.get(this);
+        sessionScreen = new SessionScreen(this, session);
         store = new TakeStore(this, false);
         store.recoverAsync(io, () -> runOnUiThread(() -> {
             if (!isDestroyed() && !exiting() && tab == 4 && libraryFilter == 0) showTab();
@@ -670,6 +675,7 @@ public class MainActivity extends Activity {
         exitSaveError = "";
         composerErrorBeforeExit = composer.error;
         harmonyErrorBeforeExit = harmony.error;
+        sessionErrorBeforeExit = session.error;
         exitProgress = StudioDialogs.alert(this)
                 .setTitle(tr("저장 후 종료 중", "Saving and exiting"))
                 .setMessage(tr("저장이 끝날 때까지 기다려 주세요.", "Please wait until saving finishes."))
@@ -692,7 +698,10 @@ public class MainActivity extends Activity {
         harmony.poll(); // Queue a layer that completed just before capture stopped.
         // Close recording writers and release live streams immediately. Disk export/mux
         // can take time, and must not keep the microphone or countdown running.
-        AudioService.requestAppExit(this, error -> {
+        session.drainForExit(() -> {
+            if (!session.exitFailure.isEmpty()) exitSaveError += session.exitFailure + "\n";
+            else if (!session.error.isEmpty() && !session.error.equals(sessionErrorBeforeExit)) exitSaveError += session.error + "\n";
+            AudioService.requestAppExit(this, error -> {
             if (error != null && !error.isEmpty()) exitSaveError += error + "\n";
             // Document-provider exports survive recreation; finish their authorized writes too.
             ComposerExchange.afterPendingExports(exportError -> {
@@ -705,6 +714,7 @@ public class MainActivity extends Activity {
                         if (!harmony.error.isEmpty() && !harmony.error.equals(harmonyErrorBeforeExit)) exitSaveError += harmony.error + "\n";
                         completeExit();
                     }))));
+            });
             });
         });
     }
@@ -773,11 +783,11 @@ public class MainActivity extends Activity {
         takePlayButtons.clear();
         takePlaybackStatus.clear();
         content = page;
-        page.maxContentWidthDp = tabletLandscape() && (tab == 1 || tab == 2 || tab == 4 || tab == 5 || tab == 6 || tab == 9) ? 880 : 0;
+        page.maxContentWidthDp = tabletLandscape() && (tab == 1 || tab == 2 || tab == 4 || tab == 5 || tab == 6 || tab == 9 || tab == 10) ? 880 : 0;
         page.flexible(null, 0, 0);
         content.removeAllViews();
         actionDock.removeAllViews();
-        actionDock.setVisibility(tab == 0 || tab == 3 || tab == 5 || tab == 7 || tab == 8 || tab == 9 ? View.VISIBLE : View.GONE);
+        actionDock.setVisibility(tab == 0 || tab == 3 || tab == 5 || tab == 7 || tab == 8 || tab == 9 || tab == 10 ? View.VISIBLE : View.GONE);
         pageScroll.scrollTo(0, 0);
         visual = null;
         pitch = null;
@@ -793,7 +803,7 @@ public class MainActivity extends Activity {
         flipButton = null;
         levelText = null;
 
-        int selected = tab == 7 || tab == 8 ? 1 : tab == 4 ? 2 : tab == 0 ? 0 : -1;
+        int selected = tab == 7 || tab == 8 ? 1 : tab == 4 || tab == 10 ? 2 : tab == 0 ? 0 : -1;
         for (int i = 0; i < nav.getChildCount(); i++) {
             Button b = (Button) nav.getChildAt(i);
             boolean active = i == selected;
@@ -812,6 +822,7 @@ public class MainActivity extends Activity {
         else if (tab == 7) composerScreen.draw(false);
         else if (tab == 8) composerScreen.draw(true);
         else if (tab == 9) harmonyScreen.draw();
+        else if (tab == 10) sessionScreen.draw();
         else library();
         renderedPage = new BackNavigation.Page(tab, sourceTab, libraryFilter, 0);
         updateTransportVisibility();
@@ -970,6 +981,7 @@ public class MainActivity extends Activity {
                 tr("녹음 설정", "Recording settings"),
                 tr("보컬 연습", "Vocal practice"),
                 tr("보컬 화음", "Vocal harmony"),
+                tr("세션", "Sessions"),
                 tr("도움말", "Help"),
                 tr("종료", "Exit")
         };
@@ -982,10 +994,11 @@ public class MainActivity extends Activity {
                 tr("예약 녹음 · 저장 옵션", "Recording timer · storage"),
                 tr("스케일 · 피치 · MIDI", "Scales · pitch · MIDI"),
                 tr("목소리 화음과 루프", "Vocal harmonies and loops"),
+                tr("반주와 보컬 · 공유 타임라인", "Backing and vocals · shared timeline"),
                 tr("사용 방법 · 앱 정보", "Guide · about"),
                 tr("저장 후 마이크와 재생 모두 끄기", "Save and turn off microphone and playback")
         };
-        String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "help", "close"};
+        String[] glyphs = {"mic", "music", "piano", "folder", "settings", "record", "piano", "music", "folder", "help", "close"};
 
         for (int i = 0; i < names.length; i++) {
             final int k = i;
@@ -997,7 +1010,8 @@ public class MainActivity extends Activity {
                     || (k == 3 && tab == 4)
                     || (k == 4 && tab == 6)
                     || (k == 6 && tab == 5)
-                    || (k == 7 && tab == 9);
+                    || (k == 7 && tab == 9)
+                    || (k == 8 && tab == 10);
             ImageView icon = new ImageView(this);
             icon.setImageDrawable(new StudioGlyph(glyphs[i], currentItem ? LIME : (i == 6 ? RED : 0xffbcc5d4)));
             item.addView(icon, new LinearLayout.LayoutParams(dp(28), dp(28)));
@@ -1027,7 +1041,8 @@ public class MainActivity extends Activity {
                 else if (k == 5) recordingOptions();
                 else if (k == 6) chooseTab(5);
                 else if (k == 7) chooseTab(9);
-                else if (k == 9) confirmExit();
+                else if (k == 8) chooseTab(10);
+                else if (k == 10) confirmExit();
                 else {
                     AlertDialog dialog = StudioDialogs.darkAlert(this)
                             .setTitle("Live Vault")
@@ -2484,7 +2499,11 @@ public class MainActivity extends Activity {
         StudioTheme.selected(backFilter, libraryFilter == 1);
         weighted(filters, recFilter, 48);
         weighted(filters, backFilter, 48);
+        StudioButton sessionFilter = StudioTheme.styled(this, tr("세션", "Sessions"), StudioButton.CHIP, () -> chooseLibraryFilter(2));
+        StudioTheme.selected(sessionFilter, libraryFilter == 2);
+        weighted(filters, sessionFilter, 48);
         add(filters);
+        if (libraryFilter == 2) { sessionScreen.projects(); return; }
 
         if (libraryFilter == 1) {
             composerScreen.projects();
@@ -2842,6 +2861,7 @@ public class MainActivity extends Activity {
 
     void ensureMic(int action) {
         if (exiting()) return;
+        if (action == 3 && SessionController.legacyBlocked(this)) return;
         if (busy || videoPreparing) return;
         if (action == 4) {
             if (!YouTubePlayer.beforeNativePlayback()) return;
@@ -2871,6 +2891,7 @@ public class MainActivity extends Activity {
         if (pendingAction == 0 || !AudioService.active || NativeAudio.stats()[10] < .5 || busy || videoPreparing) return;
         int action = pendingAction;
         if (action == 2 && (camera == null || !camera.ready)) return;
+        if ((action == 3 || action == 4) && SessionController.legacyBlocked(this)) { pendingAction = 0; return; }
         pendingAction = 0;
         if (action == 1) {
             stopPlayer();
@@ -3068,7 +3089,7 @@ public class MainActivity extends Activity {
 
     void updateTransportVisibility() {
         boolean practiceRecording = tab == 5 && AudioService.practice != null && AudioService.practice.active;
-        transport.setVisibility(((RecordingManager.active || AudioService.waiting()) && tab != 0 && tab != 3 && !practiceRecording) ? View.VISIBLE : View.GONE);
+        transport.setVisibility(((RecordingManager.active || AudioService.waiting()) && tab != 0 && tab != 3 && tab != 10 && !practiceRecording) ? View.VISIBLE : View.GONE);
     }
 
     String formatTime(double seconds) {
@@ -3084,7 +3105,7 @@ public class MainActivity extends Activity {
 
     void updateScreenAwake(boolean running) {
         boolean awake = activityVisible && !exiting()
-                && (camera != null || videoPreparing || (running && (tab == 0 || tab == 5 || tab == 9)));
+                && (camera != null || videoPreparing || (running && (tab == 0 || tab == 5 || tab == 9 || tab == 10)) || (tab == 10 && session != null && session.state[1] == 1));
         if (awake) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
@@ -3211,6 +3232,12 @@ public class MainActivity extends Activity {
                                     : String.format(Locale.US, tr("정확도 %.1f%% · 발성 %.1f%%", "Accuracy %.1f%% · voiced %.1f%%"), pr.score.accuracy(), pr.score.coverage()))
                     );
                 }
+            }
+            session.poll();
+            sessionScreen.poll();
+            if (lastSessionRevision != session.revision) {
+                lastSessionRevision = session.revision;
+                sessionScreen.refresh();
             }
             if (!AudioService.active && !AudioService.playbackActive) harmony.poll();
             harmonyScreen.poll();
@@ -3577,6 +3604,11 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int request, String[] permissions, int[] grants) {
         super.onRequestPermissionsResult(request, permissions, grants);
         if (exiting()) { pendingAction = 0; clearRecordingRequest(); return; }
+        if (request == 14) {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && tab == 10) sessionScreen.record();
+            else toast(tr("마이크 권한이 필요합니다.", "Microphone permission is required."));
+            return;
+        }
         if (request == 12) {
             if (recordingRequestStage != 1) {
                 clearRecordingRequest();

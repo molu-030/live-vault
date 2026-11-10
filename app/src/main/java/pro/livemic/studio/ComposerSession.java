@@ -7,6 +7,7 @@ import java.io.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 
 /** Service-owned project and transactional performance capture. No UI timer triggers audio. */
 final class ComposerSession {
@@ -14,6 +15,54 @@ final class ComposerSession {
     static synchronized ComposerSession get(Context c){if(instance==null||instance.worker.isShutdown())instance=new ComposerSession(c.getApplicationContext());return instance;}
     final Context context;final ComposerStore store;final ExecutorService worker=Executors.newSingleThreadExecutor();final Handler main=new Handler(Looper.getMainLooper());
     ComposerProject project=new ComposerProject();int selectedPart=0,revision=0;volatile boolean ready=false;boolean voiceOn=false,capturing=false;String error="",message="";
+    // A session edit is an isolated workspace; the unrelated legacy draft and history stay intact.
+    private SessionBinding binding;
+    private volatile long publishGeneration;
+    private static final class SessionBinding {
+        final String id;final ComposerProject legacy;final int selected;
+        final ArrayDeque<String> undo,redo;final PhraseComparison comparison;
+        final Consumer<ComposerProject> sink;final Runnable play,pause,stop;
+        final BooleanSupplier playing,editingLocked;
+        final String saveId;final boolean dirty;final SaveState draft,library;
+        SessionBinding(ComposerSession owner,String id,Consumer<ComposerProject> sink,Runnable play,Runnable pause,Runnable stop,BooleanSupplier playing,BooleanSupplier editingLocked){
+            this.id=id;legacy=owner.project;selected=owner.selectedPart;undo=new ArrayDeque<>(owner.store.undo);redo=new ArrayDeque<>(owner.store.redo);comparison=owner.comparison;
+            this.sink=sink;this.play=play;this.pause=pause;this.stop=stop;this.playing=playing;this.editingLocked=editingLocked;
+            saveId=owner.saveProjectId;dirty=owner.libraryDirty;draft=copySave(owner.draftSave);library=copySave(owner.librarySave);
+        }
+    }
+    private static SaveState copySave(SaveState value){SaveState result=new SaveState();restoreSave(result,value);return result;}
+    private static void restoreSave(SaveState to,SaveState from){to.phase=from.phase;to.request=from.request;to.savedAt=from.savedAt;to.failure=from.failure;to.formattedAt=-1;}
+    boolean isSessionBound(){return binding!=null;}
+    synchronized boolean bindSession(String id,ComposerProject value,Consumer<ComposerProject> sink,Runnable play,Runnable pause,Runnable stop,BooleanSupplier playing,BooleanSupplier editingLocked){
+        if(!ready||capturing||versionBusy||versionRestoreLock||ExitCoordinator.isExitRequested())return false;
+        try{
+            ComposerProject isolated=ComposerProject.read(value.json());isolated.validate();
+            if(binding!=null)unbindSession();
+            stop();voice(false);publishGeneration++;playbackRequest++;
+            binding=new SessionBinding(this,id,sink,play,pause,stop,playing,editingLocked);
+            project=isolated;selectedPart=0;comparison=null;store.undo.clear();store.redo.clear();
+            saveEpoch++;saveProjectId="";ensureSaveProject();revision++;error="";return true;
+        }catch(Exception e){error=displayError(e.getMessage());return false;}
+    }
+    synchronized void unbindSession(){
+        SessionBinding previous=binding;if(previous==null)return;
+        publishGeneration++;playbackRequest++;binding=null;project=previous.legacy;selectedPart=previous.selected;
+        store.undo.clear();store.undo.addAll(previous.undo);store.redo.clear();store.redo.addAll(previous.redo);
+        comparison=previous.comparison;saveEpoch++;saveProjectId=previous.saveId;libraryDirty=previous.dirty;
+        restoreSave(draftSave,previous.draft);restoreSave(librarySave,previous.library);
+        // A queued legacy save may have completed while its UI was suspended.
+        if(draftSave.phase==SaveState.SAVING){draftSave.phase=SaveState.IDLE;draftSave.request++;}
+        if(librarySave.phase==SaveState.SAVING){librarySave.phase=SaveState.IDLE;librarySave.request++;}
+        revision++;if(comparison!=null)comparison.revision=revision;
+    }
+    private boolean sessionEditingLocked(){
+        if(binding==null||!binding.editingLocked.getAsBoolean())return false;
+        error=AppLanguage.text(context,"세션을 일시정지하고 작업을 마친 뒤 편집하세요.","Pause the session and finish the current operation before editing.");return true;
+    }
+    private boolean sessionLibraryBlocked(){
+        if(binding==null)return false;
+        error=AppLanguage.text(context,"세션으로 돌아간 뒤 다른 프로젝트를 여세요.","Return to the session before opening or managing another backing project.");return true;
+    }
     static final class SaveState {
         static final int IDLE=0,SAVING=1,SAVED=2,FAILED=3;
         int phase=IDLE;long request,savedAt;String failure="";
@@ -41,7 +90,7 @@ final class ComposerSession {
     boolean currentTakeSelected(){return canComparePhrase()&&comparison.currentSelected;}
     boolean previousTakeEmpty(){return !canComparePhrase()||comparison.previous.isEmpty();}
     void selectPhraseTake(boolean current,boolean finish){
-        if(restoreLocked()||!canComparePhrase())return;PhraseComparison saved=comparison;
+        if(sessionEditingLocked()||restoreLocked()||!canComparePhrase())return;PhraseComparison saved=comparison;
         ComposerProject.Part target=project.part(saved.partId);List<VoicePhrase> before=new ArrayList<>(target.phrases);
         try{
             List<VoicePhrase> replacements=new ArrayList<>();for(String json:current?saved.current:saved.previous)replacements.add(VoicePhrase.read(new JSONObject(json)));
@@ -59,6 +108,7 @@ final class ComposerSession {
     boolean canUndo(){return !capturing&&!versionRestoreLock&&!store.undo.isEmpty();}
     boolean canRedo(){return !capturing&&!versionRestoreLock&&!store.redo.isEmpty();}
     String saveStatus(boolean draft){
+        if(binding!=null)return AppLanguage.text(context,"세션 · 편집 시 자동 저장","Session · Edits save automatically");
         ensureSaveProject();SaveState status=draft?draftSave:librarySave;
         String label=AppLanguage.text(context,draft?"초안":"내 반주",draft?"Draft":"My Backings");
         if(status.phase==SaveState.SAVING)return label+AppLanguage.text(context," · 저장 중…"," · Saving…");
@@ -82,6 +132,7 @@ final class ComposerSession {
         if(!NativeComposer.loadSoundFont(sf.getAbsolutePath()))throw new IOException(AppLanguage.text(context,"음원 초기화 실패","Sound initialization failed"));ComposerProject restored=draft;main.post(()->{project=restored;ensureSaveProject();long stamp=store.savedAt(restored.id,true);if(stamp>0){draftSave.phase=SaveState.SAVED;draftSave.savedAt=stamp;}ready=true;revision++;publish(-1);});
     }catch(Exception e){main.post(()->{error=AppLanguage.text(context,"작곡기 준비 실패: ","Composer setup failed: ")+displayError(e.getMessage());revision++;});}});}
     void drainForExit(Runnable done) {
+        unbindSession();
         playbackRequest++;
         if (capturing) poll(); // Keep a phrase already completed by native audio.
         if (capturing) cancelPhrase(); // Unfinished capture keeps the previous phrase.
@@ -100,7 +151,7 @@ final class ComposerSession {
         }))));
     }
     double[] state(){return state;}
-    boolean playing(){return state[1]>.5;}
+    boolean playing(){return binding!=null?binding.playing.getAsBoolean():state[1]>.5;}
     ComposerProject.Part part(){selectedPart=Math.max(0,Math.min(selectedPart,project.parts.size()-1));return project.parts.get(selectedPart);}
     String displayError(String value){
         if(!AppLanguage.english(context)||value==null)return value;
@@ -121,11 +172,16 @@ final class ComposerSession {
             default: return value;
         }
     }
-    void edit(Consumer<ComposerProject> change,boolean structure){if(restoreLocked())return;if(capturing){error=AppLanguage.text(context,"프레이즈 기록을 마친 뒤 편집하세요.","Finish recording the phrase before editing.");return;}if(structure&&playing()){error=AppLanguage.text(context,"일시정지 후 파트 구성을 편집하세요.","Pause playback before editing parts.");return;}
+    void edit(Consumer<ComposerProject> change,boolean structure){if(sessionEditingLocked()||restoreLocked())return;if(capturing){error=AppLanguage.text(context,"프레이즈 기록을 마친 뒤 편집하세요.","Finish recording the phrase before editing.");return;}if(structure&&playing()){error=AppLanguage.text(context,"일시정지 후 파트 구성을 편집하세요.","Pause playback before editing parts.");return;}
         comparison=null;
         try{String before=project.json().toString();try{change.accept(project);project.validate();}catch(Exception e){project=ComposerProject.read(new JSONObject(before));throw e;}store.checkpoint(ComposerProject.read(new JSONObject(before)));revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
     void persist(){projectChanged();queueSave(true);}
     private void queueSave(boolean draft){
+        if(binding!=null){
+            try{binding.sink.accept(ComposerProject.read(project.json()));draftSave.phase=SaveState.SAVED;draftSave.savedAt=System.currentTimeMillis();}
+            catch(Exception e){draftSave.phase=SaveState.FAILED;draftSave.failure=displayError(e.getMessage());error=draftSave.failure;}
+            return;
+        }
         ensureSaveProject();SaveState status=draft?draftSave:librarySave;
         long epoch=saveEpoch,request=++status.request;String id=project.id;
         status.phase=SaveState.SAVING;status.failure="";
@@ -144,20 +200,21 @@ final class ComposerSession {
         status.phase=SaveState.SAVED;status.savedAt=at;status.failure="";
         if(!draft){libraryDirty=false;message=AppLanguage.text(context,"내 반주에 저장했습니다.","Saved to My Backings.");nonEditingRevision();}
     }
-    void publish(int selected){if(ExitCoordinator.isExitRequested()||worker.isShutdown()||!ready)return;try{ComposerProject snapshot=ComposerProject.read(project.json());worker.execute(()->{try{ComposerTransport.Plan plan=new ComposerTransport().compile(snapshot,selected);if(!NativeComposer.publish(plan.events,plan.beats,plan.bar,plan.bpm,plan.key,plan.scale))throw new IOException(AppLanguage.text(context,"재생 계획 큐가 가득 찼습니다.","Playback plan queue is full."));}catch(Exception e){main.post(()->error=AppLanguage.text(context,"반주 준비 실패: ","Could not prepare backing: ")+displayError(e.getMessage()));}});}catch(Exception e){error=displayError(e.getMessage());}}
-    void play(){if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}int request=++playbackRequest;publish(-1);worker.execute(()->main.post(()->{if(ExitCoordinator.isExitRequested()||request!=playbackRequest)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));NativeAudio.playLocal(false);NativeComposer.transport(1);}));}
-    void pause(){playbackRequest++;NativeComposer.transport(2);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
-    void stop(){playbackRequest++;if(capturing)cancelPhrase();NativeComposer.transport(0);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
-    void voice(boolean on){if(restoreLocked())return;if(on&&ExitCoordinator.isExitRequested())return;if(on&&!YouTubePlayer.beforeNativePlayback())return;voiceOn=on;applyVoice();nonEditingRevision();}
+    void publish(int selected){if(binding!=null)return;final long generation=publishGeneration;if(ExitCoordinator.isExitRequested()||worker.isShutdown()||!ready)return;try{ComposerProject snapshot=ComposerProject.read(project.json());worker.execute(()->{if(generation!=publishGeneration)return;try{ComposerTransport.Plan plan=new ComposerTransport().compile(snapshot,selected);synchronized(this){if(generation!=publishGeneration)return;if(!NativeComposer.publish(plan.events,plan.beats,plan.bar,plan.bpm,plan.key,plan.scale))throw new IOException(AppLanguage.text(context,"재생 계획 큐가 가득 찼습니다.","Playback plan queue is full."));}}catch(Exception e){main.post(()->error=AppLanguage.text(context,"반주 준비 실패: ","Could not prepare backing: ")+displayError(e.getMessage()));}});}catch(Exception e){error=displayError(e.getMessage());}}
+    void play(){if(binding!=null){binding.play.run();return;}if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}int request=++playbackRequest;publish(-1);worker.execute(()->main.post(()->{if(ExitCoordinator.isExitRequested()||request!=playbackRequest)return;AudioService.composerRequested=true;context.startForegroundService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.PLAYBACK));NativeAudio.playLocal(false);NativeComposer.transport(1);}));}
+    void pause(){if(binding!=null){binding.pause.run();return;}playbackRequest++;NativeComposer.transport(2);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
+    void stop(){if(binding!=null){binding.stop.run();return;}playbackRequest++;if(capturing)cancelPhrase();NativeComposer.transport(0);AudioService.composerRequested=false;if(!ExitCoordinator.isExitRequested()&&AudioService.playbackActive)context.startService(new Intent(context,AudioService.class).putExtra("exitGeneration", ExitCoordinator.generation()).setAction(AudioService.COMPOSER_STOP));}
+    void voice(boolean on){if(binding!=null){error=AppLanguage.text(context,"세션 화면에서 목소리를 녹음하세요.","Record voice from the session screen.");return;}if(restoreLocked())return;if(on&&ExitCoordinator.isExitRequested())return;if(on&&!YouTubePlayer.beforeNativePlayback())return;voiceOn=on;applyVoice();nonEditingRevision();}
     void applyVoice(){VoiceInstrumentSettings s=project.voice;NativeComposer.voice(voiceOn,s.program,s.mode,s.octave,s.autoRange,s.snap,s.response,s.quality,s.rhythm,s.mixVoice,s.confidence,s.gate);}
-    void history(boolean redo){if(restoreLocked())return;if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 실행 취소하세요.","Finish recording before undoing.");return;}if((redo?store.redo:store.undo).isEmpty())return;comparison=null;try{project=store.history(project,redo);revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
+    void history(boolean redo){if(sessionEditingLocked()||restoreLocked())return;if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 실행 취소하세요.","Finish recording before undoing.");return;}if((redo?store.redo:store.undo).isEmpty())return;comparison=null;try{project=store.history(project,redo);revision++;persist();publish(-1);if(voiceOn)applyVoice();}catch(Exception e){error=displayError(e.getMessage());}}
     void save(){queueSave(false);}
-    void open(ComposerProject p){if(restoreLocked())return;if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 프로젝트를 여세요.","Finish recording before opening a project.");return;}comparison=null;stop();voice(false);project=p;saveProjectId="";ensureSaveProject();selectedPart=0;store.undo.clear();store.redo.clear();persist();publish(-1);revision++;}
+    void open(ComposerProject p){if(sessionLibraryBlocked()||restoreLocked())return;if(capturing){error=AppLanguage.text(context,"기록을 마친 뒤 프로젝트를 여세요.","Finish recording before opening a project.");return;}comparison=null;stop();voice(false);project=p;saveProjectId="";ensureSaveProject();selectedPart=0;store.undo.clear();store.redo.clear();persist();publish(-1);revision++;}
     void duplicate(){duplicate(project.name+AppLanguage.text(context," 복제"," Copy"));}
-    void duplicate(String name){int before=revision;edit(p->{p.id=UUID.randomUUID().toString();p.name=name;},true);if(revision!=before)save();}
+    void duplicate(String name){if(sessionLibraryBlocked())return;int before=revision;edit(p->{p.id=UUID.randomUUID().toString();p.name=name;},true);if(revision!=before)save();}
     boolean versionBusy,versionRestoreLock;
     private boolean restoreLocked(){if(!versionRestoreLock)return false;error=AppLanguage.text(context,"버전 복원을 마칠 때까지 잠시 기다려 주세요.","Please wait for the version restore to finish.");return true;}
     private <T> void versionTask(Callable<T> task,Consumer<T> success,Runnable completed) {
+        if(sessionLibraryBlocked()){if(completed!=null)completed.run();return;}
         if(ExitCoordinator.isExitRequested()||worker.isShutdown())return;
         if(capturing||versionBusy){error=AppLanguage.text(context,"기록 또는 버전 작업을 마친 뒤 다시 시도하세요.","Finish recording or the version operation first.");return;}
         ComposerProject expected=project;int expectedRevision=revision;versionBusy=true;
@@ -197,6 +254,7 @@ final class ComposerSession {
         PreparedRestore(ComposerProject project,ProjectVersions.Version backup){this.project=project;this.backup=backup;}
     }
     void restoreVersion(ProjectVersions.Version version,boolean asCopy,Runnable completed){
+        if(sessionLibraryBlocked()){if(completed!=null)completed.run();return;}
         if(capturing||versionBusy||!project.id.equals(version.projectId)){error=AppLanguage.text(context,"기록 또는 버전 작업 중이거나 다른 프로젝트의 버전입니다.","Recording or a version operation is active, or this version belongs to another project.");return;}
         if(ExitCoordinator.isExitRequested()||worker.isShutdown())return;
         try{
@@ -259,7 +317,7 @@ final class ComposerSession {
         ComposerProject.Part target=project.parts.get(index);
         return AppLanguage.text(context,"기록 대상: ","Recording target: ")+targetLabel(target,microphoneTrack(target));
     }
-    void recordPhrase(){if(restoreLocked())return;if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!voiceOn||!AudioService.active){error=AppLanguage.text(context,"목소리 악기를 먼저 켜세요.","Turn on the voice instrument first.");return;}if(capturing){cancelPhrase();return;}if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}try{
+    void recordPhrase(){if(binding!=null){error=AppLanguage.text(context,"세션 화면에서 목소리를 녹음하세요. 세션 편집 중 프레이즈 기록은 지원되지 않습니다.","Record voice from the session screen. Phrase capture is unavailable while editing a session.");return;}if(restoreLocked())return;if(ExitCoordinator.isExitRequested())return;if(!YouTubePlayer.beforeNativePlayback())return;if(!voiceOn||!AudioService.active){error=AppLanguage.text(context,"목소리 악기를 먼저 켜세요.","Turn on the voice instrument first.");return;}if(capturing){cancelPhrase();return;}if(!ready){error=AppLanguage.text(context,"음원을 준비하고 있습니다.","Preparing sounds.");return;}try{
         comparison=null;state=NativeComposer.state();
         boolean wasPlaying=playing();int actualPart=wasPlaying?(int)state[2]:selectedPart;
         if(actualPart<0||actualPart>=project.parts.size())throw new IOException(AppLanguage.text(context,"기록할 파트를 찾을 수 없습니다.","The recording part is unavailable."));

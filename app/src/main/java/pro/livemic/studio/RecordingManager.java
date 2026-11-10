@@ -15,21 +15,26 @@ public final class RecordingManager {
     public static String startError="";
     private static RecordingSyncProfiles.Profile savedSyncProfile;
     private static org.json.JSONArray savedEffects;
+    private static org.json.JSONObject sessionTarget,savedSessionTarget;
+    public static synchronized boolean startSession(Context c,int tempo,org.json.JSONObject target){
+        sessionTarget=target;
+        try{return start(c,tempo,false);}finally{sessionTarget=null;}
+    }
     public static synchronized boolean start(Context c,int tempo){return start(c,tempo,AudioService.youtubeSelected);}
     public static synchronized boolean start(Context c,int tempo,boolean microphoneOnly){
         startError="";
         if(active||NativeAudio.stats()[10]<.5f)return false;
         startError=TakeStorage.startProblem(c,false);if(!startError.isEmpty())return false;
-        context=c.getApplicationContext();bpm=tempo;savedRetainSources=TakeStorage.retainSources(c);
+        context=c.getApplicationContext();bpm=tempo;savedSessionTarget=sessionTarget;savedRetainSources=TakeStorage.retainSources(c);
         preparing=true;
         id=new SimpleDateFormat("yyyyMMdd_HHmmss_SSS",Locale.US).format(new Date())+"_"+UUID.randomUUID().toString().substring(0,8);TakeStore store=new TakeStore(context,false);
-        savedSyncProfile=RecordingSyncProfiles.current(c);savedSyncMs=microphoneOnly?0:savedSyncProfile.offsetMs;syncMs=savedSyncMs;
+        savedSyncProfile=RecordingSyncProfiles.current(c);savedSyncMs=microphoneOnly||sessionTarget!=null?0:savedSyncProfile.offsetMs;syncMs=savedSyncMs;
         savedEffects=new org.json.JSONArray();float[] defaults={1,.55f,.27f,2.2f,.14f,280,.25f,0,0,1,1,0,0,0,0,78,0,0,0,1};
         android.content.SharedPreferences effectValues=AudioRouting.studioPreferences(c);
         for(int i=0;i<20;i++)savedEffects.put((Object)Double.valueOf(effectValues.getFloat("p"+i,defaults[i])));
         try{RecordingIntegrity.writeState(store,id,new org.json.JSONObject().put("syncOffsetMs",savedSyncMs).put("microphoneOnly",microphoneOnly)
                 .put("syncProfileKey",savedSyncProfile.key).put("syncProfileConfirmed",savedSyncProfile.confirmed).put("syncProfileInherited",savedSyncProfile.inherited)
-                .put("sourceRetention",savedRetainSources?"retained":"not-requested").put("initialEffects",savedEffects));}
+                .put("sourceRetention",savedRetainSources?"retained":"not-requested").put("initialEffects",savedEffects).put("sessionTarget",sessionTarget==null?org.json.JSONObject.NULL:sessionTarget));}
         catch(Exception e){preparing=false;startError=AppLanguage.text(c,"녹음 복구 정보를 저장하지 못했습니다: ","Could not save recording recovery information: ")+e.getMessage();return false;}
         try{
         micOnly=microphoneOnly;NativeAudio.recordMicOnly(micOnly);NativeAudio.recordSync(savedSyncMs);practiceResult=null;extraWarning="";lastResult=null;paused=false;active=savedRetainSources?NativeAudio.beginRecordStems(store.file(id,".wav").getAbsolutePath(),store.file(id,".raw.wav").getAbsolutePath(),store.file(id,".fixed.wav").getAbsolutePath(),store.file(id,".vocal.wav").getAbsolutePath()):NativeAudio.beginRecord(store.file(id,".wav").getAbsolutePath());if(!active){NativeAudio.recordMicOnly(false);micOnly=false;if(store.file(id,".wav").length()<=44){RecordingIntegrity.cleanup(store,id);for(String suffix:RecordingIntegrity.SUFFIXES)if(store.file(id,suffix).length()<=44)store.file(id,suffix).delete();}}return active;
@@ -47,7 +52,7 @@ public final class RecordingManager {
         boolean editable=sources&&NativeAudio.recordSourcesEditable();
         if(savedRetainSources&&!sources){warning+=(warning.isEmpty()?"":"\n")+AppLanguage.text(context,"원음 분리 파일 저장에 문제가 있습니다. 원래 믹스와 남아 있는 원음 파일은 유지됩니다.","Source files could not be fully saved. The original mix and retained source files are kept.");}
         if(savedRetainSources&&!vocal)warning+=(warning.isEmpty()?"":"\n")+AppLanguage.text(context,"보컬 분리 파일을 저장하지 못했습니다. 최종 믹스와 남은 원음은 유지됩니다.","The vocal stem could not be saved. The final mix and remaining sources are retained.");
-        org.json.JSONObject extras=new org.json.JSONObject().put("sourceRetention",savedRetainSources?"retained":"not-requested")
+        org.json.JSONObject extras=new org.json.JSONObject().put("sourceRetention",savedRetainSources?"retained":"not-requested").put("sessionTarget",savedSessionTarget==null?org.json.JSONObject.NULL:savedSessionTarget)
                 .put("sourceVocalRetained",store.file(id,".vocal.wav").length()>44).put("vocalStemEditable",vocal&&sources)
                 .put("syncOffsetMs",savedSyncMs).put("microphoneOnly",savedMicOnly)
                 .put("syncProfileKey",savedSyncProfile.key).put("syncProfileConfirmed",savedSyncProfile.confirmed).put("syncProfileInherited",savedSyncProfile.inherited)

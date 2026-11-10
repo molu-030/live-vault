@@ -1,0 +1,21 @@
+Cache scheduling:
+- Once all requested pages are ready, each enabled reader blocks on a semaphore rather than waking every 20 ms.
+- Callback prefetch signals only when the requested 4096-frame page changes. An atomic pending bit coalesces notifications to at most one queued semaphore post.
+- The callback never waits on a semaphore. Control pause/close wakes the reader; paused readers park on the existing condition variable. EINTR is handled on the reader.
+- The production Engine host test waits for a cache-ready parked reader, verifies 40 ms with unchanged read/wakeup counters, verifies same-page callbacks do not wake it, exercises a callback page transition under allocation/mutex/fileIO instrumentation, then checks explicit page-cross refill, paused seek, resume, and concurrent legacy/session shutdown.
+
+Composer scheduling:
+- External timeline beat is still supplied per sample.
+- Voice-command draining, plan adoption, settings and solo scans run once per callback.
+- Backing all-notes-off runs on transport/seek transitions instead of every paused sample.
+
+Optional diagnostic command:
+  SESSION_BENCHMARK=1 scripts/test-session.sh
+
+Observed one unsanitized host run (400 callbacks x 256 frames):
+  legacy eight-voice composer: 79.46 ms
+  session eight cached looping WAV clips plus the same composer: 98.75 ms (1.24x)
+  paused legacy: 19.16 ms
+  paused session: 20.64 ms (1.08x)
+
+The diagnostic uses the real production Engine callback and cached float32 WAV clips. It isolates host callback computation with stubbed hardware; it is not a hardware performance, device latency, battery, scheduler, or Samsung S9 claim. Timings vary by host load. No timing threshold is a test assertion.

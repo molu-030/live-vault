@@ -36,6 +36,7 @@ class ComposerEngine {
     std::atomic<int> pending{-1},command{-1},voiceRevision{0};int appliedVoiceRevision=-1;
     double position=0,barLength=4,total=32,tempo=90;int rate=48000;uint64_t sample=0;
     std::atomic<float> gain[8],pan[8];std::atomic<bool> mute[8],solo[8],overrideTrack[8];float smoothGain[8]{},partGain[8]{},partPan[8]{};
+    bool anySoloSnapshot=false;
     int currentRhythm=0,heldRoot=-1,heldVelocity=90;int currentVoice=-1,voiceNotes[6]{},voiceCount=0,octaveOffset=0,voiceDegree=-1,voiceQuality=0;bool anchored=false,deferRhythm=false;
     std::array<uint64_t,6> onFrame{};std::array<int,6> onNote{};std::array<float,6> onVelocity{};int pendingStrings=0;
     std::atomic<bool> voiceEnabled{false},voiceMonitor{true},autoRange{false},snap{false},rhythm{false};
@@ -88,20 +89,23 @@ public:
             size_t count=std::min<size_t>(hop.size(),rate/100);if(microphone.available()<count){std::this_thread::sleep_for(std::chrono::milliseconds(1));continue;}microphone.pop(hop.data(),count);std::move(window.begin()+count,window.end(),window.begin());std::copy(hop.begin(),hop.begin()+count,window.end()-count);filled=std::min(2048,filled+int(count));was=true;if(filled<2048)continue;lm::Pitch p=lm::detectPitch(window.data(),2048,rate);level=p.rms;VoiceCommand c=tracker.process(p,response,confidence,gate);if(c.kind>=0&&!voiceCommands.push(c))overflow=true;
         }
     }
-    void render(float* accompaniment,float* instrument,float* countIn,int count){
+    void render(float* accompaniment,float* instrument,float* countIn,int count,bool external=false,double externalBeat=0,bool externalPlaying=false,bool externalBoundary=true){
         std::fill(accompaniment,accompaniment+count*2,0);std::fill(instrument,instrument+count*2,0);std::fill(countIn,countIn+count,0);if(!ready.load(std::memory_order_acquire))return;
-        int action=command.exchange(-1);if(action>=0){if(action==0||action==2){playing=false;silenceBacking();if(recordState){recordState=3;recording=3;}if(action==0){position=0;cursor=0;}}else{if(!playing)adopt();if(action==3){position=-barLength;cursor=0;}playing=true;}}
+        if(external){bool changed=playing.load()!=externalPlaying;if(playing&&!externalPlaying)silenceLive();if(externalBoundary)adopt();bool moved=externalBoundary&&std::abs(externalBeat-position)>tempo/(60.*rate)*1.5;if(changed||moved){silenceBacking();if(moved){cursor=0;if(selected>=0){auto& ev=plans[selected].events;while(cursor<ev.size()&&ev[cursor].beat<externalBeat){if(ev[cursor].type==2||ev[cursor].type==3)dispatch(ev[cursor]);cursor++;}}}}position=externalBeat;playing=externalPlaying;if(externalBoundary)command=-1;}
+        if(!external||externalBoundary){
+        int action=external?-1:command.exchange(-1);if(action>=0){if(action==0||action==2){playing=false;silenceBacking();if(recordState){recordState=3;recording=3;}if(action==0){position=0;cursor=0;}}else{if(!playing)adopt();if(action==3){position=-barLength;cursor=0;}playing=true;}}
         if(!playing)adopt();
         if(appliedVoiceRevision!=voiceRevision){appliedVoiceRevision=voiceRevision;silenceLive();anchored=false;tsf_channel_set_presetnumber(live,0,program,0);}
         VoiceCommand v;while(voiceCommands.pop(v)){if(!voiceEnabled)continue;if(v.kind==0){release();heldRoot=-1;inputNote=outputNote=-1;}else if(v.kind==1){int midi=map(v.midi);heldRoot=midi;heldVelocity=v.velocity;cents=mode==0?v.cents:0;expression=v.expression;if(mode==1&&rhythm){release();heldRoot=midi;deferRhythm=position>=0;}else trigger(midi,v.velocity);outputNote=midi;}else if(v.kind==2){expression=v.expression;cents=mode==0?v.cents:0;if(currentVoice>=0)capture(2,currentVoice,0);}}
         if(!voiceEnabled){silenceLive();inputNote=outputNote=-1;}
         int rc=recCommand.exchange(-1);if(rc==0){recordState=0;recording=0;}else if(rc==1){overflow=false;if(position<0){recStart=recOrigin=0;recEnd=total;}else{recOrigin=partStart;recStart=std::ceil((position+.00001)/barLength)*barLength;recEnd=partEnd;}if(recEnd>recStart){recordState=1;recording=1;}else{recordState=3;recording=3;}}
-        bool anySolo=false;for(int ch=0;ch<8;ch++)if(solo[ch])anySolo=true;
+        anySoloSnapshot=false;for(int ch=0;ch<8;ch++)if(solo[ch])anySoloSnapshot=true;
+        }
         for(int i=0;i<count;i++){
             if(playing){if(position>=0&&recordState==1&&position>=recStart){recordState=2;recording=2;if(currentVoice>=0)capture(1,currentVoice,90);}
                 if(recordState==2&&position>=recEnd){if(currentVoice>=0)capture(0,currentVoice,0);recordState=3;recording=3;}
-                if(position>=total){silenceBacking();position-=total;cursor=0;}
-                double previous=position-tempo/(60.*rate);if(position>=0&&(std::floor(position/barLength)>std::floor(previous/barLength)))adopt();
+                if(!external&&position>=total){silenceBacking();position-=total;cursor=0;}
+                double previous=position-tempo/(60.*rate);if(!external&&position>=0&&(std::floor(position/barLength)>std::floor(previous/barLength)))adopt();
                 if(selected>=0&&position>=0){auto& events=plans[selected].events;while(cursor<events.size()&&events[cursor].beat<=position){dispatch(events[cursor]);cursor++;}}
                 if(position<0){double phase=position-std::floor(position);countIn[i]=.1f*std::sin(2*lm::PI*1100*phase*60/tempo)*std::exp(-phase*80);}
             }
@@ -118,7 +122,7 @@ public:
                 }
             }
             for(int j=0;j<pendingStrings;j++)if(onFrame[j]<=sample){tsf_channel_note_on(live,0,onNote[j],onVelocity[j]);voiceNotes[voiceCount++]=onNote[j];onFrame[j]=UINT64_MAX;}
-            if(sample%32==0){for(int ch=0;ch<8;ch++){float target=(overrideTrack[ch]?gain[ch].load():partGain[ch])*(((overrideTrack[ch]&&mute[ch])||(anySolo&&!solo[ch]))?0:1);smoothGain[ch]+=(target-smoothGain[ch])*.15f;tsf_channel_set_volume(backing,ch,smoothGain[ch]);tsf_channel_set_pan(backing,ch,std::clamp(.5f+(overrideTrack[ch]?pan[ch].load():partPan[ch])*.5f,0.f,1.f));}tsf_channel_midi_control(live,0,11,int(expression*127));tsf_channel_set_pitchwheel(live,0,std::clamp(8192+int(cents/200*8192),0,16383));}
+            if(sample%32==0){for(int ch=0;ch<8;ch++){float target=(overrideTrack[ch]?gain[ch].load():partGain[ch])*(((overrideTrack[ch]&&mute[ch])||(anySoloSnapshot&&!solo[ch]))?0:1);smoothGain[ch]+=(target-smoothGain[ch])*.15f;tsf_channel_set_volume(backing,ch,smoothGain[ch]);tsf_channel_set_pan(backing,ch,std::clamp(.5f+(overrideTrack[ch]?pan[ch].load():partPan[ch])*.5f,0.f,1.f));}tsf_channel_midi_control(live,0,11,int(expression*127));tsf_channel_set_pitchwheel(live,0,std::clamp(8192+int(cents/200*8192),0,16383));}
             tsf_render_float(backing,accompaniment+i*2,1,0);tsf_render_float(live,instrument+i*2,1,0);
             if(playing)position+=tempo/(60.*rate);sample++;
         }beat=position;

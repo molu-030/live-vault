@@ -1,0 +1,2 @@
+PASS session exact 44.1/48k clocks, rate changes, pause/seek/stop/EOF, capture anchor, overlap, rejected publication retains plan
+PASS real callback session fixed-bed FX isolation, voice-only record bus, exact capture anchor, allocation/lock/fileIO=0; cache ready/page wake/seek/resume park; concurrent session/legacy stop serialized
