@@ -1,6 +1,6 @@
 # Live Vault 3.14.0 validation
 
-Final combined tasks `:app:testPersonalDebugUnitTest :app:assemblePersonalDebug` completed successfully. The final full run contains **410 tests across 62 classes**, with zero failures, errors or skipped tests. `java-tests.json` records per-class counts. Earlier target results are not added to this total.
+Final combined tasks `:app:testPersonalDebugUnitTest :app:assemblePersonalDebug` completed successfully. The final full run contains **412 tests across 62 classes**, with zero failures, errors or skipped tests. `java-tests.json` records per-class counts. Earlier target results are not added to this total.
 
 ## Scope and artifact verification
 
@@ -22,3 +22,5 @@ Root review also corrected queued exit saves and exact capture-target persistenc
 Clip positioning and track gain/pan/mute edits require paused or stopped playback. Recorded clips keep their original speed/pitch; BPM/key changes affect the composer. Voice-instrument phrase capture remains available in the independent composer, not while bound to a session editor. There is no automatic unreferenced-media cleanup, detailed audio-trim editor or time stretching.
 
 Actual Galaxy Tab S9 Ultra USB routing/reconnection, acoustic feedback, physical recording/round-trip latency, long-duration hardware stability, battery and thermal testing remain deferred by the user. Host tests, UI fixtures and APK linkage checks do not establish those measurements.
+
+Final ownership review found that an old unresolved session target could claim or stop an ordinary Live recording. Recording ownership now uses an immutable session-ID/token pair and an atomic checked stop. Two new integration regressions verify ordinary takes survive session exit and arming cancellation. The subsequent full412-test run and APK assembly passed.

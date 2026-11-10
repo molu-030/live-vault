@@ -16,16 +16,19 @@ public final class RecordingManager {
     private static RecordingSyncProfiles.Profile savedSyncProfile;
     private static org.json.JSONArray savedEffects;
     private static org.json.JSONObject sessionTarget,savedSessionTarget;
+    private static final class SessionOwner {final String sessionId,token;SessionOwner(org.json.JSONObject target){sessionId=target.optString("sessionId");token=target.optString("token");}}
+    private static volatile SessionOwner sessionOwner;
+    static boolean belongsToSession(String sessionId,String token){SessionOwner owner=sessionOwner;return active&&owner!=null&&owner.sessionId.equals(sessionId)&&owner.token.equals(token);}
+    static synchronized Result stopSession(String sessionId,String token,String warning)throws Exception{if(!belongsToSession(sessionId,token))return null;extraWarning=warning;return stop();}
     public static synchronized boolean startSession(Context c,int tempo,org.json.JSONObject target){
-        sessionTarget=target;
-        try{return start(c,tempo,false);}finally{sessionTarget=null;}
+        try{sessionTarget=new org.json.JSONObject(target.toString());return start(c,tempo,false);}catch(Exception e){startError=e.getMessage();return false;}finally{sessionTarget=null;}
     }
     public static synchronized boolean start(Context c,int tempo){return start(c,tempo,AudioService.youtubeSelected);}
     public static synchronized boolean start(Context c,int tempo,boolean microphoneOnly){
         startError="";
         if(active||NativeAudio.stats()[10]<.5f)return false;
         startError=TakeStorage.startProblem(c,false);if(!startError.isEmpty())return false;
-        context=c.getApplicationContext();bpm=tempo;savedSessionTarget=sessionTarget;savedRetainSources=TakeStorage.retainSources(c);
+        context=c.getApplicationContext();bpm=tempo;savedSessionTarget=sessionTarget;sessionOwner=savedSessionTarget==null?null:new SessionOwner(savedSessionTarget);savedRetainSources=TakeStorage.retainSources(c);
         preparing=true;
         id=new SimpleDateFormat("yyyyMMdd_HHmmss_SSS",Locale.US).format(new Date())+"_"+UUID.randomUUID().toString().substring(0,8);TakeStore store=new TakeStore(context,false);
         savedSyncProfile=RecordingSyncProfiles.current(c);savedSyncMs=microphoneOnly||sessionTarget!=null?0:savedSyncProfile.offsetMs;syncMs=savedSyncMs;

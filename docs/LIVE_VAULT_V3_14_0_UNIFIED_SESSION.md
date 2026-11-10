@@ -39,7 +39,7 @@ BPM·키 변경은 작곡기 반주에 적용된다. 이미 녹음된 오디오 
 
 최대 오디오 트랙 8개와 별도 작곡기 합성 반주, 클립 32개를 지원한다. 정밀 오디오 트리밍·타임 스트레치·녹음 오디오의 키 변환을 제공하는 DAW 편집기는 아니다. 재생 중 실시간 트랙 믹스 편집도 이번 범위에 포함하지 않는다.
 
-[네이티브 검증 기록](validation/session-native-2026-11-10/README.md)은 호스트에서 실행한 엔진·캐시·콜백 검사 근거이며 Android 실기기 검증이 아니다. Android View 레이아웃 검사는 412×893 및 1480×924 창, 한국어·영어 130% 글꼴, 최대 트랙·클립·긴 이름을 사용한다. 화면 렌더와 자동 검사가 실제 Galaxy Tab S9 Ultra의 오디오 지연·USB 경로·마이크 녹음을 검증한 것으로 해석하지 않는다. 실기기 검증은 보류 상태다. 최종 단일 전체 실행에서 **62개 클래스·410개 Java/UI 검사**가 실패·오류·건너뜀 없이 통과했고 개인용 Android APK 빌드가 성공했다. 기존 패키지·서명 인증서가 일치하며 3개 ABI의 JNI 82개 내보내기와 Oboe·공유 STL 연결을 확인했다. 결과·렌더·수정 내역은 [최종 검증 기록](validation/v3.14.0/README.md)에 보존했다.
+[네이티브 검증 기록](validation/session-native-2026-11-10/README.md)은 호스트에서 실행한 엔진·캐시·콜백 검사 근거이며 Android 실기기 검증이 아니다. Android View 레이아웃 검사는 412×893 및 1480×924 창, 한국어·영어 130% 글꼴, 최대 트랙·클립·긴 이름을 사용한다. 화면 렌더와 자동 검사가 실제 Galaxy Tab S9 Ultra의 오디오 지연·USB 경로·마이크 녹음을 검증한 것으로 해석하지 않는다. 실기기 검증은 보류 상태다. 최종 단일 전체 실행에서 **62개 클래스·412개 Java/UI 검사**가 실패·오류·건너뜀 없이 통과했고 개인용 Android APK 빌드가 성공했다. 기존 패키지·서명 인증서가 일치하며 3개 ABI의 JNI 82개 내보내기와 Oboe·공유 STL 연결을 확인했다. 결과·렌더·수정 내역은 [최종 검증 기록](validation/v3.14.0/README.md)에 보존했다.
 
 구현 근거: [세션 모델](../app/src/main/java/pro/livemic/studio/SessionProject.java), [저장·가져오기](../app/src/main/java/pro/livemic/studio/SessionStore.java), [전송·녹음·복구](../app/src/main/java/pro/livemic/studio/SessionController.java), [화면](../app/src/main/java/pro/livemic/studio/SessionScreen.java), [작곡기 연결](../app/src/main/java/pro/livemic/studio/ComposerSession.java), [레이아웃 검사](../app/src/test/java/pro/livemic/studio/SessionLayoutTest.java).
 
