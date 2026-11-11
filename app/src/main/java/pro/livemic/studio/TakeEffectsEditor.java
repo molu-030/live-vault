@@ -92,7 +92,7 @@ final class TakeEffectsEditor {
     }
     private void render(boolean save,boolean video){
         if(working||cancelled.get()||ExitCoordinator.isExitRequested())return;if(!save&&!prepareListening())return;
-        working(true);stage(0);float[] settings=values.clone();if(!save){a.stopPlayer();preview.delete();}
+        working(true);stage(0);float[] settings=values.clone();final int previewGeneration=a.libraryPreviewGeneration;if(!save){a.stopPlayer();preview.delete();}
         try{a.io.execute(()->{
             String error="";TakeAudioFiles.Saved saved=null;boolean ready=false;
             try{
@@ -104,7 +104,10 @@ final class TakeEffectsEditor {
             a.runOnUiThread(()->{if(a.isDestroyed()||ExitCoordinator.isExitRequested()){preview.delete();return;}working(false);
                 if(cancelled.get()){preview.delete();if(result!=null)a.showTab();return;}
                 if(result!=null){dialog.dismiss();a.toast(result.warning.isEmpty()?(result.video?a.tr("새 MP4와 WAV 복사본을 저장했습니다.","Saved new MP4 and WAV copies."):a.tr("새 효과 WAV 복사본을 저장했습니다.","Saved a new effects WAV copy.")):result.warning);a.showTab();}
-                else if(playable)a.play(preview);else a.toast(failure.isEmpty()?a.tr("처리하지 못했습니다. 원본은 유지됩니다.","Could not render. The original is retained."):failure);
+                else if(playable){
+                    if(a.activityVisible&&a.tab==4&&a.libraryFilter==0&&previewGeneration==a.libraryPreviewGeneration)a.play(preview);
+                    else preview.delete();
+                }else a.toast(failure.isEmpty()?a.tr("처리하지 못했습니다. 원본은 유지됩니다.","Could not render. The original is retained."):failure);
             });
         });}catch(java.util.concurrent.RejectedExecutionException e){working(false);a.toast(a.tr("종료 중에는 편집을 시작할 수 없습니다.","Cannot start editing while closing."));}
     }

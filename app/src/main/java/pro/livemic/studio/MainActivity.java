@@ -152,6 +152,7 @@ public class MainActivity extends Activity {
     CameraController camera;
     TextureView texture;
     File rawVideo, exportFile, playingFile;
+    int libraryPreviewGeneration;
     static final java.util.Set<String> finalizingVideoTakes = java.util.concurrent.ConcurrentHashMap.newKeySet();
     TakeStore store;
     MediaPlayer player;
@@ -756,6 +757,9 @@ public class MainActivity extends Activity {
     }
 
     void showTab() {
+        // A library refresh keeps playback; leaving its recordings view releases it.
+        if (renderedPage != null && renderedPage.tab == 4 && renderedPage.filter == 0
+                && (tab != 4 || libraryFilter != 0)) stopLibraryPreview();
         if (tab != 6 && effectComparison != null) {
             if (settingsLocked() || recordPermissionPending) finishEffectComparisonForRecording();
             else {
@@ -3474,6 +3478,11 @@ public class MainActivity extends Activity {
         updateTakePlaybackButtons();
     }
 
+    private void stopLibraryPreview() {
+        libraryPreviewGeneration++;
+        stopPlayer();
+    }
+
     void updateTakePlaybackButtons() {
         for (Map.Entry<String, StudioButton> entry : takePlayButtons.entrySet()) {
             boolean current = playingFile != null && entry.getKey().equals(playingFile.getAbsolutePath());
@@ -3717,6 +3726,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        // Invalidate in-flight effect previews too, so returning never resumes them.
+        stopLibraryPreview();
         if (diagnosticsRefresh != null) handler.removeCallbacks(diagnosticsRefresh);
         if (youtube == null) { super.onPause(); return; }
         youtube.pause();

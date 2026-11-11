@@ -1,0 +1,41 @@
+{
+  "version": "3.14.2-preview",
+  "versionCode": 39,
+  "package": "pro.livemic.studio.personal",
+  "bytes": 39941736,
+  "sha256": "ec88f052325162f93520349fc0812e6121480d5ebec7fef7d831109884af8ff4",
+  "certificateSha256": "6a61c39da7f13d3c7622c12068efd1e5bcb43bae2b7748821e2d2a9af169a139",
+  "abis": {
+    "arm64-v8a": {
+      "linkedLibraries": [
+        "liblivemic.so",
+        "liboboe.so",
+        "libc++_shared.so"
+      ],
+      "allDeclaredJniMethodsVerified": true
+    },
+    "armeabi-v7a": {
+      "linkedLibraries": [
+        "liblivemic.so",
+        "liboboe.so",
+        "libc++_shared.so"
+      ],
+      "allDeclaredJniMethodsVerified": true
+    },
+    "x86_64": {
+      "linkedLibraries": [
+        "liblivemic.so",
+        "liboboe.so",
+        "libc++_shared.so"
+      ],
+      "allDeclaredJniMethodsVerified": true
+    }
+  },
+  "allDeclaredJniMethods": {
+    "NativeAudio": 52,
+    "NativeComposer": 11,
+    "NativeHarmony": 11,
+    "NativeSession": 8
+  },
+  "allDeclaredJniTotal": 82
+}
