@@ -523,12 +523,18 @@ final class StudioPlaybackLine extends View {
     boolean dragging;
     final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     final Seek listener;
+    final String accessibilityLabel;
 
     StudioPlaybackLine(Context c, Seek listener) {
+        this(c, AppLanguage.text(c, "반주 재생 위치", "Backing playback position"), listener);
+    }
+
+    StudioPlaybackLine(Context c, String accessibilityLabel, Seek listener) {
         super(c);
         this.listener = listener;
+        this.accessibilityLabel = accessibilityLabel;
         setFocusable(true);
-        setContentDescription(AppLanguage.text(c, "반주 재생 위치", "Backing playback position"));
+        setContentDescription(accessibilityLabel);
     }
 
     @Override
@@ -545,8 +551,9 @@ final class StudioPlaybackLine extends View {
     }
 
     void change(float value) {
+        if (!isEnabled() || Float.isNaN(value) || Float.isInfinite(value)) return;
         progress = Math.max(0, Math.min(1, value));
-        setContentDescription(AppLanguage.text(getContext(), "반주 재생 위치 ", "Backing playback position ") + Math.round(progress * 100) + "%");
+        setContentDescription(accessibilityLabel + " " + Math.round(progress * 100) + "%");
         listener.seek(progress);
         invalidate();
     }
@@ -569,6 +576,7 @@ final class StudioPlaybackLine extends View {
                 change((event.getX() - 7 * d) / Math.max(1, getWidth() - 14 * d));
                 return true;
             case MotionEvent.ACTION_UP:
+                change((event.getX() - 7 * d) / Math.max(1, getWidth() - 14 * d));
                 dragging = false;
                 getParent().requestDisallowInterceptTouchEvent(false);
                 performClick();

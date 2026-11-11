@@ -3,6 +3,10 @@ package pro.livemic.studio;
 import android.app.Dialog;
 import android.media.MediaPlayer;
 import android.view.View;
+import android.view.MotionEvent;
+import android.os.Bundle;
+import android.graphics.Rect;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Button;
 import java.io.File;
 import java.util.concurrent.CountDownLatch;
@@ -58,7 +62,7 @@ public class LibraryPlaybackNavigationTest {
         if(a.drawerPopup!=null)a.drawerPopup.dismiss();a.stopPlayer();a.handler.removeCallbacksAndMessages(null);
         a.youtube.destroy();a.io.shutdown();a.composer.worker.shutdownNow();
         AudioService.active=AudioService.playbackActive=AudioService.composerRequested=false;RecordingManager.active=false;
-        AppLanguage.set(a,false);StudioScreenshotTest.Audio.supplied=null;
+        AppLanguage.set(a,false);RuntimeEnvironment.setFontScale(1f);StudioScreenshotTest.Audio.supplied=null;
     }
     MediaPlayer startPreview() {
         Button play=a.takePlayButtons.get(wav.getAbsolutePath());assertNotNull(play);play.performClick();
@@ -95,6 +99,74 @@ public class LibraryPlaybackNavigationTest {
         a.chooseTab(0);a.onPause();cleared(previous);
         assertTrue(AudioService.active);assertTrue(AudioService.playbackActive);assertTrue(AudioService.composerRequested);assertTrue(RecordingManager.active);
         assertTrue(StudioScreenshotTest.Audio.localPlayCalls.isEmpty());assertTrue(StudioScreenshotTest.Composer.transportCalls.isEmpty());
+    }
+    StudioPlaybackLine seekLine() {
+        StudioPlaybackLine line=a.takePlaybackLines.get(wav.getAbsolutePath());assertNotNull(line);return line;
+    }
+    void touch(StudioPlaybackLine line,int action,float fraction) {
+        line.layout(0,0,400,48);
+        MotionEvent event=MotionEvent.obtain(0,0,action,7+386*fraction,24,0);
+        assertTrue(line.onTouchEvent(event));event.recycle();
+    }
+    @Test public void tapAndDragSeekPlayingAudioAndTickDoesNotFightTheGesture() {
+        MediaPlayer preview=startPreview();StudioPlaybackLine line=seekLine();assertEquals(View.VISIBLE,line.getVisibility());
+        touch(line,MotionEvent.ACTION_DOWN,.25f);ShadowLooper.idleMainLooper();
+        assertEquals(2500,preview.getCurrentPosition());assertTrue(preview.isPlaying());
+        touch(line,MotionEvent.ACTION_MOVE,.73f);ShadowLooper.idleMainLooper();
+        assertEquals(7300,preview.getCurrentPosition());assertTrue(line.dragging);
+        preview.seekTo(1000);ShadowLooper.idleMainLooper();a.updateTakePlaybackProgress();
+        assertEquals(.73f,line.progress,.001f);
+        touch(line,MotionEvent.ACTION_UP,.81f);ShadowLooper.idleMainLooper();a.updateTakePlaybackProgress();assertFalse(line.dragging);
+        assertEquals(8100,preview.getCurrentPosition());assertEquals(.81f,line.progress,.001f);
+    }
+    @Test public void pausedAccessibilitySeekUpdatesTimeImmediatelyAndRefreshRebinds() {
+        MediaPlayer preview=startPreview();a.play(wav);StudioPlaybackLine line=seekLine();
+        Bundle args=new Bundle();args.putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.6f);
+        assertTrue(line.performAccessibilityAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args));
+        assertEquals("Paused · 00:06 / 00:10",a.takePlaybackStatus.get(wav.getAbsolutePath()).getText().toString());
+        ShadowLooper.idleMainLooper();assertEquals(6000,preview.getCurrentPosition());assertFalse(preview.isPlaying());
+        a.showTab();assertNotSame(line,seekLine());assertEquals(.6f,seekLine().progress,.001f);
+        assertEquals(View.VISIBLE,seekLine().getVisibility());assertFalse(preview.isPlaying());
+        line.change(.2f);ShadowLooper.idleMainLooper();assertEquals(6000,preview.getCurrentPosition());
+    }
+    @Test public void seekClampsBoundsRejectsInvalidFractionsAndNeverStartsStoppedAudio() {
+        MediaPlayer preview=startPreview();a.play(wav);int generation=a.takePlaybackViewGeneration;
+        a.seekTake(wav,generation,-2);ShadowLooper.idleMainLooper();assertEquals(0,preview.getCurrentPosition());
+        a.seekTake(wav,generation,2);ShadowLooper.idleMainLooper();assertEquals(10000,preview.getCurrentPosition());assertFalse(preview.isPlaying());
+        a.seekTake(wav,generation,Float.NaN);a.seekTake(wav,generation,Float.POSITIVE_INFINITY);
+        ShadowLooper.idleMainLooper();assertEquals(10000,preview.getCurrentPosition());
+        StudioPlaybackLine line=seekLine();a.stopPlayer();line.change(.5f);assertNull(a.player);assertEquals(View.GONE,line.getVisibility());
+    }
+    @Test public void seekIsBlockedDuringRecordingCountdownAndAfterChangingFileOrPage()throws Exception {
+        MediaPlayer preview=startPreview();a.play(wav);int generation=a.takePlaybackViewGeneration;StudioPlaybackLine stale=seekLine();
+        RecordingManager.active=true;a.updateTakePlaybackProgress();assertFalse(stale.isEnabled());
+        a.seekTake(wav,generation,.5f);ShadowLooper.idleMainLooper();assertEquals(0,preview.getCurrentPosition());
+        RecordingManager.active=false;
+        java.lang.reflect.Field field=AudioService.class.getDeclaredField("countdown");field.setAccessible(true);
+        RecordingCountdown countdown=(RecordingCountdown)field.get(null);countdown.arm(3,0);
+        a.seekTake(wav,generation,.5f);a.updateTakePlaybackProgress();assertFalse(stale.isEnabled());
+        ShadowLooper.idleMainLooper();assertEquals(0,preview.getCurrentPosition());countdown.cancel();a.updateTakePlaybackProgress();
+        File other=a.store.file("other-seek-preview",".wav");TakeSourcesTest.wav(other,false,2);
+        ShadowMediaPlayer.addMediaInfo(DataSource.toDataSource(other.getAbsolutePath()),new ShadowMediaPlayer.MediaInfo(10000,0));
+        a.play(other);MediaPlayer current=a.player;stale.change(.5f);ShadowLooper.idleMainLooper();assertEquals(0,current.getCurrentPosition());
+        a.chooseTab(0);cleared(current);stale.change(.8f);assertNull(a.player);
+    }
+    @Test @Config(sdk=35,qualifiers="w412dp-h893dp-mdpi") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void renderPhoneKoreanSeekAtLargeFont()throws Exception { renderSeekCapture(false,412,893,"phone-ko-large.png"); }
+    @Test @Config(sdk=35,qualifiers="w1280dp-h800dp-land-mdpi") @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void renderTabletEnglishSeekAtLargeFont()throws Exception { renderSeekCapture(true,1280,800,"tablet-en-large.png"); }
+    void renderSeekCapture(boolean english,int width,int height,String name)throws Exception {
+        RuntimeEnvironment.setFontScale(1.3f);AppLanguage.set(a,english);a.showTab();startPreview();a.play(wav);
+        seekLine().change(.6f);ShadowLooper.idleMainLooper();a.updateTakePlaybackProgress();
+        a.root.measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(height,View.MeasureSpec.EXACTLY));
+        a.root.layout(0,0,width,height);
+        Rect bounds=StudioScreenshotTest.bounds(a,seekLine());
+        if(bounds.bottom>a.pageScroll.getBottom())a.pageScroll.scrollBy(0,bounds.bottom-a.pageScroll.getBottom()+16);
+        File out=new File(System.getProperty("user.dir"),"build/studio-screenshots/library-seek");out.mkdirs();
+        StudioScreenshotTest.capture(a,width,height,new File(out,name),false);
+        bounds=StudioScreenshotTest.bounds(a,seekLine());assertEquals(48,seekLine().getHeight());
+        assertTrue("seek stays within scroll viewport",bounds.top>=a.pageScroll.getTop()&&bounds.bottom<=a.pageScroll.getBottom());
+        assertTrue("seek leaves gesture edge space",bounds.left>=16&&bounds.right<=width-16);
     }
     void startEditorRender(String label)throws Exception {
         a.takeEffectsEditor=new TakeEffectsEditor(a,take);a.takeEffectsEditor.show();

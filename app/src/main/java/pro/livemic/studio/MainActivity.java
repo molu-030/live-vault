@@ -158,6 +158,8 @@ public class MainActivity extends Activity {
     MediaPlayer player;
     final Map<String, StudioButton> takePlayButtons = new HashMap<>();
     final Map<String, TextView> takePlaybackStatus = new HashMap<>();
+    final Map<String, StudioPlaybackLine> takePlaybackLines = new HashMap<>();
+    int takePlaybackViewGeneration;
     boolean testActive = false;
 
     @Override
@@ -786,6 +788,8 @@ public class MainActivity extends Activity {
         outputButton = null;
         takePlayButtons.clear();
         takePlaybackStatus.clear();
+        takePlaybackLines.clear();
+        takePlaybackViewGeneration++;
         content = page;
         page.maxContentWidthDp = tabletLandscape() && (tab == 1 || tab == 2 || tab == 4 || tab == 5 || tab == 6 || tab == 9 || tab == 10) ? 880 : 0;
         page.flexible(null, 0, 0);
@@ -2646,6 +2650,15 @@ public class MainActivity extends Activity {
                 playback.setVisibility(View.GONE);
                 takePlaybackStatus.put(audio.getAbsolutePath(), playback);
                 card.addView(playback);
+                int viewGeneration = takePlaybackViewGeneration;
+                StudioPlaybackLine seek = new StudioPlaybackLine(this,
+                        tr("테이크 재생 위치", "Take playback position"),
+                        fraction -> seekTake(audio, viewGeneration, fraction));
+                seek.setVisibility(View.GONE);
+                LinearLayout.LayoutParams seekParams = new LinearLayout.LayoutParams(-1, dp(48));
+                seekParams.leftMargin = seekParams.rightMargin = dp(StudioTheme.SPACE_8);
+                card.addView(seek, seekParams);
+                takePlaybackLines.put(audio.getAbsolutePath(), seek);
             }
             if (j.has("practice")) {
                 JSONObject pr = j.optJSONObject("practice");
@@ -3188,19 +3201,7 @@ public class MainActivity extends Activity {
                     playerLine.invalidate();
                 }
             }
-            if (player != null && playingFile != null) {
-                TextView playback = takePlaybackStatus.get(playingFile.getAbsolutePath());
-                if (playback != null) {
-                    try {
-                        playback.setText(
-                                (player.isPlaying() ? tr("재생 중 · ", "Playing · ") : tr("일시정지 · ", "Paused · "))
-                                        + formatTime(player.getCurrentPosition() / 1000.0)
-                                        + " / " + formatTime(player.getDuration() / 1000.0)
-                        );
-                    } catch (IllegalStateException ignored) {
-                    }
-                }
-            }
+            updateTakePlaybackProgress();
             if (levelText != null) {
                 float db = 20 * (float) Math.log10(Math.max(.00001f, s[3]));
                 levelText.setText(s[3] > .00001 ? String.format(Locale.US, "%.0f dB", db) : "— dB");
@@ -3496,10 +3497,57 @@ public class MainActivity extends Activity {
                             : tr("테이크 재생", "Play take")
             );
             TextView st = takePlaybackStatus.get(entry.getKey());
-            if (st != null) {
-                st.setVisibility(current ? View.VISIBLE : View.GONE);
-                if (current) st.setText(active ? tr("재생 중", "Playing") : tr("일시정지", "Paused"));
+            if (st != null) st.setVisibility(current ? View.VISIBLE : View.GONE);
+            StudioPlaybackLine seek = takePlaybackLines.get(entry.getKey());
+            if (seek != null) seek.setVisibility(current ? View.VISIBLE : View.GONE);
+        }
+        updateTakePlaybackProgress();
+    }
+
+    void seekTake(File file, int viewGeneration, float fraction) {
+        if (exiting() || tab != 4 || libraryFilter != 0 || viewGeneration != takePlaybackViewGeneration
+                || player == null || !file.equals(playingFile) || RecordingManager.active || AudioService.waiting()
+                || Float.isNaN(fraction) || Float.isInfinite(fraction)) return;
+        try {
+            int duration = player.getDuration();
+            if (duration <= 0) return;
+            int position = Math.round(Math.max(0f, Math.min(1f, fraction)) * duration);
+            player.seekTo(position);
+            // Show the requested position immediately, including while paused.
+            showTakePlaybackProgress(position, duration);
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    void updateTakePlaybackProgress() {
+        if (player == null || playingFile == null) return;
+        try {
+            StudioPlaybackLine seek = takePlaybackLines.get(playingFile.getAbsolutePath());
+            int duration = player.getDuration();
+            boolean canSeek = !RecordingManager.active && !AudioService.waiting() && duration > 0;
+            if (seek != null) {
+                seek.setEnabled(canSeek);
+                seek.setAlpha(canSeek ? 1f : .45f);
+                if (seek.dragging && canSeek) return;
             }
+            showTakePlaybackProgress(player.getCurrentPosition(), duration);
+        } catch (IllegalStateException ignored) {
+        }
+    }
+
+    private void showTakePlaybackProgress(int position, int duration) {
+        if (player == null || playingFile == null) return;
+        String path = playingFile.getAbsolutePath();
+        TextView status = takePlaybackStatus.get(path);
+        if (status != null) status.setText(
+                (player.isPlaying() ? tr("재생 중 · ", "Playing · ") : tr("일시정지 · ", "Paused · "))
+                        + formatTime(position / 1000.0) + " / " + formatTime(duration / 1000.0));
+        StudioPlaybackLine seek = takePlaybackLines.get(path);
+        if (seek != null) {
+            seek.progress = duration > 0 ? Math.max(0f, Math.min(1f, (float) position / duration)) : 0f;
+            seek.setContentDescription(seek.accessibilityLabel + " " + formatTime(position / 1000.0)
+                    + " / " + formatTime(duration / 1000.0));
+            seek.invalidate();
         }
     }
 
