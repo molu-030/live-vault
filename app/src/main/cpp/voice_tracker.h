@@ -15,7 +15,20 @@ public:
     void reset(){current=candidate=-1;count=quiet=0;lastLevel=trough=0;retriggerCooldown=0;}
     VoiceCommand process(lm::Pitch p,int response,float confidence,float gate){
         VoiceCommand result;result.kind=-1;
-        if(p.frequency<=0||p.confidence<confidence||p.rms<gate){if(++quiet>=2&&current>=0){result.kind=0;result.input=current;current=-1;}candidate=-1;count=0;lastLevel=p.rms;trough=p.rms;return result;}
+        int quietLimit = (response == 0) ? 2 : 5;
+        bool nearCurrent = false;
+        if (current >= 0 && p.frequency > 0) {
+            float pitchCheck = 69.f + 12.f * std::log2(p.frequency / 440.f);
+            if (std::abs(pitchCheck - current) < 1.2f) {
+                nearCurrent = true;
+            }
+        }
+        float reqConf = nearCurrent ? confidence * 0.82f : confidence;
+        float reqGate = nearCurrent ? gate * 0.55f : gate;
+        if(p.frequency<=0||p.confidence<reqConf||p.rms<reqGate){
+            if(++quiet>=quietLimit&&current>=0){result.kind=0;result.input=current;current=-1;}
+            candidate=-1;count=0;lastLevel=p.rms;trough=p.rms;return result;
+        }
         quiet=0;float pitch=69+12*std::log2(p.frequency/440);int midi=int(std::lround(pitch));
         // Keep the sounding note through the +/-50-cent rounding boundary during vibrato.
         if(current>=0&&std::abs(pitch-current)<.7f)midi=current;

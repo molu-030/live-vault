@@ -1,0 +1,23 @@
+PASS: local seek bounds, invalid input, latest request and clearing
+PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail
+PASS: stereo Haas echo and delay modulation stability
+PASS: noise reduction suppresses quiet signal while preserving voiced signal
+PASS: silence stability, growing-tone suppression, overload mute and explicit reset
+PASS: captured stereo gain, underflow silence, disabled capture drain, fresh-session isolation
+PASS: target-relative accuracy, octave errors, boundary, silence and confidence gate
+44100 Hz: third 3097.89 fifth 3033.09 input 6.84
+48000 Hz: third 3369.10 fifth 3318.08 input 7.61
+PASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence
+PASS: clearing solo preserves volume, pan and mute
+PASS: 44100Hz immediate mute ends at next part
+PASS: 48000Hz immediate mute ends at next part
+PASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence
+PASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence
+PASS: immediate/3/5/10-second deadlines, cancellation, rearm, duplicate and invalid requests
+/tmp/livemic-arrangement/before-0.wav: 940800 frames, energy=28605.9
+/tmp/livemic-arrangement/before-6.wav: 705600 frames, energy=18475.6
+/tmp/livemic-arrangement/before-5.wav: 940800 frames, energy=28217.6
+/tmp/livemic-arrangement/after-0.wav: 940800 frames, energy=21736.3
+/tmp/livemic-arrangement/after-6.wav: 705600 frames, energy=12481.3
+/tmp/livemic-arrangement/after-5.wav: 940800 frames, energy=24759.5
+PASS: Java/native guitar voicings for 132 root/quality combinations

@@ -1,0 +1,4 @@
+Verified signed personal APK: applicationId pro.livemic.studio.personal, versionCode 33, versionName 3.10.0-preview.
+Existing signing certificate SHA-256 matches artifact.json.
+New recording/source/recovery JNI exports verified: arm64-v8a, armeabi-v7a, x86_64.
+Published standard APK SHA-256 unchanged: 3ef89e3193c8235bc23080850b6eb06fc04ecba62ca35da20bfb89ac3b9e5732

@@ -1,0 +1,14 @@
+growth sr=44100 hz=250 count=1 muted=0 energy_ratio=0.0160374
+growth sr=44100 hz=400 count=1 muted=0 energy_ratio=0.0147926
+growth sr=44100 hz=1500 count=1 muted=0 energy_ratio=0.014466
+growth sr=44100 hz=6000 count=1 muted=0 energy_ratio=0.014408
+repeat sr=44100 cycle=1 count=1 muted=0
+repeat sr=44100 cycle=2 count=1 muted=0
+repeat sr=44100 cycle=3 count=1 muted=1
+growth sr=48000 hz=250 count=1 muted=0 energy_ratio=0.0169774
+growth sr=48000 hz=400 count=1 muted=0 energy_ratio=0.0145219
+growth sr=48000 hz=1500 count=1 muted=0 energy_ratio=0.0144042
+growth sr=48000 hz=6000 count=1 muted=0 energy_ratio=0.0144038
+repeat sr=48000 cycle=1 count=1 muted=0
+repeat sr=48000 cycle=2 count=1 muted=0
+repeat sr=48000 cycle=3 count=1 muted=1

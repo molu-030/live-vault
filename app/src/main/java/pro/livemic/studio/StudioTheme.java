@@ -31,7 +31,40 @@ final class StudioTheme {
     static final int DANGER = 0xffea6b70;
     static final int BORDER = 0xff2b2e33;
 
+    // Material 3 spacing/type roles with the studio's 12dp rounded-square shape.
+    static final int SPACE_4=4,SPACE_8=8,SPACE_12=12,SPACE_16=16,SPACE_24=24,SPACE_32=32;
+    static final int CARD_PADDING=SPACE_16,CARD_RADIUS=12,BUTTON_RADIUS=12,TOUCH_TARGET=48;
+    static final int BUTTON_PADDING_HORIZONTAL=SPACE_16,BUTTON_PADDING_VERTICAL=SPACE_12;
+    static final int TYPE_LABEL=12,TYPE_BODY=14,TYPE_TITLE=16,TYPE_HEADLINE=20,TYPE_DISPLAY=24;
+    static final int CONTROL_BORDER=0xff35383e,DANGER_CONTAINER=0xff2b161b,DANGER_BORDER=0xffa8424d;
+
     private static Typeface body, medium, bold, mono;
+
+    static int typeSize(int requested) {
+        if(requested<=TYPE_LABEL)return TYPE_LABEL;
+        if(requested<=TYPE_BODY)return TYPE_BODY;
+        if(requested<=TYPE_TITLE)return TYPE_TITLE;
+        if(requested<=TYPE_HEADLINE)return TYPE_HEADLINE;
+        return TYPE_DISPLAY;
+    }
+
+    static int lineHeightSp(int requested) {
+        switch(typeSize(requested)){
+            case TYPE_LABEL:return 16;
+            case TYPE_BODY:return 20;
+            case TYPE_TITLE:return 24;
+            case TYPE_HEADLINE:return 28;
+            default:return 32;
+        }
+    }
+
+    static void applyTypography(TextView view,int requested) {
+        int size=typeSize(requested);
+        view.setTextSize(size);
+        view.setIncludeFontPadding(false);
+        view.setLineHeight(Math.max(Math.round(sp(view.getContext(),lineHeightSp(size))),
+                view.getPaint().getFontMetricsInt().descent-view.getPaint().getFontMetricsInt().ascent));
+    }
 
     static Typeface body(Context c) {
         if (body == null) body = c.getResources().getFont(R.font.studio_sans);
@@ -67,7 +100,7 @@ final class StudioTheme {
 
     static GradientDrawable background(Context c, int color, int radius) {
         int stroke = 0;
-        if (color == RAISED) stroke = 0xff35383e;
+        if (color == RAISED) stroke = CONTROL_BORDER;
         else if (color == SURFACE) stroke = BORDER;
         else if (color == LCD_BG) stroke = LCD_BORDER;
         else if (color == FINE_BG) stroke = FINE_BORDER;
@@ -89,12 +122,10 @@ final class StudioTheme {
     static TextView text(Context c, String value, int size, int color) {
         TextView t = new TextView(c);
         t.setText(value);
-        t.setTextSize(size);
         t.setTextColor(color);
         t.setTypeface(body(c));
-        t.setIncludeFontPadding(false);
+        applyTypography(t,size);
         t.setFontFeatureSettings("tnum");
-        t.setLineSpacing(dp(c, 3), 1);
         return t;
     }
 
@@ -120,7 +151,7 @@ final class StudioTheme {
         );
         b.glyph(glyph);
         b.setContentDescription(description);
-        b.setPadding(dp(c, 12), 0, dp(c, 12), 0);
+        b.setPadding(dp(c, SPACE_12), 0, dp(c, SPACE_12), 0);
         return b;
     }
 
@@ -133,9 +164,9 @@ final class StudioTheme {
     static LinearLayout card(Context c) {
         LinearLayout l = new LinearLayout(c);
         l.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(c, 12);
+        int pad = dp(c, CARD_PADDING);
         l.setPadding(pad, pad, pad, pad);
-        l.setBackground(background(c, SURFACE, 10, BORDER));
+        l.setBackground(background(c, SURFACE, CARD_RADIUS, BORDER));
         return l;
     }
 }

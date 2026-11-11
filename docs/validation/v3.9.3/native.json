@@ -1,0 +1,147 @@
+{
+  "version": "3.9.3",
+  "scope": "host native synthetic tests; not device verification",
+  "timestamp_utc": "2026-11-08T08:26:18.722061+00:00",
+  "source_changes_during_validation": false,
+  "gradle_invoked": false,
+  "results": [
+    {
+      "name": "native",
+      "command": "bash scripts/test-native.sh",
+      "exit_code": 0,
+      "output": "PASS: local seek bounds, invalid input, latest request and clearing\nPASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail\nPASS: stereo Haas echo and delay modulation stability\nPASS: noise reduction suppresses quiet signal while preserving voiced signal\nPASS: silence stability, growing-tone suppression, overload mute and explicit reset\nPASS: captured stereo gain, underflow silence, disabled capture drain, fresh-session isolation\n"
+    },
+    {
+      "name": "composer",
+      "command": "bash scripts/test-composer.sh",
+      "exit_code": 0,
+      "output": "PASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence\nPASS: live chord hip-hop rhythm index8 and invalid-index fallback, fixed allocation\nPASS: clearing solo preserves volume, pan and mute\nPASS: 44100Hz immediate mute ends at next part\nPASS: 48000Hz immediate mute ends at next part\nPASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\nPASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\n"
+    },
+    {
+      "name": "feedback",
+      "command": "bash scripts/test-feedback.sh",
+      "exit_code": 0,
+      "output": "PASS: feedback frequency coverage, staged stereo gain, repeated incidents, benign audio, stereo latch/reset, routes and invalid inputs\n"
+    },
+    {
+      "name": "harmony",
+      "command": "bash scripts/test-harmony.sh",
+      "exit_code": 0,
+      "output": "44100 Hz: third 3097.89 fifth 3033.09 input 6.84\n48000 Hz: third 3369.10 fifth 3318.08 input 7.61\n"
+    },
+    {
+      "name": "resampler optimized compile",
+      "command": "c++ -std=c++17 -O2 -Wall -Wextra tests/input_resampler_test.cpp -o <temporary-test-dir>/input-resampler-opt",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "resampler optimized",
+      "command": "<temporary-test-dir>/input-resampler-opt",
+      "exit_code": 0,
+      "output": "PASS: stereo short reads zero-fill; fixed FIFO 44.1/48kHz continuous fractional conversion and resets\n"
+    },
+    {
+      "name": "resampler ASan UBSan compile",
+      "command": "c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all tests/input_resampler_test.cpp -o <temporary-test-dir>/input-resampler-sanitized",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "resampler ASan UBSan",
+      "command": "<temporary-test-dir>/input-resampler-sanitized",
+      "exit_code": 0,
+      "output": "PASS: stereo short reads zero-fill; fixed FIFO 44.1/48kHz continuous fractional conversion and resets\n"
+    },
+    {
+      "name": "composer ASan UBSan compile",
+      "command": "c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -pthread tests/composer_native_test.cpp -o <temporary-test-dir>/composer-sanitized",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "composer full sanitizers vendor diagnostic",
+      "command": "<temporary-test-dir>/composer-sanitized app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2",
+      "exit_code": 1,
+      "output": "tests/../app/src/main/cpp/vendor/tsf.h:627:79: runtime error: left shift of negative value -1\n"
+    },
+    {
+      "name": "composer ASan UBSan excluding existing vendor shift compile",
+      "command": "c++ -std=c++17 -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -fno-sanitize=shift -pthread tests/composer_native_test.cpp -o <temporary-test-dir>/composer-sanitized-no-shift",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "composer ASan UBSan excluding existing vendor shift",
+      "command": "<temporary-test-dir>/composer-sanitized-no-shift app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2",
+      "exit_code": 0,
+      "output": "PASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence\nPASS: live chord hip-hop rhythm index8 and invalid-index fallback, fixed allocation\nPASS: clearing solo preserves volume, pan and mute\nPASS: 44100Hz immediate mute ends at next part\nPASS: 48000Hz immediate mute ends at next part\nPASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\nPASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\n"
+    }
+  ],
+  "status": "passed_vendor_ubsan_diagnostic_resolved",
+  "previous_vendor_diagnostic": "Full strict UBSan halts at app/src/main/cpp/vendor/tsf.h:627:79: left shift of negative value -1 during soundfont loading. Existing vendor signed-shift behavior; vendor unchanged. Composer ASan/UBSan is also run with shift checks excluded to validate current native cases independently. The expression amount->shortAmount << 15 uses a signed negative operand in GEN_UINT_ADD15; optimized normal runs complete, full strict UBSan exits 1, and the shift-excluded sanitizer run completes without diagnostics.",
+  "vendor_ub_resolution": {
+    "location": "app/src/main/cpp/vendor/tsf.h:627",
+    "change": "Replace signed left shift with signed int multiplication by32768, then unsigned accumulation. Signed-short input products fit int32.",
+    "regression_values": [
+      -32768,
+      -1,
+      0,
+      1,
+      32767
+    ],
+    "generators": [
+      4,
+      12,
+      45,
+      50
+    ],
+    "strict_sanitizers": "passed with no exclusions and no diagnostics",
+    "soundfont_equivalence": "presets=275 regions=13098 address_digest=bfe40deac10afea5\nrender_digest=76e18faae8c6bffc",
+    "soundfont_equivalence_result": "original and fixed optimized output identical: all loaded region address fields and representative guitar/bass/piano PCM at44.1/48kHz"
+  },
+  "followup_results": [
+    {
+      "name": "fixed composer strict ASan UBSan compile",
+      "command": "c++ -std=c++17 -O1 -g -pthread -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all tests/composer_native_test.cpp -o <temporary-test-dir>/composer-strict",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "fixed composer strict ASan UBSan",
+      "command": "<temporary-test-dir>/composer-strict app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2",
+      "exit_code": 0,
+      "output": "PASS: coarse sample address offsets preserve signed-short boundaries and unsigned accumulation\nPASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence\nPASS: live chord hip-hop rhythm index8 and invalid-index fallback, fixed allocation\nPASS: clearing solo preserves volume, pan and mute\nPASS: 44100Hz immediate mute ends at next part\nPASS: 48000Hz immediate mute ends at next part\nPASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\nPASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\n"
+    },
+    {
+      "name": "fixed composer optimized",
+      "command": "bash scripts/test-composer.sh",
+      "exit_code": 0,
+      "output": "PASS: coarse sample address offsets preserve signed-short boundaries and unsigned accumulation\nPASS: 44.1/48kHz <100ms synthetic onset, repeated articulation, vibrato hysteresis, confidence and silence\nPASS: live chord hip-hop rhythm index8 and invalid-index fallback, fixed allocation\nPASS: clearing solo preserves volume, pan and mute\nPASS: 44100Hz immediate mute ends at next part\nPASS: 48000Hz immediate mute ends at next part\nPASS: 44100Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\nPASS: 48000Hz eight-track + voice, fixed allocation, count-in, phrase closure, stop silence\n"
+    },
+    {
+      "name": "original soundfont equivalence compile",
+      "command": "c++ -std=c++17 -O2 -include initializer_list -I<temporary-test-dir>/old <temporary-test-dir>/soundfont-equivalence.cpp -o <temporary-test-dir>/soundfont-original",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "original soundfont equivalence",
+      "command": "<temporary-test-dir>/soundfont-original app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2",
+      "exit_code": 0,
+      "output": "presets=275 regions=13098 address_digest=bfe40deac10afea5\nrender_digest=76e18faae8c6bffc\n"
+    },
+    {
+      "name": "fixed soundfont equivalence compile",
+      "command": "c++ -std=c++17 -O2 -include initializer_list -Iapp/src/main/cpp <temporary-test-dir>/soundfont-equivalence.cpp -o <temporary-test-dir>/soundfont-fixed",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "fixed soundfont equivalence",
+      "command": "<temporary-test-dir>/soundfont-fixed app/src/main/assets/soundfonts/generaluser-gs-1.44.sf2",
+      "exit_code": 0,
+      "output": "presets=275 regions=13098 address_digest=bfe40deac10afea5\nrender_digest=76e18faae8c6bffc\n"
+    }
+  ]
+}

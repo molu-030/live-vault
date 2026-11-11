@@ -1,0 +1,21 @@
+{
+  "fullRunBeforeShadowFix": {
+    "tests": 223,
+    "failures": 5,
+    "errors": 0,
+    "skipped": 0
+  },
+  "finalAffectedScope": {
+    "tests": 38,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "distinctLatestCases": {
+    "tests": 223,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "note": "Full223 run passed218; five new AecStatusTest cases failed because the most-specific Robolectric AEC shadow did not inherit AudioEffect methods. Test shadow inheritance corrected; all assertions and production code unchanged. Final38 AEC/UI/route/service cases passed. Replacing each class by latest result yields223 distinct passing cases, not a single223-case passing full run."
+}

@@ -212,15 +212,19 @@ class StudioButton extends Button {
         setElevation(0);
         setMinWidth(0);
         setMinimumWidth(0);
-        setMinHeight(StudioTheme.dp(c, 48));
-        setMinimumHeight(StudioTheme.dp(c, 48));
+        setMinHeight(StudioTheme.dp(c, StudioTheme.TOUCH_TARGET));
+        setMinimumHeight(StudioTheme.dp(c, StudioTheme.TOUCH_TARGET));
         setAllCaps(false);
         setIncludeFontPadding(false);
-        setTypeface(StudioTheme.bold(c));
-        setTextSize(13);
+        setTypeface(StudioTheme.medium(c));
+        StudioTheme.applyTypography(this,StudioTheme.TYPE_BODY);
+        setSingleLine(false);
+        setMaxLines(Integer.MAX_VALUE);
+        setEllipsize(null);
         setLetterSpacing(0);
         setGravity(Gravity.CENTER);
-        setPadding(StudioTheme.dp(c, 12), 0, StudioTheme.dp(c, 12), 0);
+        setPadding(StudioTheme.dp(c,StudioTheme.BUTTON_PADDING_HORIZONTAL),StudioTheme.dp(c,StudioTheme.BUTTON_PADDING_VERTICAL),
+                StudioTheme.dp(c,StudioTheme.BUTTON_PADDING_HORIZONTAL),StudioTheme.dp(c,StudioTheme.BUTTON_PADDING_VERTICAL));
         setTextColor(StudioTheme.TEXT);
     }
 
@@ -232,10 +236,10 @@ class StudioButton extends Button {
 
     StudioButton glyph(String k) {
         StudioGlyph d = new StudioGlyph(k, role == RECORD ? StudioTheme.DANGER : StudioTheme.MUTED);
-        int size = StudioTheme.dp(getContext(), 17);
+        int size = StudioTheme.dp(getContext(), 20);
         d.setBounds(0, 0, size, size);
         setCompoundDrawables(d, null, null, null);
-        setCompoundDrawablePadding(StudioTheme.dp(getContext(), 7));
+        setCompoundDrawablePadding(StudioTheme.dp(getContext(), StudioTheme.SPACE_8));
         return this;
     }
 
@@ -256,7 +260,7 @@ class StudioButton extends Button {
         }
         float d = getResources().getDisplayMetrics().density;
         box.set(.7f * d, .7f * d, getWidth() - .7f * d, getHeight() - .7f * d);
-        float radius = role == CHIP || role == OUTLINE || role == CIRCLE ? getHeight() / 2f : 8 * d;
+        float radius = role == CIRCLE ? getHeight()/2f : StudioTheme.BUTTON_RADIUS*d;
         if (role == CIRCLE) {
             float diameter = Math.min(getWidth(), getHeight()) - 2 * d;
             box.set(
@@ -275,7 +279,7 @@ class StudioButton extends Button {
                 : colored
                 ? custom
                 : role == RECORD
-                ? 0xff2b161b
+                ? StudioTheme.DANGER_CONTAINER
                 : role == OPTION
                 ? StudioTheme.RAISED
                 : StudioTheme.RAISED;
@@ -287,12 +291,12 @@ class StudioButton extends Button {
             p.setStyle(Paint.Style.STROKE);
             p.setStrokeWidth(.9f * d);
             int stroke = role == RECORD
-                    ? 0xffa8424d
+                    ? StudioTheme.DANGER_BORDER
                     : role == OUTLINE
                     ? StudioTheme.ACCENT
                     : selected
                     ? (role == OPTION ? StudioTheme.CARD_SELECTED_BORDER : StudioTheme.ACCENT)
-                    : 0xff35383e;
+                    : StudioTheme.CONTROL_BORDER;
             p.setColor(stroke);
             c.drawRoundRect(box, radius, radius, p);
             p.setStyle(Paint.Style.FILL);
@@ -358,67 +362,71 @@ final class StudioFader extends View {
         this.formatter = formatter;
         this.listener = listener;
         setFocusable(true);
-        setContentDescription(label);
+        setClickable(true);
+        setMinimumHeight(StudioTheme.dp(c,StudioTheme.TOUCH_TARGET));
+        setContentDescription(label+" "+formatter.value(value));
     }
 
-    private float captionHeight() {
-        p.setTypeface(StudioTheme.medium(getContext()));
-        p.setTextSize(StudioTheme.sp(getContext(), 13));
-        Paint.FontMetrics metrics = p.getFontMetrics();
-        float height = metrics.descent - metrics.ascent;
-        p.setTypeface(StudioTheme.mono(getContext()));
-        p.setTextSize(StudioTheme.sp(getContext(), 12));
-        metrics = p.getFontMetrics();
-        return Math.max(height, metrics.descent - metrics.ascent);
+    private final android.text.TextPaint labelPaint=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final android.text.TextPaint valuePaint=new android.text.TextPaint(Paint.ANTI_ALIAS_FLAG);
+    android.text.StaticLayout labelLayout,valueLayout;
+    private int captionWidth=-1;
+    private String captionValue="";
+    private float captionScale=-1,labelHeight,valueHeight,captionBottom,trackY;
+    private boolean stacked;
+
+    private android.text.StaticLayout caption(String value,android.text.TextPaint paint,int width,android.text.Layout.Alignment alignment,int size){
+        Paint.FontMetrics metrics=paint.getFontMetrics();
+        float extra=Math.max(0,StudioTheme.sp(getContext(),StudioTheme.lineHeightSp(size))-(metrics.descent-metrics.ascent));
+        return android.text.StaticLayout.Builder.obtain(value,0,value.length(),paint,Math.max(1,width))
+                .setIncludePad(false).setAlignment(alignment).setLineSpacing(extra,1)
+                .setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE).setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE).build();
+    }
+
+    private void prepareCaption(int width){
+        String formatted=formatter.value(value);float scale=StudioTheme.sp(getContext(),StudioTheme.TYPE_BODY);
+        if(width==captionWidth&&formatted.equals(captionValue)&&scale==captionScale)return;
+        captionWidth=width;captionValue=formatted;captionScale=scale;
+        labelPaint.setTypeface(StudioTheme.medium(getContext()));labelPaint.setTextSize(scale);labelPaint.setColor(StudioTheme.TEXT);
+        valuePaint.setTypeface(StudioTheme.mono(getContext()));valuePaint.setTextSize(StudioTheme.sp(getContext(),StudioTheme.TYPE_LABEL));valuePaint.setColor(StudioTheme.ACCENT);
+        float gap=StudioTheme.dp(getContext(),StudioTheme.SPACE_8);
+        float widestValue=Math.max(valuePaint.measureText(formatted),Math.max(valuePaint.measureText(formatter.value(min)),valuePaint.measureText(formatter.value(max))));
+        stacked=labelPaint.measureText(label)+widestValue+gap>width;
+        int labelWidth=stacked?width:Math.max(1,width-(int)Math.ceil(widestValue+gap));
+        labelLayout=caption(label,labelPaint,labelWidth,android.text.Layout.Alignment.ALIGN_NORMAL,StudioTheme.TYPE_BODY);
+        valueLayout=caption(formatted,valuePaint,stacked?width:Math.min(width,(int)Math.ceil(widestValue)),android.text.Layout.Alignment.ALIGN_OPPOSITE,StudioTheme.TYPE_LABEL);
+        labelHeight=Math.max(labelLayout.getHeight(),labelLayout.getLineCount()*StudioTheme.sp(getContext(),StudioTheme.lineHeightSp(StudioTheme.TYPE_BODY)));
+        valueHeight=Math.max(valueLayout.getHeight(),valueLayout.getLineCount()*StudioTheme.sp(getContext(),StudioTheme.lineHeightSp(StudioTheme.TYPE_LABEL)));
+        float header=stacked?labelHeight+StudioTheme.dp(getContext(),StudioTheme.SPACE_4)+valueHeight:Math.max(labelHeight,valueHeight);
+        captionBottom=StudioTheme.dp(getContext(),StudioTheme.SPACE_4)+header;
+        trackY=captionBottom+StudioTheme.dp(getContext(),StudioTheme.SPACE_12);
     }
 
     @Override
-    protected void onMeasure(int widthSpec, int heightSpec) {
-        int height = (int) Math.ceil(34 * getResources().getDisplayMetrics().density + captionHeight());
-        setMeasuredDimension(resolveSize(StudioTheme.dp(getContext(), 160), widthSpec), resolveSize(height, heightSpec));
+    protected void onMeasure(int widthSpec,int heightSpec){
+        int width=resolveSize(StudioTheme.dp(getContext(),160),widthSpec);prepareCaption(Math.max(1,width));
+        float grid=StudioTheme.dp(getContext(),StudioTheme.SPACE_4);
+        int desired=(int)(Math.ceil((trackY+StudioTheme.dp(getContext(),StudioTheme.SPACE_16))/grid)*grid);
+        setMeasuredDimension(width,resolveSize(Math.max(StudioTheme.dp(getContext(),StudioTheme.TOUCH_TARGET),desired),heightSpec));
     }
 
     @Override
-    protected void onDraw(Canvas c) {
-        float d = getResources().getDisplayMetrics().density, w = getWidth(), left = 7 * d, right = w - 8 * d;
-        float height = captionHeight(), y = 6 * d + height + 13 * d;
-        float f = Math.max(0, Math.min(1, (value - min) / (max - min)));
-        String formatted = formatter.value(value);
-        p.setTypeface(StudioTheme.mono(getContext()));
-        p.setTextSize(StudioTheme.sp(getContext(), 12));
-        float valueWidth = p.measureText(formatted);
-        Paint.FontMetrics metrics = p.getFontMetrics();
-        float baseline = 6 * d - metrics.ascent;
-        p.setTextAlign(Paint.Align.RIGHT);
-        p.setColor(StudioTheme.ACCENT);
-        c.drawText(formatted, w - 2 * d, baseline, p);
-        p.setTextAlign(Paint.Align.LEFT);
-        p.setTypeface(StudioTheme.medium(getContext()));
-        p.setTextSize(StudioTheme.sp(getContext(), 13));
-        p.setColor(StudioTheme.TEXT);
-        metrics = p.getFontMetrics();
-        baseline = 6 * d - metrics.ascent;
-        c.drawText(
-                android.text.TextUtils.ellipsize(label, p, Math.max(0, w - valueWidth - 16 * d), android.text.TextUtils.TruncateAt.END).toString(),
-                0,
-                baseline,
-                p
-        );
-        p.setStrokeWidth(5 * d);
-        p.setStrokeCap(Paint.Cap.ROUND);
-        p.setColor(0xff272b31);
-        c.drawLine(left, y, right, y, p);
-        float x = left + (right - left) * f;
-        p.setColor(StudioTheme.ACCENT);
-        c.drawLine(left, y, x, y, p);
-        p.setColor(StudioTheme.TEXT);
-        c.drawCircle(x, y, 7 * d, p);
+    protected void onDraw(Canvas c){
+        prepareCaption(Math.max(1,getWidth()));
+        float d=getResources().getDisplayMetrics().density,w=getWidth(),left=StudioTheme.SPACE_8*d,right=w-StudioTheme.SPACE_8*d;
+        float top=StudioTheme.SPACE_4*d;
+        c.save();c.translate(0,top+(stacked?0:(Math.max(labelHeight,valueHeight)-labelHeight)/2));labelLayout.draw(c);c.restore();
+        c.save();c.translate(stacked?0:w-valueLayout.getWidth(),top+(stacked?labelHeight+StudioTheme.SPACE_4*d:(Math.max(labelHeight,valueHeight)-valueHeight)/2));valueLayout.draw(c);c.restore();
+        float f=Math.max(0,Math.min(1,(value-min)/(max-min))),x=left+(right-left)*f;
+        p.setStrokeWidth(StudioTheme.SPACE_4*d);p.setStrokeCap(Paint.Cap.ROUND);p.setColor(StudioTheme.FINE_BORDER);c.drawLine(left,trackY,right,trackY,p);
+        p.setColor(StudioTheme.ACCENT);c.drawLine(left,trackY,x,trackY,p);p.setColor(StudioTheme.TEXT);c.drawCircle(x,trackY,StudioTheme.SPACE_8*d,p);
     }
 
     void change(float v) {
         value = Math.max(min, Math.min(max, v));
         listener.changed(value);
         setContentDescription(label + " " + formatter.value(value));
+        requestLayout();
         invalidate();
     }
 
@@ -430,7 +438,7 @@ final class StudioFader extends View {
                 getParent().requestDisallowInterceptTouchEvent(true);
                 setPressed(true);
             case MotionEvent.ACTION_MOVE:
-                change(min + Math.max(0, Math.min(1, (e.getX() - 7 * getResources().getDisplayMetrics().density) / Math.max(1, getWidth() - 15 * getResources().getDisplayMetrics().density))) * (max - min));
+                change(min + Math.max(0, Math.min(1, (e.getX() - StudioTheme.SPACE_8 * getResources().getDisplayMetrics().density) / Math.max(1, getWidth() - StudioTheme.SPACE_16 * getResources().getDisplayMetrics().density))) * (max - min));
                 return true;
             case MotionEvent.ACTION_UP:
                 setPressed(false);
@@ -515,12 +523,18 @@ final class StudioPlaybackLine extends View {
     boolean dragging;
     final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
     final Seek listener;
+    final String accessibilityLabel;
 
     StudioPlaybackLine(Context c, Seek listener) {
+        this(c, AppLanguage.text(c, "반주 재생 위치", "Backing playback position"), listener);
+    }
+
+    StudioPlaybackLine(Context c, String accessibilityLabel, Seek listener) {
         super(c);
         this.listener = listener;
+        this.accessibilityLabel = accessibilityLabel;
         setFocusable(true);
-        setContentDescription(AppLanguage.text(c, "반주 재생 위치", "Backing playback position"));
+        setContentDescription(accessibilityLabel);
     }
 
     @Override
@@ -537,8 +551,9 @@ final class StudioPlaybackLine extends View {
     }
 
     void change(float value) {
+        if (!isEnabled() || Float.isNaN(value) || Float.isInfinite(value)) return;
         progress = Math.max(0, Math.min(1, value));
-        setContentDescription(AppLanguage.text(getContext(), "반주 재생 위치 ", "Backing playback position ") + Math.round(progress * 100) + "%");
+        setContentDescription(accessibilityLabel + " " + Math.round(progress * 100) + "%");
         listener.seek(progress);
         invalidate();
     }
@@ -561,6 +576,7 @@ final class StudioPlaybackLine extends View {
                 change((event.getX() - 7 * d) / Math.max(1, getWidth() - 14 * d));
                 return true;
             case MotionEvent.ACTION_UP:
+                change((event.getX() - 7 * d) / Math.max(1, getWidth() - 14 * d));
                 dragging = false;
                 getParent().requestDisallowInterceptTouchEvent(false);
                 performClick();

@@ -1,0 +1,1964 @@
+{
+  "fullRun": {
+    "tests": 324,
+    "failures": 1,
+    "reason": "Workflow visible-text width assertion included trailing whitespace; corrected to Layout.getLineMax."
+  },
+  "correctedFocusedRun": {
+    "tests": 3,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "latestAggregate": {
+    "uniqueTests": 324,
+    "passed": 324,
+    "failures": 0
+  },
+  "cases": [
+    {
+      "suite": "pro.livemic.studio.TakeStorageUiTest",
+      "name": "sourceDeleteCancelKeepsBytesAndConfirmedMenuActionKeepsMix",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageUiTest",
+      "name": "recordingStartedAfterConfirmationBlocksDeletionAndOptOutIsClearlyLabelled",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageUiTest",
+      "name": "retentionChoiceRequiresSaveAndRecordingLocksAnAlreadyOpenSheet",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageUiTest",
+      "name": "serviceRecordingSnapshotsTheActualActivityEffectsPreferences",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "failedCreationOrEnableIsReportedAsError",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "reattachmentAndCloseReleaseOldEffect",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "unsupportedOrInvalidSessionNeverReportsPreferredAsActive",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "preferenceSyncDisablesAndReenablesExistingEffect",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "stateReadFailureIsContainedAndSyncCanRecover",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "serviceRefreshesActualStatusOnEffectsRouteAndMicStop",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AecStatusTest",
+      "name": "activeRequiresAnEnabledControlledEffectOnCurrentSession",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletScreenshotTest",
+      "name": "tabletOfficialViewportWithClearlyLabeledOfflineContent",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletScreenshotTest",
+      "name": "representativeTabletAndPhoneViews",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "recordingSnapshotKeepsOffsetWhileNextReadUsesNextRecordingAdjustment[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "recordingSnapshotKeepsOffsetWhileNextReadUsesNextRecordingAdjustment",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "actualStreamRouteWinsOverRequestedDeviceAndUnlistedActualDoesNotPretendToMatch[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "actualStreamRouteWinsOverRequestedDeviceAndUnlistedActualDoesNotPretendToMatch",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "twoPairsKeepOffsetsIndependentAndNeverStoreIdentifyingDetails[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "twoPairsKeepOffsetsIndependentAndNeverStoreIdentifyingDetails",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "legacyOutputModeIsReadOnlyFallbackUntilEachPairIsAdjusted[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "legacyOutputModeIsReadOnlyFallbackUntilEachPairIsAdjusted",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "reconnectWithNewRuntimeIdsAndFreshPreferencesHandleRestoresSameProfile[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "reconnectWithNewRuntimeIdsAndFreshPreferencesHandleRestoresSameProfile",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "defaultZeroUsesSeparateUnconfirmedProfileUntilStreamIsKnown[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "defaultZeroUsesSeparateUnconfirmedProfileUntilStreamIsKnown",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "disconnectOrModeChangeRejectsStaleSliderAndKeepsOtherPairUntouched[28]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncProfilesTest",
+      "name": "disconnectOrModeChangeRejectsStaleSliderAndKeepsOtherPairUntouched",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.WorkflowScreenshotTest",
+      "name": "projectVersionsAtBothLanguagesAndFontScales",
+      "run": "focused",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.WorkflowScreenshotTest",
+      "name": "recentVoiceAtBothLanguagesAndFontScales",
+      "run": "focused",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.WorkflowScreenshotTest",
+      "name": "effectsEditorAtBothLanguagesAndFontScales",
+      "run": "focused",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeFinalizationTest",
+      "name": "queuedFinalizationBlocksMenuAndPreservesName",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeFinalizationTest",
+      "name": "automaticPracticeCompletionRefreshesControlsAndResultsOnlyOnce",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeFinalizationTest",
+      "name": "missingSourceAndCancellationAreReportedAndClearPendingExport",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeFinalizationTest",
+      "name": "takeExportSurvivesActivityRecreationAndCopiesProviderBytes",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeFinalizationTest",
+      "name": "metadataFailureAfterMuxRetainsBothVideoCopies",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ProjectVersionsTest",
+      "name": "undoKeepsVersionsAndExplicitProjectDeleteRemovesOnlyItsHistory",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ProjectVersionsTest",
+      "name": "incompleteMetadataAndInterruptedSnapshotDoNotHideHealthyVersions",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ProjectVersionsTest",
+      "name": "newestTwentyIncludesNamedVersionsAndProjectsStayIndependent",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ProjectVersionsTest",
+      "name": "invalidNamesAndUnavailableStorageNeverProduceVisibleVersion",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ProjectVersionsTest",
+      "name": "cancelledOrFailedStagedBackupAtLimitNeverPrunesNamedVersions",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ProjectVersionsTest",
+      "name": "snapshotsRemainImmutableAcrossRenameRestartAndSourceEdits",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "projectionLaunchFailureClearsPendingAndNextRecordIsMic",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "deniedMicrophoneClearsOneShot",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "externalCaptureIsOneShotAndCancellationClearsIt",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "recordingOptionsScreenshots",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "microphoneGrantContinuesOnlyTheArmedRequest",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "youtubeDisarmsExternalCaptureAndLateProjectionCannotStartAnotherRecording",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "pendingProjectionPreventsYouTubeSelectionUntilCancelled",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "recreationPreservesInFlightConsentButDoesNotRearm",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "approvedConsentSchedulesExactlyOneExternalCapture",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "unexpectedConsentDoesNotStartRecording",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSourceTest",
+      "name": "legacyPreferenceCannotTriggerProjectionForOrdinaryRecord",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioDialogsLayoutTest",
+      "name": "shortFormsKeepActionsReachableAndContentScrollable",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerExportTest",
+      "name": "portableArchivePreservesCompleteProjectAndDescribesCompoundTime",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerExportTest",
+      "name": "arrangementDistinguishesActivePhraseSourcesAndPreservesInactiveRoles",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerExportTest",
+      "name": "documentPickerCancellationAndProviderWriteUseDetachedSnapshot",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonyTilesTest",
+      "name": "directRestoreUsesPreviousSavedFileAndSwapsUndoHistory",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonyTilesTest",
+      "name": "tabletHasTwoByTwoTilesAtBothFontScalesAndLanguages",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonyTilesTest",
+      "name": "phoneKeepsSingleColumnAtBothFontScalesAndLanguages",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonyTilesTest",
+      "name": "tileStatesAndRecordingTargetUpdateWithoutRedrawingAndCancelKeepsSavedPart",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonyTilesTest",
+      "name": "failedSaveKeepsOldAudioAndPersistentFailureOnAffectedTile",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "exportExplainsExtendedPatternsAndKeepsPhraseSourceOptional",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "octaveUnisonIsAnActualSimultaneousOctavePair",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "fingerstyleCombinesThumbAndMelodyAndJazzUsesSwungUpperChords",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "kitArticulationRetainsTheClosingFill",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "bassOptionsHaveDistinctRolesInEveryMeter",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "allPatternsStayBalancedInsideSplitHarmonyAndRepeatDeterministically",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "unsupportedPatternFallsBackToDefault",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "keyboardCompingHasStraightAndSwungOffbeatsWithShortGates",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPatternTest",
+      "name": "kitPatternsChangeActualGmNotesAndDensityWithoutChangingStandard",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "importFinishingAfterExitCannotShowPreviewOrApplyProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "exitCancelsIncompletePhraseAndKeepsPreviousProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "rootCancelAndDialogBackPreserveAudioAndPermission",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "activeVideoPublishesMp4BeforeRemovingTask",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "serviceDestructionPersistsAlreadyCompletedPhraseBeforeDisablingVoice",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "exitSavesPhraseCompletedBeforeJavaPoll",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "idleUiAndBackgroundReleaseScreenAndStopTicks",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "activeAudioIsFinalizedBeforeTaskRemoval",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "confirmedExitWaitsForAuthorizedDocumentExportAndSuppressesLateUi",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "confirmationWaitsForQueuedSaveAndIgnoresStalePermissionAndPendingStart",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "activeVideoMuxFinishesAndFailuresRemainReviewable",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ExitFlowTest",
+      "name": "menuExitIsAccessibleAndKeepsExistingNavigation",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.EchoInputProfileTest",
+      "name": "externalAndUnknownInputsPreventAssumingTheDefaultMicrophone",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.EchoInputProfileTest",
+      "name": "preferenceAndPlatformSupportBothGateTheProfile",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.EchoInputProfileTest",
+      "name": "onlyBuiltInIdsAreProvidedAndVirtualDevicesDoNotBlockSafeDefault",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "visitsReturnThroughPreviousPagesAndRootBackConfirmsExit",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "returningThroughOnlineSourceClearsYouTubeOnlyWhenFilesRestored",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "plainAlertAndNativeCancelabilityRetainWindowPriority",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "modernCallbackRegisteredAndRoutesThroughModalAndPageBack[33]",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "modernCallbackRegisteredAndRoutesThroughModalAndPageBack",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "sourceAndLibraryFilterVisitsRestorePreviousSelection",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "cameraConfirmationOnlyPopsAfterAcceptance",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "redrawsAndSelectingCurrentPageDoNotCreateHistory",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "backRestoresScrollAfterDestinationLayout",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "outgoingRenderedSelectionSurvivesCallerChangingFilterBeforeVisit",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "sourceHistoryRespectsRecordingAndCountdownLocksWithoutConsumingVisit",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "backLeavesBackgroundAudioAndPendingPermissionIntact",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "cameraPreparationDoesNotConsumeHistory",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "savedStateRestoresPageSelectionsScrollAndHistory",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackNavigationTest",
+      "name": "backClosesTopDialogThenDrawerBeforeChangingPage",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "chooserAndTrackNameNavigateFromEmptyFileAndPausedComposerWithoutStartingTransport",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "selectedYouTubeHasChooserAndFilesTabNaturallyLeavesVideo",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "onlineLoadAndConsentKeepSourceAndHistoryUntilExplicitToLive",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "everyDrawerDestinationKeepsItsMeaningAfterBackingInsertion",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "recordingAndCountdownLockAllChooserEntrancesWithoutChangingSelection",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "emptyPlayOpensChooserButSelectedFilePlayRemainsTransport",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.BackingNavigationTest",
+      "name": "drawerBackingOffersAllThreeSourcesAndReturnsToLive",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "composerAndHarmonyCaptureBlockReroute",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "idleEffectsAndRouteActionsNeverStartMicrophoneAndCleanupStopsPolling",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "activeRouteRestoresOnlyActualSafeMonitoring",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "delayedYouTubeRecordingKeepsFrozenMicOnlyModeAfterPlayerDeselection",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "rollbackRefreshesProtectionForRestoredActualRoute",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "standaloneExitWithoutServiceStopsPausedNativeTransports",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "failedRouteRollsBackAndKeepsBacking",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "recordingCountdownAndPracticeBlockReroute",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "everyStreamStartAndRouteRollbackRefreshesEchoInputConfiguration",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "stalePausedComposerRequestCannotKeepSilentStreamAlive",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "confirmedExitSynchronouslyStopsResourcesAndRejectsLateStarts",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "pulseRefreshesProtectionWithoutChangingRecordingOrEffectGains",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "naturalLocalPlaybackEndClosesNativeOutputAndReleasesWakeLock",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "effectsActionReadsServicePreferencesIncludingGainAndNoiseReduction",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "playbackRouteNeverStartsMicrophone",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "playbackThenMicrophoneJoinRefreshesActualOutputProtection",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "playbackReleaseContinuesPastOldRetryWindowWhileLocalAudioPlays",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "statusPulseIsBoundedAndKeepsIntentionalBackgroundMicAlive",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "pausedHarmonyReleasesStreamsThenResumesAtPreservedPosition",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "stalePlaybackRequestCannotOpenNativeBackingDuringYouTubeOrFrozenMicOnlyRecording",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioServiceRoutingTest",
+      "name": "previousLaunchCommandsCannotStartOrStopCurrentLaunchAudio",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerReliabilityTest",
+      "name": "addingTrackRejectsUnionLimitWithoutChangingAnyPart",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerReliabilityTest",
+      "name": "addingTrackRejectsFullLaterPartEvenWhenIdAlreadyExists",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerReliabilityTest",
+      "name": "highRecordedChordReleasesExactlyTheNotesItStarts",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "quantizationRetainsStringDelayAndSavedExpression",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "twentyStepHistoryAndAtomicRecovery",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "guitarVoicingsStayOnSixStringsAndBassWithinRange",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "projectLimitsAndVersionedRoundTrip",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "arrangementSeedAndPhraseTimingSurviveCompilation",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "diatonicHarmoniesAndBeatSplits",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerProjectTest",
+      "name": "allKeysTransposeManualSlashAndPhraseAndScalePreservesPerformance",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "harmonyFourLayersAndFixedActions",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "galaxyWindowKeepsPrimaryActionsAboveSystemBars",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "cameraControlsStayReachableWhenPreviewScrolls",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "performanceAndHarmonyReviewCaptures",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "renderStudioScreens",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "composerAndVoiceFixedControls",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "phraseCommitCancellationUndoAndKeyChange",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.StudioScreenshotTest",
+      "name": "selectedOptionAndChoiceRemainAccessible",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonySessionTest",
+      "name": "completedRecordingPersistsCancelKeepsOldAndUndoRestores",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonySessionTest",
+      "name": "undoAndFailedSaveStopBeforeReload",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonySessionTest",
+      "name": "invalidMetadataIsRejected",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonySessionTest",
+      "name": "atomicBackupIsRecovered",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonySessionTest",
+      "name": "metadataChangesDuringSaveKeepCommittedLayer",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.HarmonySessionTest",
+      "name": "nativeErrorsAreReportedOnceUntilChanged",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "lcdShowsPlayingPartAndSecondSplitChord",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "switchingPartAndProjectClearsSoloWithoutMixWrites",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "trackRowsDistinguishPhraseSourcesAndKeepInactivePatternLabels",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "keyboardCancelKeepsPhraseAndSaveCanBeUndone",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "queuedPlayCannotRestartAfterStop",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "failedEditInvalidatesChordDialogAndRetryEditsCurrentProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "staleLevelCancelCannotWriteToNewProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "corruptHistoryPreservesBothStacksAndCurrentProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "queuedCountInCannotRestartAfterCancel",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "playingPartAloneReceivesTrackPreviewAndMute",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "staleKeyboardSaveCannotReplaceNewProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerEditorTest",
+      "name": "deletingSoloTrackClearsSoloIndex",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerScreenshotTest",
+      "name": "pickerAndEightPartNavigationAtLargeTextInBothLanguages",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.SpeakerProtectionUiTest",
+      "name": "actualAecStateIsIndependentOfPreferenceInBothLanguages",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.SpeakerProtectionUiTest",
+      "name": "existingTickRefreshesOpenSettingsAfterEffectResult",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.SpeakerProtectionUiTest",
+      "name": "settingsReportActualInputProfileSeparatelyFromAecAndExplainReentry",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.SpeakerProtectionUiTest",
+      "name": "reductionRetainsMonitorStateAndRejectsInvalidReadings",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "keyboardAndUnknownLegacyPhrasesSurviveMicrophoneCapture",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "savingDuringCaptureDoesNotInvalidateUnchangedProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "sameProjectContentMutationRejectsStaleCaptureWithoutLosingChanges",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "knownMicrophoneRerecordAtCapacityIsTransactional",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "globalUnionLimitRejectsBeforeNativeCaptureEvenWithLocalSpace",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "drumsNeverBecomeMicrophoneReplacement",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "phraseSourceIsOptionalAndStrictAiRoundTripPreservesIt",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "recordingRefreshesNativePartBeforeCapacityAndTargetSelection",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "capacityAndTargetFollowPlayingPartInsteadOfSelectedPart",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "name": "changedProjectCannotReceiveOrBeReplacedByStaleCapture",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubeScreenshotTest",
+      "name": "youtubeSourceConsentErrorAndLiveOfflineFixtureInBothLanguages",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubeScreenshotTest",
+      "name": "restoredBackingEntryPointsAndSourcesNativePreview",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.RecordingSyncUiTest",
+      "name": "unconfirmedProfileExplainsItsSeparateStorageAndShowsSavedManualOffset",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "asynchronousListDoesNotOpenAfterNavigation",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "finalRestoreCommitLocksEditsUntilBackupIsDurable",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "restoringAsCopyKeepsOriginalHistoryAndLibraryEntry",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "staleRestoreAndRecordingCannotReplaceNewerEdits",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "unavailableStorageDuringRestoreLeavesCurrentProjectAndHistoryUntouched",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "creatingVersionRunsBehindWorkerAndKeepsEditingIdentity",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "restoringBacksUpCurrentStateAndUndoKeepsBothVersions",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "explicitLibraryDeletionNamesVersionsAndCancelKeepsThem",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerVersionWorkflowTest",
+      "name": "previewCancelAndStaleConfirmationKeepOriginalAndUiUsesActualClicks",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeVideoEditTest",
+      "name": "encoderHardBudgetUsesAudioDurationAndRejectsBrokenSignatures",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeVideoEditTest",
+      "name": "preCancelledWorkCreatesNoCopyAndNeutralStemDefaultsDoNotStackInitialEffects",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeVideoEditTest",
+      "name": "timelineDoesNotReapplyVocalSyncAndValidationRejectsLostSamplesOrWrongWavDuration",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeVideoEditTest",
+      "name": "muxFailureOrCancelPreservesEditedWavAndAllOriginalFilesAndCleansOnlyTemps",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeVideoEditTest",
+      "name": "legacyVideoNeedsExplicitTimingMetadataButStillSupportsWavEdits",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeVideoEditTest",
+      "name": "videoCopyUsesSignedCameraOffsetOnceAndKeepsIndependentSourcesForReediting",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageTest",
+      "name": "deleteOnlyChosenSourcesKeepsMixVideoMidiAndOtherCopies",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageTest",
+      "name": "recordingLockAndMetadataFailureKeepSourceBytes",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageTest",
+      "name": "copyEstimateIncludesSourcesMixAndVideoTemporaryAudio",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageTest",
+      "name": "estimatedSpaceIncludesFiveFloatChannelsAndVideoReserve",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageTest",
+      "name": "defaultRetainsAllStemsAndOptOutIsNotASourceFailure",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeStorageTest",
+      "name": "actualSourceFailureKeepsAllFilesAndVocalSidecarIsNotRecoveredAsATake",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LanguageSwitchTest",
+      "name": "languageChoicePersistsWithoutChangingProjectOrInterruptingState",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeSourcesTest",
+      "name": "copyPublishesNewTakeAndCancelOrRenderFailureLeavesSourcesUntouched",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeSourcesTest",
+      "name": "micOnlyIgnoresOffsetAndSourceFailureNeverRemovesOriginalMix",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeSourcesTest",
+      "name": "recoverySkipsSourceSidecarsAndDeletionRemovesAllTakeFiles",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeSourcesTest",
+      "name": "unsupportedVoiceRoutingRetainsSourcesWithoutClaimingEditSupport",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeSourcesTest",
+      "name": "beginSnapshotsPairOffsetForNativeMetadataAndVideoResult",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.FeedbackRoutingTest",
+      "name": "onlyKnownPersonalListeningDeviceTypesBypassProtection",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.FeedbackRoutingTest",
+      "name": "connectedHeadphonesDoNotOverrideActualSpeaker",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.FeedbackRoutingTest",
+      "name": "defaultRouteUsesActualOutputAndProtectsUnknownOrRemovedRoutes",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "inactiveRecordedPhraseSurvivesExportAndImport",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "completeCanonicalProjectIsAcceptedWithoutChanges",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "recordingBlocksImportPicker",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "previewCancelAndApplyKeepOriginalUntilExplicitCopy",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "legacyRecordedExpressionAndNotesBeyondResizedPartRoundTrip",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "unsolicitedResultAndDestroyedActivityCannotShowImportPreview",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "importedRhythmsMustFitTheirMeter",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "rejectsInvalidRangesReferencesDuplicatesAndTiming",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerImportTest",
+      "name": "hipHopAndExpandedPatternsSurviveSaveDuplicateExportAndImport",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "undoRedoButtonsExposeHistoryAndLockWhileRecording",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "comparisonCannotSurviveTransposeReopenOrAnotherRecording",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "namedCopyUsesNewIdAndKeepsOriginalLibraryEntry",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "recordingReadoutUsesActualPartAndStaysFixedDuringCapture",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "reopenedSameIdAndLaterEditsRejectStaleLibraryCompletions",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "previousProjectSaveCannotMarkNewProjectAsSaved",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "olderDraftCompletionCannotReplaceNewerSavingState",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "phraseComparisonChangesOnlyTargetAndInvalidatesOnOtherEdits",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "saveFailuresStayVisibleAndRetriesSaveCurrentProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerWorkflowStateTest",
+      "name": "turningVoiceOffAndSavingPreserveOnlyAnAlreadyValidComparison",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.VideoPublicationTest",
+      "name": "unfinishedMuxIsNotPublishedAndFailedPublicationPreservesExistingVideo",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "mainEffectKnobsPersistAndWriteOnlyReverbAndEcho",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "mainKnobVerticalDragBothDirectionsWritesOnlyItsParameterAndPersists",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "topBarLogoAndBrandReturnHomeAndEffectsShareCompactRow",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "displayShowsIndependentActualLevelsPitchAndRecordingTime",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "mainKnobRejectsOutsideDialAndCancellationAllowsPollToSynchronize",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "noiseReductionInDetailedEffectsUpdatesParameter",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "echoPopupUsesActualPercentForChipStepAndAccessibleSliderAndAppliesOnBack",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "resetDoesNotStopMicOrRecordingOrTouchOtherParameters",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "liveMicVolumeAndMonitorToggleSyncWithParameters",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "mainKnobsExposeKeyboardAndAccessibleRangeWithRealValueDescription",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "monitorOffAndOnUpdatesComposerWithoutStoppingRecordingOrBacking",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "hamburgerMenuNavigatesToLiveComposerAndLibrary",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "synchronizationAndPollingNeverWriteAudioParameters",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "pausedAndMonitorStatusComeFromStats",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "safetyResetKeepsRecordingAndEffectGainsWhileRestoringMonitor",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "pausedCurrentProjectResumesComposerInsteadOfStaleFile",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "presetAndSafetyMuteKeepRecordingAndMicrophoneActive",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "sourceChooserRetainsBackingSourcesAndDeviceAccess",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "videoOpensPreviewAndIsDisabledWhileBusy",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "monitorStatusUsesStatsEvenWhenCachedSettingDisagrees",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "mainKnobsReserveNoSystemGestureExclusionAndRejectScreenEdges",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "mainKnobTapAndHorizontalSwipeNeverChangeValues",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "activeMonitorClicksFollowActualStateWhenCachedSettingDisagrees",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "liveBackingVolumePersistsAndWritesOnlyBackingGain",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "playingSelectedFileDoesNotRequestMicrophonePermission",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "idleAndBusyStatesDoNotDisplayStaleRecordingDuration",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "audioSettingsExposesAllFourProcessingSwitches",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "captureLocksDeviceSettings",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "compactKnobVerticalDragSurvivesScrollableParentDispatch",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleTest",
+      "name": "detailsKeepAdvancedEffectsAndPresetResetActions",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioRoutingTest",
+      "name": "echoAndAutoGainPreferencesPersist",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioRoutingTest",
+      "name": "prepareCapturesModeAfterOldRouteCloses",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioRoutingTest",
+      "name": "selectionsPersistIndependently",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioRoutingTest",
+      "name": "builtInDeviceTypesHaveDistinctLabels",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioRoutingTest",
+      "name": "missingExplicitDevicesFailClearly",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerRedesignScreenshotTest",
+      "name": "composerAndLanguageScreens",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveConsoleScreenshotTest",
+      "name": "liveDashboardInBothLanguagesSizesAndTextScales",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "stepButtonsMoveToTheirSectionsInPageCoordinates",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "effectComparisonSwitchesCompleteEffectsAndCancelRestoresOriginalWithoutTransportChanges",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "recordingFromGlobalButtonKeepsComparedEffectsWhenLeavingSetup",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "inputReadoutRespondsToLiveLevelAndDeviceChangesPromptRecheck",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "externallyStartedRecordingPreventsExitFromRestoringComparisonEffects",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "setupOpensWithoutStartingMicAndDescribesListeningTestHonestly",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.AudioSetupGuideTest",
+      "name": "comparisonButtonsCanSaveSwitchAndCancelEditedSettings",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveMixerViewTest",
+      "name": "liveScreensAndMixerNativeCaptures",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveMixerViewTest",
+      "name": "compactExpandedWorkspaceKeepsLcdAndIoInsideItsBounds",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveMixerViewTest",
+      "name": "readoutAndMixerFollowThePlayingPartAndArrangementRepeat",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveMixerViewTest",
+      "name": "sourcesRespectActiveRecordedMode",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveMixerViewTest",
+      "name": "gainEditsCommitOnceAndStaleGesturesRestoreTheCurrentModel",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.LiveMixerViewTest",
+      "name": "soloIsTemporaryAndPreservesNativeGainPanMute",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeAudioUiTest",
+      "name": "historyRequiresOptInAndASeparateMicStartAndNeverOffersEmptyRecovery",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeAudioUiTest",
+      "name": "editorUsesLocalEffectsAndBackKeepsOriginalAndLiveSettings",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TakeAudioUiTest",
+      "name": "recordedVoiceModeHasExplicitVideoChoiceAndFixedSaveControls",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPhraseRegressionTest",
+      "name": "expressionStopsBeforeNoteEndpointAndPartEndWithoutChangingSavedCurves",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "phoneKeepsCompactLayoutAtBothFontScalesAndLanguages",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "rotationAndMultiwindowPreserveProjectNavigationAndAudioState",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "officialYouTubeViewportAndEffectsRemainReachableInRightPane",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "cameraPreviewRetainsTextureAndControllerAcrossRotation",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "voicePanesKeepPhraseAndTransportInFixedFooter",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "composerHasTwoChordColumnsVisibleTracksAndIndependentLongPaneScrolling",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "tabletInstrumentCategoriesKeepDrumsAndFavorites",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.TabletLayoutTest",
+      "name": "liveLocalBackingFitsExpandedWindowsAndKeepsRealMeterValues",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "oldProjectsGetDefaultsAndNewValuesRoundTrip",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "compoundMeterPatternsUseQuarterWalkingAndEighthArpeggios",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "rhythmsStayInTheirMeterAndFillReplacesLastBeat",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "splitChordSweepBalancesAllGeneratedNotes",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "walkingBassAnchorsShortSplitHarmonyBeforeApproachingNext",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "seededPlansAreDeterministicAndNotesCloseWithinTheirHarmony",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "HumanizationIsBoundedInMillisecondsAtAllTempos",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "guitarPatternsRemainBalancedAtTempoExtremes",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "ensembleArpeggioIsArticulated",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ArrangementQualityTest",
+      "name": "recordedPhraseIsNotHumanized",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "composerLinksOpenVoiceAndSavedProjectsWithProjectFilter",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "drumFavoritePersistsAndDoesNotSelectOrDismissAndLegacyGmZeroStaysDistinct",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "drumSearchAndSelectionUseActualKitAndFavoritesFilterStaysMeaningful",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "voiceOmitsDrumsAndCategoryMappingStillFindsFavorites",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "stalePartChooserCannotJumpInNewProject",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "eightPartsHaveBoundedArrowsAndDirectJumpLocksDuringCapture",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.ComposerPickerNavigationTest",
+      "name": "featuredContainsSpecifiedMelodic24AndAvailableDefaultDrum",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "backingVolumeReachesOfficialPlayerWithoutChangingMicrophoneOrSystemVolume",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "consentAcceptanceRechecksRecordingStartedWhileDialogWasOpen",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "mainReverbAndEchoStayAdjustableDuringYouTubeMicrophoneOnlyRecording",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "rejectingConsentOrInvalidInputNeverCreatesPlayerOrLoadsNetwork",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "startupNeverLoadsYouTube",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "acceptedConsentLoadsVisiblePlayerAndTabOrBackgroundPausesIt",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "nativePlayerAdaptsToWidePortraitAndBelowMinimumWindows",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "youtubeRecordingUsesMicOnlyAndNativeSourcesKeepNormalMixAndSync",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "focusLossPausesAndFocusReturnNeverStartsPlayback",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "frozenMicrophoneOnlyRequestSurvivesPlayerDeselectionBeforeRecordingStarts",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "acceptsOnlyVideoIdsAndSupportedHttpsVideoLinks",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "selectedVideoRequiresUserGestureAndReattachmentNeverStartsPlayback",
+      "run": "full",
+      "passed": true
+    },
+    {
+      "suite": "pro.livemic.studio.YouTubePlayerTest",
+      "name": "scrollingPartOfActualVideoOutOfViewportDisallowsPlaybackUntilFullyRevealed",
+      "run": "full",
+      "passed": true
+    }
+  ]
+}

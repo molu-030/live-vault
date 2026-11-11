@@ -1,0 +1,14 @@
+PASS 44.1/48k zero-ppm mono/stereo sample-exact; variable callbacks; startup353/384 silence frames (~8ms)
+PASS adaptive nominal44.1/48conversion matches fixed interpolation with0ppm; unequal stereo downmix exact
+PASS 600s synthetic 48000->48000 clock=-500ppm correction=-500.008ppm fifo=381..385 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 48000->48000 clock=500ppm correction=500.008ppm fifo=384..388 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 44100->44100 clock=-500ppm correction=-500.004ppm fifo=351..354 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 44100->44100 clock=500ppm correction=500.004ppm fifo=353..356 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 44100->48000 clock=-500ppm correction=-500.002ppm fifo=350..353 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 44100->48000 clock=500ppm correction=500.01ppm fifo=353..356 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 48000->44100 clock=-500ppm correction=-500.006ppm fifo=382..385 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS 600s synthetic 48000->44100 clock=500ppm correction=500.002ppm fifo=385..388 maxSlew=50ppm/s under/overflow=0 alloc=0
+PASS physical440Hz at synthetic -500ppm capture clock -> output=440Hz after settling
+PASS physical440Hz at synthetic 500ppm capture clock -> output=440Hz after settling
+PASS starvation silence/reprime, overflow frame accounting and route/rate reset; output callback frame count unchanged
+PASS: stereo short reads zero-fill; fixed FIFO 44.1/48kHz continuous fractional conversion and resets

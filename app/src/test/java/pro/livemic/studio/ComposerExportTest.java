@@ -37,6 +37,18 @@ public class ComposerExportTest {
   String arrangement=string(files.get("arrangement.md"));assertTrue(arrangement.contains("6/8"));assertTrue(arrangement.contains("1.5"));assertTrue(arrangement.contains("quarter"));assertTrue(string(files.get("llm-prompt.md")).contains("Keep the melody"));assertNotNull(new JSONObject(string(files.get("schema.json"))));
   JSONObject manifest=new JSONObject(string(files.get("manifest.json")));assertEquals(p.id,manifest.getString("projectId"));JSONObject hashes=manifest.getJSONObject("sha256");for(String name:Arrays.asList("project.json","arrangement.md","llm-prompt.md","schema.json","README.md"))assertEquals(hash(files.get(name)),hashes.getString(name));
  }
+ @Test public void arrangementDistinguishesActivePhraseSourcesAndPreservesInactiveRoles()throws Exception{
+  ComposerProject p=new ComposerProject();ComposerProject.Part part=p.parts.get(0);TrackConfig track=part.tracks.get(0);
+  VoicePhrase phrase=new VoicePhrase();phrase.trackId=track.id;VoicePhrase.Note note=new VoicePhrase.Note();note.midi=60;note.length=1;note.velocity=90;phrase.notes.add(note);part.phrases.add(phrase);
+  String prefix="- "+track.name+" ["+track.id+"]: ";String[] sources={"microphone","keyboard",""},roles={"recorded voice phrase","keyboard phrase","recorded phrase"};
+  for(int i=0;i<sources.length;i++){
+   track.phraseSource=sources[i];track.voice=true;String before=p.json().toString();
+   assertTrue(ComposerLlmExport.arrangement(p).contains(prefix+roles[i]+", GM program "));assertEquals(before,p.json().toString());
+   track.voice=false;before=p.json().toString();String summary=ComposerLlmExport.arrangement(p);
+   assertTrue(summary.contains(prefix+"instrument, GM program "));assertTrue(summary.contains("1 phrase notes"));assertEquals(before,p.json().toString());
+  }
+  track.bank=128;assertTrue(ComposerLlmExport.arrangement(p).contains(prefix+"drums, GM program "));
+ }
  public static class TestProvider extends ContentProvider {
   static File destination;public boolean onCreate(){return true;}public String getType(Uri u){return "application/zip";}public Cursor query(Uri u,String[] p,String s,String[] a,String o){return null;}public Uri insert(Uri u,ContentValues v){return null;}public int delete(Uri u,String s,String[] a){return 0;}public int update(Uri u,ContentValues v,String s,String[] a){return 0;}
   @Override public ParcelFileDescriptor openFile(Uri u,String mode)throws FileNotFoundException{return ParcelFileDescriptor.open(destination,ParcelFileDescriptor.MODE_CREATE|ParcelFileDescriptor.MODE_TRUNCATE|ParcelFileDescriptor.MODE_WRITE_ONLY);}

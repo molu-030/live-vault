@@ -1,0 +1,39 @@
+Native Oboe Engine regression — 2026-11-10
+
+Commands (both exited 0):
+  scripts/test-oboe-engine.sh
+  SANITIZE=1 scripts/test-oboe-engine.sh
+
+Each command passed these four groups:
+- Native default/direct-AAudio selection, invalid-provider rejection, and rejection
+  during streams, recording, writer activity, source capture and playback.
+- Initial Oboe output-open, input-open, output-start and input-start failure paths
+  retry the complete direct-AAudio startup. Requested/applied/platform/fallback
+  fields remain distinct. Repeated start retains the fallback reason; complete
+  fallback failure leaves applied/platform unknown; successful fallback clears
+  active fault while retaining its reason.
+- Failed microphone open/start while Oboe backing output is already running
+  preserves backing output, captured/local playback and transport/frame clocks.
+- Actual Engine render exercises adaptive input FIFO, downmix/SRC, Harmony pitch,
+  analyzer buses, reopen counter reset, read-error fail-closed behavior and an
+  exact 2,048-frame WAV written by the real writer. Instrumented callback calls
+  report zero malloc/calloc/realloc/new or pthread mutex lock/trylock operations.
+
+The suite defines LV_TEST_OBOE and replaces only the hardware-facing
+OboeBackend implementation. It executes production Engine and writer branches.
+It does not execute Oboe's Android stream implementation or measure hardware,
+USB behavior, latency, power, thermal behavior, or A/B performance.
+
+Additional regression commands after these fixes (both exited 0):
+  scripts/test-input-engine-drift.sh
+  scripts/test-audio-buses.sh
+
+Input drift: seven groups including the real Engine callback's 120-second
+synthetic finite input clock step from +200 to -200ppm, with no FIFO underflow
+or overflow and zero callback allocations. Final correction -200.22ppm;
+maximum slew 50ppm/s. This is simulated queue/clock evidence, not a USB clock
+measurement.
+
+Audio buses: startup policy, vocal sources, durable writer journal, local-file
+cache and fourteen 44.1/48kHz capture/local/procedural/composer/voice/alignment/
+negative-control bus assertions passed.

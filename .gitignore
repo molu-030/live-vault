@@ -15,6 +15,7 @@ private-artifacts/
 
 # Personal capture implementation is delivered as a private overlay, not published.
 app/src/personal/
+app/src/testPersonal/
 
 !artifacts/LiveMic-Pro-design-v2.apk
 !artifacts/Live-Vault-standard.apk

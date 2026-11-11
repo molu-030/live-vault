@@ -1,0 +1,7 @@
+PASS real Engine default same-rate mono enters adaptive FIFO; finite queue drained, zero-ppm bit-exact after8ms, analyzer/frame continuity, callbackalloc0
+PASS actualavailable0 performs no speculative read; largefinite backlog drains only boundednominal+2target, no fakeoverflow/allocation
+PASS unavailable hardware counters use bounded finite reads; short/zero reads do not invent samples or turn off a valid stream
+PASS hardware read error fails closed; reopen44100/stereo resets FIFO/servo/counters; absent stream outputs silence without old audio
+PASS actual44100/stereo hardware despite48000/mono request; downmix/SRC,8ms warmup and output-unit diagnostic384/48000 truthful
+PASS real WAV writer retains2048 output/recordingframes across empty hardware/FIFO dropout/reprime; exact filelength,callbackalloc0
+PASS productioncallback120s synthetic finite hardware clock +200->-200ppm step; correction=-200.22ppm maxSlew=50ppm/s; no under/overflow,callbackalloc0 (not USB measurement)

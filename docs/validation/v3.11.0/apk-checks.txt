@@ -1,0 +1,5 @@
+Personal APK package/version/signature verified.
+New JNI exports validated in arm64-v8a, armeabi-v7a, x86_64.
+Public standard APK unchanged: 3ef89e3193c8235bc23080850b6eb06fc04ecba62ca35da20bfb89ac3b9e5732
+Build and corrected focused UI validation: SUCCESS.
+No attached adb device; acoustic, battery and Android codec device validation not performed.

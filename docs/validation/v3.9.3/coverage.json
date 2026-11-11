@@ -1,0 +1,259 @@
+{
+  "version": "3.9.3-preview",
+  "versionCode": 30,
+  "method": "Latest class results: full run with two fixture failures, then replacement of three corrected fixture classes. Not a single 234-case full-pass execution.",
+  "full_run": {
+    "suites": 33,
+    "totals": {
+      "tests": 234,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": {
+      "pro.livemic.studio.AecStatusTest": {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.TabletScreenshotTest": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.TakeFinalizationTest": {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.RecordingSourceTest": {
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.StudioDialogsLayoutTest": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerExportTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerPatternTest": {
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ExitFlowTest": {
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.BackNavigationTest": {
+        "tests": 15,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.BackingNavigationTest": {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.AudioServiceRoutingTest": {
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerReliabilityTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerProjectTest": {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.StudioScreenshotTest": {
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.HarmonySessionTest": {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerEditorTest": {
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerPickerScreenshotTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.SpeakerProtectionUiTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerCaptureTargetTest": {
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.YouTubeScreenshotTest": {
+        "tests": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.LanguageSwitchTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.FeedbackRoutingTest": {
+        "tests": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerImportTest": {
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.VideoPublicationTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.LiveConsoleTest": {
+        "tests": 30,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.AudioRoutingTest": {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerRedesignScreenshotTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.LiveConsoleScreenshotTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerPhraseRegressionTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.TabletLayoutTest": {
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ArrangementQualityTest": {
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerPickerNavigationTest": {
+        "tests": 7,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.YouTubePlayerTest": {
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "final_scoped_run": {
+    "suites": 3,
+    "totals": {
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classes": {
+      "pro.livemic.studio.StudioDialogsLayoutTest": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerEditorTest": {
+        "tests": 12,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "pro.livemic.studio.ComposerPickerNavigationTest": {
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "latest_class_results": {
+    "suites": 33,
+    "totals": {
+      "tests": 234,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "fixture_corrections": [
+    "ScrollView content-to-viewport coordinate conversion",
+    "Drain asynchronous Dialog cancellation callback via the actual tracked Back path",
+    "Isolate project and native shadow playing state; drain queued composer tasks"
+  ],
+  "status": "passed_latest_class_results",
+  "device_verification": false
+}

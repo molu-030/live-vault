@@ -1,0 +1,14 @@
+{
+  "fileName": "Live-Vault-personal-3.9.1-preview.apk",
+  "applicationId": "pro.livemic.studio.personal",
+  "versionName": "3.9.1-preview",
+  "versionCode": 28,
+  "bytes": 36001478,
+  "sha256": "e699cd934563dbb956232a328b1b162431fb22ea7c4847d60e05b0d718d7a5c1",
+  "certificateSha256": "6a61c39da7f13d3c7622c12068efd1e5bcb43bae2b7748821e2d2a9af169a139",
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+  ]
+}

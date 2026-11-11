@@ -1,468 +1,503 @@
 package pro.livemic.studio;
 
-import android.content.Context;
+import android.app.AlertDialog;
 import android.content.res.ColorStateList;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.RectF;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.SeekBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
 
-/**
- * Redesigned Live Studio console matching the dark charcoal + neon lime reference UI:
- * 1. Live Session LCD display + Mic/Monitor/Route toolbar + Mic Volume slider
- * 2. Accompaniment (반주) panel + Backing Volume slider
- * 3. Vocal Effects 3x2 Mini-Dial Grid + Fine-Control Slider Box
- * 4. Fixed bottom recording dock
- */
+/** Compact performance surface; advanced editing lives in the Details dialog. */
 final class LiveScreen {
-    static final int IVORY = StudioTheme.TEXT;
-    static final int INK = StudioTheme.ACCENT_INK;
-    static final int PANEL = StudioTheme.SURFACE;
-    static final int SCREEN = StudioTheme.LCD_BG;
-
     final MainActivity a;
-    final int[] ids = {2, 3, 0, 4, 5, 6};
-    final float[] mins = {0, .3f, 0, 0, 70, 0};
-    final float[] maxs = {1, 6, 2, .8f, 700, .7f};
-    final Button[] selectors = new Button[6];
-    final MainActivity.Formatter[] format = {
-        v -> Math.round(v * 100) + "%",
-        v -> String.format(Locale.US, "%.1f s", v),
-        v -> Math.round(v * 100) + "%",
-        v -> Math.round(v * 100) + "%",
-        v -> Math.round(v) + " ms",
-        v -> Math.round(v * 100) + "%"
-    };
-
-    SharedEffectDial dial;
-    TextView mic, route, clock, backing, pitch, level, effectName, effectValue, volumeLabel, micVolumeLabel, sessionStatus;
-    ProgressBar meter;
-    Button video, inputButton, filesButton, onlineButton, composerButton, monitorToggle, backingPlayButton;
+    LiveSessionDisplay display;
+    Button sourceButton, inputButton, micButton, monitorToggle, backingPlayButton, detailsButton, video;
+    TextView backing, backingTime, route, volumeLabel, micVolumeLabel;
     SeekBar backingVolume, micVolume;
+    StudioKnob reverbVolume, echoVolume;
+    LiveMixerView mixer;
+    TextView arrangement, recordingTarget;
     boolean volumeDragging, micVolumeDragging;
+    private final boolean[] dragging = new boolean[20];
 
-    LiveScreen(MainActivity activity) {
-        a = activity;
-    }
+    LiveScreen(MainActivity activity) { a = activity; }
+    String tr(String ko, String en) { return a.tr(ko, en); }
 
-    String tr(String ko, String en) {
-        return a.tr(ko, en);
-    }
-
-    String name(int n) {
-        return new String[]{
-            tr("리버브", "Reverb"),
-            tr("잔향 길이", "Decay"),
-            tr("목소리 크기", "Voice level"),
-            tr("에코 양", "Echo"),
-            tr("에코 간격", "Delay"),
-            tr("에코 반복", "Repeat")
-        }[n];
-    }
-
-    Button button(String text, Runnable action) {
-        Button b = new Button(a);
-        b.setAllCaps(false);
-        b.setStateListAnimator(null);
-        b.setElevation(0);
-        b.setTypeface(StudioTheme.bold(a));
-        b.setTextSize(11.5f);
+    Button button(String label, Runnable action) {
+        Button b = StudioTheme.styled(a, label, StudioButton.STANDARD, action);
+        // The fixed 48dp performance grid permits two device-label lines at
+        // 130% text. Zero vertical inset preserves both 16sp lines at that scale.
+        StudioTheme.applyTypography(b, a.tabletLandscape() && !label.contains("\n") ? StudioTheme.TYPE_BODY : StudioTheme.TYPE_LABEL);
         b.setGravity(Gravity.CENTER);
         b.setIncludeFontPadding(false);
-        b.setPadding(a.dp(6), a.dp(2), a.dp(6), a.dp(2));
-        b.setMinWidth(0);
-        b.setMinimumWidth(0);
-        b.setMinHeight(a.dp(48));
-        b.setMinimumHeight(a.dp(48));
+        b.setPadding(a.dp(a.tabletLandscape() ? StudioTheme.BUTTON_PADDING_HORIZONTAL : StudioTheme.SPACE_8),
+                0,
+                a.dp(a.tabletLandscape() ? StudioTheme.BUTTON_PADDING_HORIZONTAL : StudioTheme.SPACE_8),
+                0);
+        b.setMinWidth(a.dp(StudioTheme.TOUCH_TARGET));
+        b.setMinimumWidth(a.dp(StudioTheme.TOUCH_TARGET));
+        b.setMinHeight(a.dp(StudioTheme.TOUCH_TARGET));
+        b.setMinimumHeight(a.dp(StudioTheme.TOUCH_TARGET));
         b.setMaxLines(2);
         b.setEllipsize(TextUtils.TruncateAt.END);
-        b.setText(text);
-        b.setOnClickListener(v -> action.run());
+        b.setText(label);
         paint(b, false);
         return b;
     }
 
-    void paint(Button b, boolean selected) {
+    void paint(Button b, boolean on) {
+        if (b == null) return;
         b.setBackgroundTintList(null);
-        if (b instanceof EffectCardButton) {
-            b.setBackground(StudioTheme.background(
-                    a,
-                    selected ? StudioTheme.CARD_SELECTED_BG : StudioTheme.CARD_BG,
-                    8,
-                    selected ? StudioTheme.CARD_SELECTED_BORDER : StudioTheme.CARD_BORDER
-            ));
-            b.setTextColor(selected ? StudioTheme.ACCENT : StudioTheme.TEXT);
-        } else {
-            b.setBackground(StudioTheme.background(
-                    a,
-                    selected ? StudioTheme.ACCENT : StudioTheme.RAISED,
-                    7,
-                    selected ? StudioTheme.ACCENT : 0xff35383e
-            ));
-            b.setTextColor(selected ? StudioTheme.ACCENT_INK : StudioTheme.TEXT);
-        }
-        b.setSelected(selected);
+        ((StudioButton) b).role(StudioButton.STANDARD);
+        b.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        b.setTextColor(on ? StudioTheme.ACCENT_INK : StudioTheme.TEXT);
+        b.setSelected(on);
     }
 
     void paintDanger(Button b) {
+        if (b == null) return;
         b.setBackgroundTintList(null);
-        b.setBackground(StudioTheme.background(a, StudioTheme.DANGER, 7, StudioTheme.DANGER));
-        b.setTextColor(0xff190b0c);
-        b.setSelected(true);
+        ((StudioButton) b).role(StudioButton.RECORD);
+        b.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        b.setTextColor(StudioTheme.DANGER);
+        b.setSelected(false);
     }
 
-    TextView text(String t, int size, int color) {
-        return a.text(t, size, color);
+    TextView text(String s, int size, int color) { return a.text(s, size, color); }
+    TextView text(String s, float size, int color) {
+        TextView t = new TextView(a);
+        t.setText(s);
+        StudioTheme.applyTypography(t, Math.max(StudioTheme.TYPE_LABEL, Math.round(size)));
+        t.setTextColor(color);
+        t.setTypeface(StudioTheme.body(a));
+        t.setIncludeFontPadding(false);
+        return t;
     }
 
-    /** Custom 3x2 Effect Card Button with a native-drawn mini rotary dial in the upper half. */
-    final class EffectCardButton extends Button {
-        final int index;
-        final Paint dialPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        final RectF dialArc = new RectF();
+    LinearLayout panel() {
+        LinearLayout p = a.column();
+        // Phones prioritize the fixed performance controls; tablets use the
+        // full shared card inset. Both densities follow the same 4dp grid.
+        int horizontal = a.dp(a.tabletLandscape() ? StudioTheme.CARD_PADDING : StudioTheme.SPACE_12);
+        int vertical = a.dp(a.tabletLandscape() ? StudioTheme.CARD_PADDING : StudioTheme.SPACE_4);
+        p.setPadding(horizontal, vertical, horizontal, vertical);
+        p.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, StudioTheme.CARD_RADIUS, StudioTheme.BORDER));
+        return p;
+    }
 
-        EffectCardButton(Context c, int index, Runnable action) {
-            super(c);
-            this.index = index;
-            setAllCaps(false);
-            setStateListAnimator(null);
-            setElevation(0);
-            setTypeface(StudioTheme.bold(c));
-            setTextSize(10.5f);
-            setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-            setIncludeFontPadding(false);
-            setLineSpacing(a.dp(1), 1f);
-            setPadding(a.dp(3), a.dp(2), a.dp(3), a.dp(4));
-            setMinWidth(a.dp(48));
-            setMinimumWidth(a.dp(48));
-            setMinHeight(a.dp(48));
-            setMinimumHeight(a.dp(48));
-            setMaxLines(2);
-            setOnClickListener(v -> action.run());
-        }
+    void addPanel(View p) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
+        lp.topMargin = a.dp(a.tabletLandscape() ? StudioTheme.SPACE_16 : StudioTheme.SPACE_4);
+        a.page.addView(p, lp);
+    }
 
-        @Override
-        protected void onDraw(Canvas canvas) {
-            float d = getResources().getDisplayMetrics().density;
-            float w = getWidth(), h = getHeight();
-            int textHeight = getLayout() != null ? getLayout().getHeight() : Math.round(26 * d);
-            float availableTop = Math.max(20 * d, h - textHeight - 6 * d);
-            float cx = w / 2f;
-            float cy = Math.max(12 * d, availableTop / 2f + d);
-            float r = Math.min(12.5f * d, (availableTop - 4 * d) / 2f);
+    TextView heading(String s) {
+        TextView t = new TextView(a);
+        t.setText(s);
+        StudioTheme.applyTypography(t, StudioTheme.TYPE_LABEL);
+        t.setTextColor(StudioTheme.MUTED);
+        t.setTypeface(StudioTheme.bold(a));
+        t.setGravity(Gravity.CENTER_VERTICAL);
+        t.setSingleLine(true);
+        t.setIncludeFontPadding(false);
+        return t;
+    }
 
-            if (r >= 6 * d) {
-                float min = mins[index], max = maxs[index];
-                float val = Math.max(min, Math.min(max, a.values[ids[index]]));
-                float frac = (val - min) / (max - min);
-                boolean sel = isSelected();
+    SeekBar gain(LinearLayout parent, String label, int key, int max, TextView value) {
+        LinearLayout row = a.row();
+        value.setTextSize(a.tabletLandscape() ? StudioTheme.TYPE_BODY : StudioTheme.TYPE_LABEL);
+        value.setTypeface(StudioTheme.mono(a));
+        value.setMaxLines(1);
+        value.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        value.setIncludeFontPadding(false);
+        value.setLineSpacing(0, 1f);
+        TextView name = text(label, a.tabletLandscape() ? StudioTheme.TYPE_BODY : StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
+        name.setMaxLines(1);
+        name.setGravity(Gravity.CENTER_VERTICAL);
+        name.setTypeface(StudioTheme.medium(a));
+        name.setIncludeFontPadding(false);
+        name.setLineSpacing(0, 1f);
+        row.addView(name, new LinearLayout.LayoutParams(a.dp(a.tabletLandscape() ? 96 : 64), a.dp(48)));
+        SeekBar bar = gainBar(label, key, max, value);
+        row.addView(bar, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+        row.addView(value, new LinearLayout.LayoutParams(a.dp(a.tabletLandscape() ? 64 : 48), a.dp(48)));
+        parent.addView(row);
+        return bar;
+    }
 
-                dialArc.set(cx - r, cy - r, cx + r, cy + r);
-                dialPaint.setStyle(Paint.Style.STROKE);
-                dialPaint.setStrokeWidth(2.2f * d);
-                dialPaint.setStrokeCap(Paint.Cap.ROUND);
-                dialPaint.setColor(0xff2c323b);
-                canvas.drawArc(dialArc, 135, 270, false, dialPaint);
+    SeekBar compactGain(LinearLayout parent, String label, int key, int max, TextView value) {
+        LinearLayout row = a.row();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = text(label, StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
+        name.setMaxLines(1);
+        name.setGravity(Gravity.CENTER_VERTICAL);
+        name.setTypeface(StudioTheme.medium(a));
+        name.setIncludeFontPadding(false);
+        name.setLineSpacing(0, 1f);
+        row.addView(name, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
+        SeekBar bar = gainBar(label, key, max, value);
+        bar.setPadding(a.dp(4), 0, a.dp(4), 0);
+        row.addView(bar, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+        value.setTextSize(StudioTheme.TYPE_LABEL);
+        value.setTypeface(StudioTheme.mono(a));
+        value.setMaxLines(1);
+        value.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        value.setIncludeFontPadding(false);
+        value.setLineSpacing(0, 1f);
+        row.addView(value, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
+        if (parent.getChildCount() > 0) lp.leftMargin = a.dp(StudioTheme.SPACE_8);
+        parent.addView(row, lp);
+        return bar;
+    }
 
-                dialPaint.setColor(sel ? StudioTheme.ACCENT : StudioTheme.OLIVE);
-                canvas.drawArc(dialArc, 135, 270 * frac, false, dialPaint);
-
-                dialPaint.setStyle(Paint.Style.FILL);
-                dialPaint.setColor(0xff121519);
-                canvas.drawCircle(cx, cy, r * 0.74f, dialPaint);
-
-                dialPaint.setStyle(Paint.Style.STROKE);
-                dialPaint.setStrokeWidth(0.9f * d);
-                dialPaint.setColor(sel ? 0xff5a6624 : 0xff3a404a);
-                canvas.drawCircle(cx, cy, r * 0.74f, dialPaint);
-
-                double rad = Math.toRadians(135 + 270 * frac);
-                float nx = (float) Math.cos(rad), ny = (float) Math.sin(rad);
-                dialPaint.setStrokeWidth(1.6f * d);
-                dialPaint.setColor(StudioTheme.ACCENT);
-                canvas.drawLine(cx + nx * r * 0.25f, cy + ny * r * 0.25f, cx + nx * r * 0.64f, cy + ny * r * 0.64f, dialPaint);
-                dialPaint.setStyle(Paint.Style.FILL);
+    SeekBar gainBar(String label, int key, int max, TextView value) {
+        SeekBar bar = new SeekBar(a);
+        bar.setMax(max);
+        bar.setProgress(Math.round(a.values[key] * 100));
+        value.setText(bar.getProgress() + "%");
+        bar.setContentDescription(label);
+        bar.setMinimumHeight(a.dp(48));
+        bar.setProgressTintList(ColorStateList.valueOf(StudioTheme.ACCENT));
+        bar.setThumbTintList(ColorStateList.valueOf(StudioTheme.ACCENT));
+        bar.setProgressBackgroundTintList(ColorStateList.valueOf(0xff30352b));
+        bar.setPadding(a.dp(8), 0, a.dp(8), 0);
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onStartTrackingTouch(SeekBar b) {
+                dragging[key] = true;
+                if (key == 0) micVolumeDragging = true;
+                if (key == 1) volumeDragging = true;
             }
-            super.onDraw(canvas);
-        }
+            public void onStopTrackingTouch(SeekBar b) {
+                dragging[key] = false;
+                if (key == 0) micVolumeDragging = false;
+                if (key == 1) volumeDragging = false;
+            }
+            public void onProgressChanged(SeekBar b, int v, boolean user) {
+                if (user) {
+                    a.set(key, v / 100f);
+                    value.setText(v + "%");
+                }
+            }
+        });
+        return bar;
     }
 
     void draw() {
-        // 1. LIVE SESSION PANEL
-        LinearLayout sessionPanel = a.column();
-        sessionPanel.setPadding(a.dp(8), a.dp(6), a.dp(8), a.dp(6));
-        sessionPanel.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 10, StudioTheme.BORDER));
+        boolean tablet = a.tabletLandscape();
+        LinearLayout tabletRow = tablet ? a.row() : null;
+        LinearLayout tabletRight = tablet ? a.column() : null;
+        // 1. LIVE SESSION LCD DISPLAY & 2x2 I/O CONTROLS
+        LinearLayout session = panel();
+        display = new LiveSessionDisplay(a);
+        if (tablet) {
+            session.setTag("tablet-live-left");
+            session.setPadding(a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING), a.dp(StudioTheme.CARD_PADDING));
+            display.setTag("tablet-live-session-display");
+            session.addView(display, new LinearLayout.LayoutParams(-1, 0, 1));
+        } else {
+            session.addView(display, new LinearLayout.LayoutParams(-1, a.dp(168)));
+            // The existing LCD has a two-column compact meter/pitch layout below
+            // 151dp. Let short phone windows use it so controls and system-scaled
+            // labels retain their full size while the fixed dock stays visible.
+            a.page.flexible(display, 120, 300);
+        }
 
-        LinearLayout lcd = a.column();
-        lcd.setPadding(a.dp(9), a.dp(5), a.dp(9), a.dp(6));
-        lcd.setBackground(StudioTheme.background(a, StudioTheme.LCD_BG, 7, StudioTheme.LCD_BORDER));
+        arrangement = text("", StudioTheme.TYPE_LABEL, StudioTheme.OLIVE);
+        arrangement.setTypeface(StudioTheme.mono(a));
+        arrangement.setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(4));
+        arrangement.setMaxLines(tablet ? 2 : 1);
+        arrangement.setBackgroundColor(StudioTheme.LCD_BG);
+        if (tablet) session.addView(arrangement, new LinearLayout.LayoutParams(-1, -2));
+        // Phones reuse the existing accompaniment caption for composer position;
+        // an extra dashboard row would displace fixed controls at large text sizes.
 
-        LinearLayout lcdTop = a.row();
-        mic = text("", 11, StudioTheme.ACCENT);
-        mic.setTypeface(StudioTheme.bold(a));
-        lcdTop.addView(mic, new LinearLayout.LayoutParams(0, -2, 1));
-        route = text("", 10, StudioTheme.OLIVE);
-        route.setMaxLines(1);
-        route.setEllipsize(TextUtils.TruncateAt.END);
-        route.setOnClickListener(v -> a.monitoringOptions());
-        route.setFocusable(true);
-        lcdTop.addView(route);
-        lcd.addView(lcdTop);
+        // Section label "입출력" & 2x2 Input / Output Controls Grid
+        session.addView(heading(tr("입출력", "I/O")), new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout grid = a.column();
 
-        LinearLayout lcdMid = a.row();
-        LinearLayout.LayoutParams midLp = new LinearLayout.LayoutParams(-1, -2);
-        midLp.topMargin = a.dp(2);
-        clock = text("00:00", 17, StudioTheme.TEXT);
-        clock.setTypeface(StudioTheme.mono(a));
-        lcdMid.addView(clock, new LinearLayout.LayoutParams(0, -2, 1));
-        pitch = text("", 11, StudioTheme.OLIVE);
-        pitch.setTypeface(StudioTheme.mono(a));
-        pitch.setPadding(0, 0, a.dp(8), 0);
-        lcdMid.addView(pitch);
-        level = text("", 11, StudioTheme.MUTED);
-        level.setTypeface(StudioTheme.mono(a));
-        lcdMid.addView(level);
-        lcd.addView(lcdMid, midLp);
+        // Row 1: Mic Toggle (left) | Monitor Toggle (right)
+        LinearLayout row1 = a.row();
+        micButton = a.micButton = button(tr("마이크 켜기", "Turn mic on"), a::requestMicToggle);
+        row1.addView(a.micButton, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
-        meter = new ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
-        meter.setMax(1000);
-        meter.setContentDescription(tr("입력 레벨", "Input level"));
-        meter.setProgressTintList(ColorStateList.valueOf(StudioTheme.ACCENT));
-        meter.setProgressBackgroundTintList(ColorStateList.valueOf(0xff1e261f));
-        LinearLayout.LayoutParams meterLp = new LinearLayout.LayoutParams(-1, a.dp(5));
-        meterLp.topMargin = a.dp(4);
-        lcd.addView(meter, meterLp);
-        sessionPanel.addView(lcd);
+        monitorToggle = button(tr("목소리 듣기", "Monitor"), this::toggleMonitor);
+        LinearLayout.LayoutParams monLp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
+        monLp.leftMargin = a.dp(StudioTheme.SPACE_8);
+        row1.addView(monitorToggle, monLp);
+        grid.addView(row1, new LinearLayout.LayoutParams(-1, a.dp(48)));
 
-        // Mic & Route Controls Row
-        LinearLayout controls = a.row();
-        LinearLayout.LayoutParams controlsLp = new LinearLayout.LayoutParams(-1, a.dp(48));
-        controlsLp.topMargin = a.dp(5);
-        a.micButton = button(tr("마이크 켜기", "Turn mic on"), a::requestMicToggle);
-        controls.addView(a.micButton, new LinearLayout.LayoutParams(0, a.dp(48), 1.15f));
+        // Row 2: Input Device (left) | Output Device (right)
+        LinearLayout row2 = a.row();
+        LinearLayout.LayoutParams row2Lp = new LinearLayout.LayoutParams(-1, a.dp(48));
+        row2Lp.topMargin = a.dp(StudioTheme.SPACE_8);
 
-        monitorToggle = button(tr("내 목소리 듣기", "Monitor"), this::toggleMonitor);
-        monitorToggle.setTextSize(10.5f);
-        LinearLayout.LayoutParams monLp = new LinearLayout.LayoutParams(0, a.dp(48), 1.15f);
-        monLp.leftMargin = a.dp(5);
-        controls.addView(monitorToggle, monLp);
+        inputButton = button(tr("입력", "Input") + " ▾\n" + compactDevice(a.inputName()), a::selectInput);
+        sourceButton = inputButton; // Keep reference for test compatibility
+        row2.addView(inputButton, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
-        inputButton = button(tr("입력 ▾", "Input ▾"), a::selectInput);
-        inputButton.setTextSize(10.5f);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, a.dp(48), 0.9f);
-        ip.leftMargin = a.dp(5);
-        controls.addView(inputButton, ip);
+        a.outputButton = button(tr("출력", "Output") + " ▾\n" + compactDevice(a.outputName()), a::outputMode);
+        LinearLayout.LayoutParams outLp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
+        outLp.leftMargin = a.dp(StudioTheme.SPACE_8);
+        row2.addView(a.outputButton, outLp);
+        grid.addView(row2, row2Lp);
 
-        a.outputButton = button(tr("출력 ▾", "Output ▾"), a::outputMode);
-        a.outputButton.setTextSize(10.5f);
-        LinearLayout.LayoutParams op = new LinearLayout.LayoutParams(0, a.dp(48), 0.9f);
-        op.leftMargin = a.dp(5);
-        controls.addView(a.outputButton, op);
-        sessionPanel.addView(controls, controlsLp);
+        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
+        cp.topMargin = a.dp(4);
+        session.addView(grid, cp);
 
-        // Microphone Volume Slider Row (param 0)
-        LinearLayout micVolRow = a.row();
-        LinearLayout.LayoutParams micVolLp = new LinearLayout.LayoutParams(-1, a.dp(32));
-        micVolLp.topMargin = a.dp(3);
-        micVolumeLabel = text("", 11, StudioTheme.MUTED);
-        micVolumeLabel.setGravity(Gravity.CENTER_VERTICAL);
-        micVolRow.addView(micVolumeLabel, new LinearLayout.LayoutParams(-2, a.dp(32)));
-        micVolume = new SeekBar(a);
-        micVolume.setMax(200);
-        micVolume.setProgress(Math.round(a.values[0] * 100));
-        micVolume.setContentDescription(tr("마이크 볼륨", "Microphone volume"));
-        micVolume.setProgressTintList(ColorStateList.valueOf(StudioTheme.ACCENT));
-        micVolume.setThumbTintList(ColorStateList.valueOf(StudioTheme.TEXT));
-        micVolume.setProgressBackgroundTintList(ColorStateList.valueOf(0xff272b31));
-        micVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onStartTrackingTouch(SeekBar b) {
-                micVolumeDragging = true;
-            }
+        route = text("", StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
+        route.setVisibility(View.GONE);
+        micVolumeLabel = text("", StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
+        volumeLabel = text("", StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
 
-            @Override
-            public void onStopTrackingTouch(SeekBar b) {
-                micVolumeDragging = false;
-            }
+        micVolume = gain(session, tr("마이크", "Mic"), 0, 200, micVolumeLabel);
+        if (tablet) {
+            tabletRow.setTag("tablet-live-workspace");
+            tabletRow.addView(session, new LinearLayout.LayoutParams(0, -1, 1.12f));
+            ScrollView rightScroll = new ScrollView(a);
+            rightScroll.setTag("tablet-live-right");
+            rightScroll.setFillViewport(true);
+            rightScroll.setClipToPadding(false);
+            rightScroll.addView(tabletRight, new ScrollView.LayoutParams(-1, -2));
+            LinearLayout.LayoutParams rightLp = new LinearLayout.LayoutParams(0, -1, 1);
+            rightLp.leftMargin = a.dp(StudioTheme.SPACE_16);
+            tabletRow.addView(rightScroll, rightLp);
+            a.page.addView(tabletRow, new LinearLayout.LayoutParams(-1, a.dp(420)));
+            // Use exactly the viewport left by the fixed footer; a workspace floor
+            // must not add outer scrolling to the 600dp expanded layout.
+            a.page.flexible(tabletRow, 0, 1600);
+        } else {
+            a.page.addView(session, new LinearLayout.LayoutParams(-1, -2));
+        }
 
-            @Override
-            public void onProgressChanged(SeekBar b, int value, boolean user) {
-                if (user) {
-                    a.set(0, value / 100f);
-                    updateMicVolumeLabel(value);
-                    sync();
-                }
-            }
-        });
-        micVolRow.addView(micVolume, new LinearLayout.LayoutParams(0, a.dp(32), 1));
-        sessionPanel.addView(micVolRow, micVolLp);
+        // 2. ACCOMPANIMENT PANEL (Clean Backing Surface)
+        LinearLayout accompaniment = panel();
+        accompaniment.addView(heading(tablet ? tr("반주", "ACCOMPANIMENT") : tr("🎵 반주", "🎵 ACCOMPANIMENT")), new LinearLayout.LayoutParams(-1, -2));
 
-        LinearLayout.LayoutParams sessionPanelLp = new LinearLayout.LayoutParams(-1, -2);
-        sessionPanelLp.bottomMargin = a.dp(5);
-        a.page.addView(sessionPanel, sessionPanelLp);
+        LinearLayout player = a.row();
+        backingPlayButton = button("", this::toggleBackingPlay);
+        ((StudioButton) backingPlayButton).glyph("play");
+        backingPlayButton.setCompoundDrawablePadding(0);
+        backingPlayButton.setPadding(a.dp(StudioTheme.SPACE_12), 0, a.dp(StudioTheme.SPACE_12), 0);
+        player.addView(backingPlayButton, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
 
-        // 2. ACCOMPANIMENT (반주) PANEL
-        LinearLayout backingPanel = a.column();
-        backingPanel.setPadding(a.dp(8), a.dp(5), a.dp(8), a.dp(5));
-        backingPanel.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 10, StudioTheme.BORDER));
-
-        LinearLayout sources = a.row();
-        backing = text("", 11, StudioTheme.OLIVE);
+        LinearLayout track = a.column();
+        track.setGravity(Gravity.CENTER_VERTICAL);
+        track.setPadding(a.dp(StudioTheme.SPACE_8), 0, a.dp(StudioTheme.SPACE_8), 0);
+        backing = text("", tablet ? StudioTheme.TYPE_TITLE : StudioTheme.TYPE_LABEL, StudioTheme.TEXT);
         backing.setTypeface(StudioTheme.medium(a));
         backing.setMaxLines(1);
         backing.setEllipsize(TextUtils.TruncateAt.END);
-        sources.addView(backing, new LinearLayout.LayoutParams(0, -2, 1.15f));
+        backingTime = text("00:00 / 00:00", StudioTheme.TYPE_LABEL, StudioTheme.OLIVE);
+        backingTime.setTypeface(StudioTheme.mono(a));
+        track.addView(backing);
+        track.addView(backingTime);
+        track.setOnClickListener(v -> a.chooseBacking());
+        track.setFocusable(true);
+        track.setContentDescription(tr("반주 선택 또는 변경", "Choose or change backing"));
+        player.addView(track, new LinearLayout.LayoutParams(0, a.dp(48), 1));
 
-        backingPlayButton = button("▶", this::toggleBackingPlay);
-        LinearLayout.LayoutParams playLp = new LinearLayout.LayoutParams(a.dp(48), a.dp(48));
-        playLp.leftMargin = a.dp(4);
-        sources.addView(backingPlayButton, playLp);
+        Button chooseBacking = button(tr("반주 선택 ▾", "Choose backing ▾"), a::chooseBacking);
+        player.addView(chooseBacking, new LinearLayout.LayoutParams(a.dp(tablet ? 144 : 88), a.dp(48)));
 
-        filesButton = button(tr("내 파일", "My files"), () -> openSource(1));
-        LinearLayout.LayoutParams filesLp = new LinearLayout.LayoutParams(0, a.dp(48), 0.9f);
-        filesLp.leftMargin = a.dp(4);
-        sources.addView(filesButton, filesLp);
+        accompaniment.addView(player);
+        backingVolume = gain(accompaniment, tr("반주", "Backing"), 1, 100, volumeLabel);
+        if (a.youtube.selected) a.youtube.attach(accompaniment);
+        if (tablet) tabletRight.addView(accompaniment, new LinearLayout.LayoutParams(-1, -2));
+        else addPanel(accompaniment);
 
-        onlineButton = button(tr("온라인", "Online"), () -> openSource(2));
-        LinearLayout.LayoutParams onlineLp = new LinearLayout.LayoutParams(0, a.dp(48), 0.9f);
-        onlineLp.leftMargin = a.dp(4);
-        sources.addView(onlineButton, onlineLp);
-        backingPanel.addView(sources);
+        // Compact rotary controls keep horizontal system Back gestures available.
+        LinearLayout fx = panel();
+        LinearLayout knobs = a.row();
+        reverbVolume = effectKnob(knobs, tr("리버브", "Reverb"), 2, 1);
+        echoVolume = effectKnob(knobs, tr("에코", "Echo"), 4, .8f);
+        detailsButton = button(tr("상세 ▾", "Details ▾"), this::effectsDetails);
 
-        LinearLayout volume = a.row();
-        LinearLayout.LayoutParams volLp = new LinearLayout.LayoutParams(-1, a.dp(32));
-        volLp.topMargin = a.dp(2);
-        volumeLabel = text("", 11, StudioTheme.MUTED);
-        volumeLabel.setGravity(Gravity.CENTER_VERTICAL);
-        volume.addView(volumeLabel, new LinearLayout.LayoutParams(-2, a.dp(32)));
-        backingVolume = new SeekBar(a);
-        backingVolume.setMax(100);
-        backingVolume.setProgress(Math.round(a.values[1] * 100));
-        backingVolume.setContentDescription(tr("반주 음량", "Backing volume"));
-        backingVolume.setProgressTintList(ColorStateList.valueOf(StudioTheme.ACCENT));
-        backingVolume.setThumbTintList(ColorStateList.valueOf(StudioTheme.TEXT));
-        backingVolume.setProgressBackgroundTintList(ColorStateList.valueOf(0xff272b31));
-        backingVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onStartTrackingTouch(SeekBar b) {
-                volumeDragging = true;
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar b) {
-                volumeDragging = false;
-            }
-
-            @Override
-            public void onProgressChanged(SeekBar b, int value, boolean user) {
-                if (user) {
-                    a.set(1, value / 100f);
-                    updateVolumeLabel(value);
-                }
-            }
-        });
-        volume.addView(backingVolume, new LinearLayout.LayoutParams(0, a.dp(32), 1));
-        backingPanel.addView(volume, volLp);
-
-        LinearLayout.LayoutParams backingPanelLp = new LinearLayout.LayoutParams(-1, -2);
-        backingPanelLp.bottomMargin = a.dp(5);
-        a.page.addView(backingPanel, backingPanelLp);
-
-        // 3. VOCAL EFFECTS (보컬 효과) PANEL — 3x2 Mini-Dial Grid + Fine Control Slider Box
-        LinearLayout effects = a.column();
-        effects.setPadding(a.dp(8), a.dp(6), a.dp(8), a.dp(6));
-        effects.setBackground(StudioTheme.background(a, StudioTheme.SURFACE, 10, StudioTheme.BORDER));
-
-        LinearLayout section = a.row();
-        TextView heading = text(tr("보컬 효과", "VOCAL FX"), 13, StudioTheme.TEXT);
-        heading.setTypeface(StudioTheme.bold(a));
-        heading.setGravity(Gravity.CENTER_VERTICAL);
-        section.addView(heading, new LinearLayout.LayoutParams(0, a.dp(48), 1));
-
-        Button reset = button(tr("초기화", "Reset"), this::reset);
-        section.addView(reset, new LinearLayout.LayoutParams(a.dp(68), a.dp(48)));
-
-        a.presetChip = button(a.presetName() + " ▾", () -> {
-            dial.cancelGesture();
-            a.presetPicker();
-        });
-        a.presetChip.setTextSize(11);
-        LinearLayout.LayoutParams presetLp = new LinearLayout.LayoutParams(a.dp(108), a.dp(48));
-        presetLp.leftMargin = a.dp(5);
-        section.addView(a.presetChip, presetLp);
-        effects.addView(section);
-
-        // 3x2 Grid of 6 Mini-Dial Effect Cards
-        LinearLayout grid = a.column();
-        LinearLayout.LayoutParams gridLp = new LinearLayout.LayoutParams(-1, 0, 1);
-        gridLp.topMargin = a.dp(4);
-        for (int r = 0; r < 2; r++) {
-            LinearLayout gridRow = a.row();
-            for (int c = 0; c < 3; c++) {
-                int index = r * 3 + c;
-                EffectCardButton card = new EffectCardButton(a, index, () -> select(index));
-                selectors[index] = card;
-                paint(card, index == a.selectedLiveEffect);
-                LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(0, -1, 1);
-                if (c > 0) cardLp.leftMargin = a.dp(5);
-                gridRow.addView(card, cardLp);
-            }
-            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(-1, 0, 1);
-            if (r > 0) rowLp.topMargin = a.dp(5);
-            grid.addView(gridRow, rowLp);
+        LinearLayout fh = a.row();
+        fh.addView(heading(tablet ? tr("보컬 효과", "VOCAL FX") : tr("✨ 보컬 효과", "✨ VOCAL FX")), new LinearLayout.LayoutParams(0, a.dp(48), 1));
+        fh.addView(detailsButton, new LinearLayout.LayoutParams(a.dp(tablet ? 112 : 88), a.dp(48)));
+        fx.addView(fh);
+        if (tablet) {
+            LinearLayout modes = a.row();
+            Button effectsMode = button(tr("보컬 효과", "Vocal FX"), () -> {});
+            Button mixerMode = button(tr("트랙 믹서", "Track mixer"), () -> {});
+            modes.addView(effectsMode, new LinearLayout.LayoutParams(0, a.dp(48), 1));
+            LinearLayout.LayoutParams mixerModeLp = new LinearLayout.LayoutParams(0, a.dp(48), 1);
+            mixerModeLp.leftMargin = a.dp(StudioTheme.SPACE_8);
+            modes.addView(mixerMode, mixerModeLp);
+            LinearLayout.LayoutParams modesLp = new LinearLayout.LayoutParams(-1, a.dp(48));
+            modesLp.topMargin = a.dp(StudioTheme.SPACE_8);
+            fx.addView(modes, modesLp);
+            mixer = new LiveMixerView(a);
+            mixer.setVisibility(View.GONE);
+            fx.addView(mixer, new LinearLayout.LayoutParams(-1, -2));
+            paint(effectsMode, true);
+            effectsMode.setOnClickListener(v -> {
+                mixer.close(); mixer.setVisibility(View.GONE); knobs.setVisibility(View.VISIBLE);
+                detailsButton.setVisibility(View.VISIBLE); paint(effectsMode, true); paint(mixerMode, false);
+            });
+            mixerMode.setOnClickListener(v -> {
+                a.composerScreen.clearSolo(); mixer.poll(); mixer.setVisibility(View.VISIBLE); knobs.setVisibility(View.GONE);
+                detailsButton.setVisibility(View.GONE); paint(effectsMode, false); paint(mixerMode, true);
+            });
+            // A real base height survives ScrollView's initial unspecified measurement;
+            // weights consume spare viewport height only when fillViewport remeasures.
+            knobs.setMinimumHeight(a.dp(168));
+            fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(168), 1));
+            fx.setMinimumHeight(a.dp(240));
+            LinearLayout.LayoutParams fxLp = new LinearLayout.LayoutParams(-1, -2, 1);
+            fxLp.topMargin = a.dp(StudioTheme.SPACE_16);
+            tabletRight.addView(fx, fxLp);
+        } else {
+            fx.addView(knobs, new LinearLayout.LayoutParams(-1, a.dp(96)));
+            addPanel(fx);
         }
-        effects.addView(grid, gridLp);
 
-        // Fine Control Slider Box (#101318)
-        LinearLayout fineBox = a.column();
-        fineBox.setPadding(a.dp(9), a.dp(5), a.dp(9), a.dp(4));
-        fineBox.setBackground(StudioTheme.background(a, StudioTheme.FINE_BG, 8, StudioTheme.FINE_BORDER));
-        LinearLayout fineHeader = a.row();
-        effectName = text("", 12, StudioTheme.TEXT);
-        effectName.setTypeface(StudioTheme.bold(a));
-        fineHeader.addView(effectName, new LinearLayout.LayoutParams(0, -2, 1));
-        effectValue = text("", 14, StudioTheme.ACCENT);
-        effectValue.setTypeface(StudioTheme.mono(a));
-        fineHeader.addView(effectValue);
-        fineBox.addView(fineHeader);
-
-        dial = createDial();
-        fineBox.addView(dial, new LinearLayout.LayoutParams(-1, a.dp(38)));
-        LinearLayout.LayoutParams fineLp = new LinearLayout.LayoutParams(-1, -2);
-        fineLp.topMargin = a.dp(5);
-        effects.addView(fineBox, fineLp);
-
-        a.page.addView(effects, new LinearLayout.LayoutParams(-1, a.dp(266)));
-        a.page.flexible(effects, 250, 1000);
-
-        // 4. FIXED BOTTOM ACTION DOCK
-        a.content = a.actionDock;
-        LinearLayout actions = a.row();
+        // 4. ACTION DOCK
+        LinearLayout dock = a.row();
         a.recButton = button(tr("● 녹음 시작", "● Record"), a::toggleRecord);
-        actions.addView(a.recButton, new LinearLayout.LayoutParams(0, a.dp(50), 1.3f));
+        dock.addView(a.recButton, new LinearLayout.LayoutParams(0, a.dp(48), 1));
         video = button(tr("영상", "Video"), () -> a.chooseTab(3));
-        LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(0, a.dp(50), 0.9f);
-        vp.leftMargin = a.dp(6);
-        actions.addView(video, vp);
-        a.recordOptions = button("⋯", a::recordingOptions);
-        a.recordOptions.setTextSize(20);
-        a.recordOptions.setContentDescription(tr("녹음 설정 · 시작 시간 및 다른 앱 소리", "Recording settings · start time and other app audio"));
-        LinearLayout.LayoutParams more = new LinearLayout.LayoutParams(a.dp(48), a.dp(50));
-        more.leftMargin = a.dp(6);
-        actions.addView(a.recordOptions, more);
-        a.actionDock.addView(actions);
-        a.content = a.page;
+        LinearLayout.LayoutParams vp = new LinearLayout.LayoutParams(a.dp(96), a.dp(48));
+        vp.leftMargin = a.dp(8);
+        dock.addView(video, vp);
+        recordingTarget = text("", StudioTheme.TYPE_LABEL, StudioTheme.MUTED);
+        recordingTarget.setGravity(Gravity.CENTER);
+        recordingTarget.setPadding(0, 0, 0, 0);
+        recordingTarget.setLines(1);
+        recordingTarget.setHorizontallyScrolling(false);
+        a.actionDock.addView(recordingTarget);
+        a.actionDock.addView(dock);
+        a.recordOptions = a.globalOptions;
 
-        select(a.selectedLiveEffect);
         poll(NativeAudio.stats(), AudioService.active);
+    }
+
+    StudioKnob effectKnob(LinearLayout parent, String label, int key, float max) {
+        StudioKnob knob = new StudioKnob(a, label, 0, max, a.values[key],
+                v -> Math.round(v * 100) + "%", v -> a.set(key, v));
+        if (!a.tabletLandscape()) knob.compact();
+        knob.setOnClickListener(v -> adjustEffectDialog(label, key, max, knob));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, a.tabletLandscape() ? -1 : a.dp(96), 1);
+        if (parent.getChildCount() > 0) lp.leftMargin = a.dp(StudioTheme.SPACE_8);
+        parent.addView(knob, lp);
+        return knob;
+    }
+
+    void adjustEffectDialog(String title, int key, float max, StudioKnob knob) {
+        float[] val = { a.values[key] };
+        LinearLayout p = a.column();
+        p.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(12));
+
+        TextView display = a.text(Math.round(val[0] * 100) + "%", StudioTheme.TYPE_DISPLAY, MainActivity.TEXT);
+        display.setTypeface(StudioTheme.bold(a));
+        display.setGravity(Gravity.CENTER);
+        display.setPadding(0, 0, 0, a.dp(8));
+        p.addView(display);
+
+        int maxPercent = Math.round(max * 100);
+        SeekBar bar = new SeekBar(a);
+        bar.setMax(maxPercent);
+        bar.setProgress(Math.round(val[0] * 100));
+        bar.setPadding(a.dp(StudioTheme.SPACE_16), 0, a.dp(StudioTheme.SPACE_16), 0);
+        java.util.function.IntConsumer applyPercent = percent -> {
+            int bounded = Math.max(0, Math.min(maxPercent, percent));
+            val[0] = bounded / 100f;
+            a.set(key, val[0]);
+            knob.sync(val[0]);
+            display.setText(bounded + "%");
+            bar.setProgress(bounded);
+        };
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            public void onProgressChanged(SeekBar sb, int progress, boolean fromUser) {
+                if (fromUser) applyPercent.accept(progress);
+            }
+            public void onStartTrackingTouch(SeekBar sb) {}
+            public void onStopTrackingTouch(SeekBar sb) {}
+        });
+
+        LinearLayout presets = a.row();
+        presets.setGravity(Gravity.CENTER);
+        for (int i = 0; i <= 4; i++) {
+            final int percent = Math.round(maxPercent * i / 4f);
+            Button chip = StudioTheme.styled(a, percent + "%", StudioButton.CHIP,
+                    () -> applyPercent.accept(percent));
+            StudioTheme.applyTypography(chip, StudioTheme.TYPE_LABEL);
+            chip.setPadding(a.dp(StudioTheme.SPACE_4), 0, a.dp(StudioTheme.SPACE_4), 0);
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, a.dp(StudioTheme.TOUCH_TARGET), 1);
+            if (i > 0) clp.leftMargin = a.dp(StudioTheme.SPACE_8);
+            presets.addView(chip, clp);
+        }
+        LinearLayout.LayoutParams prLp = new LinearLayout.LayoutParams(-1, -2);
+        prLp.bottomMargin = a.dp(StudioTheme.SPACE_16);
+        p.addView(presets, prLp);
+
+        LinearLayout stepRow = a.row();
+        stepRow.setGravity(Gravity.CENTER_VERTICAL);
+        Button minus = StudioTheme.styled(a, "−5%", StudioButton.STANDARD,
+                () -> applyPercent.accept(Math.round(val[0] * 100) - 5));
+        stepRow.addView(minus, new LinearLayout.LayoutParams(a.dp(56), a.dp(48)));
+        stepRow.addView(bar, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button plus = StudioTheme.styled(a, "+5%", StudioButton.STANDARD,
+                () -> applyPercent.accept(Math.round(val[0] * 100) + 5));
+        stepRow.addView(plus, new LinearLayout.LayoutParams(a.dp(56), a.dp(48)));
+        p.addView(stepRow);
+
+        StudioDialogs.form(a, title + tr(" 조절", " Adjust"), p, tr("완료", "Done"), () -> {
+            a.set(key, val[0]);
+            knob.sync(val[0]);
+        }, null);
+    }
+
+    void openSource(int source) {
+        if (a.settingsLocked()) {
+            a.toast(tr("녹음 또는 예약을 마친 뒤 소스를 바꾸세요.", "Finish recording or the countdown before changing sources."));
+            return;
+        }
+        if (source != 2) a.leaveYouTube();
+        a.sourceTab = source;
+        a.getPreferences(0).edit().putInt("backingSource", source).apply();
+        a.chooseTab(1);
+    }
+
+    void effectsDetails() {
+        LinearLayout p = panel();
+        p.setBackground(null);
+        LinearLayout previous = a.content;
+        a.content = p;
+        Button preset = button(tr("프리셋 · ", "Preset · ") + a.presetName() + " ▾", () -> {});
+        p.addView(preset);
+        a.slider(tr("리버브 잔향", "Reverb decay"), 3, .3f, 6, v -> String.format(Locale.US, "%.1f s", v));
+        a.slider(tr("에코 간격", "Echo delay"), 5, 70, 700, v -> Math.round(v) + " ms");
+        a.slider(tr("에코 반복", "Echo feedback"), 6, 0, .7f, v -> Math.round(v * 100) + "%");
+        for (int key = 7; key <= 9; key++) a.slider(new String[]{"Low EQ", "Mid EQ", "High EQ"}[key - 7], key, -12, 12, v -> Math.round(v) + " dB");
+        a.toggle(tr("컴프레서", "Compressor"), 10);
+        a.toggle(tr("소음 완화", "Noise reduction"), 19);
+        p.addView(button(tr("리버브 공간 ▾", "Reverb space ▾"), () -> StudioDialogs.choose(a, tr("리버브 공간", "Reverb space"), new String[]{tr("홀", "Hall"), tr("룸", "Room"), tr("플레이트", "Plate"), tr("대성당", "Cathedral")}, Math.round(a.values[18]), v -> a.set(18, v))));
+        a.content = previous;
+        AlertDialog dialog = StudioDialogs.darkAlert(a)
+                .setTitle(tr("상세 보컬 효과", "Vocal FX details"))
+                .setView(StudioDialogs.scrollable(a, p))
+                .setPositiveButton(tr("닫기", "Close"), (d, w) -> sync())
+                .create();
+        preset.setOnClickListener(v -> { dialog.dismiss(); a.presetPicker(); });
+        p.addView(button(tr("효과 초기화", "Reset effects"), () -> { reset(); dialog.dismiss(); effectsDetails(); }));
+        StudioDialogs.showDark(a, dialog);
+    }
+
+    void reset() {
+        int[] keys = {2, 3, 4, 5, 6, 7, 8, 9, 10, 18};
+        float[] values = {.27f, 2.2f, .14f, 280, .25f, 0, 0, 1, 1, 0};
+        for (int i = 0; i < keys.length; i++) a.set(keys[i], values[i]);
+        sync();
     }
 
     void toggleMonitor() {
@@ -475,203 +510,179 @@ final class LiveScreen {
             a.toast(tr("보호 음소거를 해제하고 실시간 출력을 켰습니다.", "Safety mute reset; live monitoring is on."));
             return;
         }
-        boolean currentlyOn = s[21] > .5f || a.values[11] > .5f;
-        if (currentlyOn) {
+        boolean on = AudioService.active ? s[21] > .5f : a.values[11] > .5f;
+        if (on) {
             a.set(11, 0);
             a.toast(tr("내 목소리 듣기를 껐습니다.", "Voice monitoring turned off."));
         } else {
-            if (!AudioService.canMonitor(a)) {
-                NativeAudio.monitorLevel(.22f);
-            }
+            if (!AudioService.canMonitor(a)) NativeAudio.monitorLevel(.22f);
             a.set(11, 1);
-            if (!AudioService.active) {
-                a.requestMicToggle();
-            } else {
-                a.toast(tr("내 목소리 듣기를 켰습니다.", "Voice monitoring turned on."));
-            }
+            if (!AudioService.active) a.requestMicToggle();
+            else a.toast(tr("내 목소리 듣기를 켰습니다.", "Voice monitoring turned on."));
         }
         poll(NativeAudio.stats(), AudioService.active);
     }
 
     void toggleBackingPlay() {
+        if (a.youtube.selected) {
+            a.youtube.pause();
+            a.toast(tr("동영상의 YouTube 재생 버튼을 사용하세요.", "Use the YouTube player controls to play the video."));
+            return;
+        }
+        if (a.settingsLocked()) {
+            a.toast(tr("녹음 또는 예약 중에는 반주를 바꿀 수 없습니다.", "Accompaniment is locked during recording or countdown."));
+            return;
+        }
         float[] s = NativeAudio.stats();
-        if (a.composer.playing()) {
-            a.composer.pause();
-            poll(NativeAudio.stats(), AudioService.active);
+        if (a.composer.playing()) a.composer.pause();
+        else if (s[16] > .5f) NativeAudio.playLocal(false);
+        else if (AudioService.composerRequested) a.composer.play();
+        else if (!a.selectedFile.isEmpty()) a.ensureMic(4);
+        else {
+            a.chooseBacking();
             return;
         }
-        if (s[16] > .5f) {
-            NativeAudio.playLocal(false);
-            poll(NativeAudio.stats(), AudioService.active);
-            return;
-        }
-        if (!a.selectedFile.isEmpty()) {
-            a.ensureMic(4);
-            return;
-        }
-        openSource(1);
+        poll(NativeAudio.stats(), AudioService.active);
     }
 
-    void updateVolumeLabel(int value) {
-        if (volumeLabel != null) {
-            volumeLabel.setText(tr("반주 ", "Backing ") + value + "%");
-        }
+    String compactDevice(String name) {
+        if (name == null || name.isEmpty()) return tr("기본", "Default");
+        if (name.equals(tr("시스템 기본", "System default")) || name.equals(tr("시스템 기본값", "System default"))) return tr("기본", "Default");
+        int dot = name.indexOf(" · ");
+        if (dot > 0) name = name.substring(0, dot);
+        int hash = name.indexOf(" #");
+        if (hash > 0) name = name.substring(0, hash);
+        name = name.trim();
+        if (name.length() > 14) name = name.substring(0, 14).trim();
+        return name;
     }
 
-    void updateMicVolumeLabel(int value) {
-        if (micVolumeLabel != null) {
-            micVolumeLabel.setText(tr("마이크 ", "Mic ") + value + "%");
-        }
+    void syncGain(SeekBar b, TextView label, int key, String name) {
+        if (b == null) return;
+        if (!dragging[key]) b.setProgress(Math.round(a.values[key] * 100));
+        label.setText(b.getProgress() + "%");
     }
 
-    String compactDevice(String value) {
-        if (value.equals(tr("시스템 기본", "System default")) || value.equals(tr("시스템 기본값", "System default"))) {
-            return tr("기본", "Default");
-        }
-        int dot = value.indexOf(" · ");
-        if (dot > 0) return value.substring(0, dot);
-        int hash = value.indexOf(" #");
-        if (hash > 0) return value.substring(0, hash);
-        return value;
-    }
-
-    void openSource(int source) {
-        a.sourceTab = source;
-        a.getPreferences(0).edit().putInt("backingSource", source).apply();
-        a.chooseTab(1);
-    }
-
-    void select(int index) {
-        if (dial != null && dial.isTracking()) return;
-        a.selectedLiveEffect = Math.max(0, Math.min(5, index));
-        bindDial();
-        sync();
-    }
-
-    void reset() {
-        if (dial != null) dial.cancelGesture();
-        int[] keys = {0, 2, 3, 4, 5, 6};
-        float[] defaults = {1, .27f, 2.2f, .14f, 280, .25f};
-        for (int i = 0; i < keys.length; i++) a.set(keys[i], defaults[i]);
-        sync();
-    }
-
-    SharedEffectDial createDial() {
-        return new SharedEffectDial(a, value -> {
-            int selected = a.selectedLiveEffect;
-            a.set(ids[selected], value);
-            sync();
-        });
-    }
-
-    void bindDial() {
-        int selected = a.selectedLiveEffect;
-        dial.cancelGesture();
-        dial.bind(name(selected), mins[selected], maxs[selected], a.values[ids[selected]], format[selected]);
-    }
-
-    void syncDial() {
-        if (dial != null) {
-            dial.sync(a.values[ids[a.selectedLiveEffect]]);
-        }
-    }
+    void updateVolumeLabel(int value) { if (volumeLabel != null) volumeLabel.setText(value + "%"); }
+    void updateMicVolumeLabel(int value) { if (micVolumeLabel != null) micVolumeLabel.setText(value + "%"); }
 
     void sync() {
-        int selected = a.selectedLiveEffect;
-        for (int i = 0; i < 6; i++) {
-            String label = (i == 2 ? tr("목소리 크기", "Voice") : name(i));
-            String value = label + "\n" + format[i].value(a.values[ids[i]]);
-            if (!value.contentEquals(selectors[i].getText())) {
-                selectors[i].setText(value);
-            }
-            if (selectors[i].isSelected() != (i == selected)) {
-                paint(selectors[i], i == selected);
-            }
-            selectors[i].invalidate();
-        }
-        if (effectName != null) effectName.setText(name(selected));
-        if (effectValue != null) effectValue.setText(format[selected].value(a.values[ids[selected]]));
-        if (!micVolumeDragging && micVolume != null) {
-            int mv = Math.round(a.values[0] * 100);
-            if (micVolume.getProgress() != mv) micVolume.setProgress(mv);
-            updateMicVolumeLabel(mv);
-        }
-        syncDial();
+        syncGain(micVolume, micVolumeLabel, 0, tr("마이크", "Mic"));
+        syncGain(backingVolume, volumeLabel, 1, tr("반주", "Backing"));
+        if (reverbVolume != null) reverbVolume.sync(a.values[2]);
+        if (echoVolume != null) echoVolume.sync(a.values[4]);
     }
 
     void poll(float[] s, boolean running) {
-        if (mic == null) return;
-        mic.setText(running ? tr("● 마이크 켜짐", "● MIC ON") : tr("● 마이크 대기", "● MIC READY"));
-        mic.setTextColor(running ? StudioTheme.ACCENT : StudioTheme.OLIVE);
-        if (a.micButton.isSelected() != running) paint(a.micButton, running);
+        if (display == null) return;
+        float[] safe = new float[22];
+        if (s != null) for (int i = 0; i < Math.min(s.length, safe.length); i++) safe[i] = Float.isFinite(s[i]) ? s[i] : 0;
+        s = safe;
 
-        boolean safetyMuted = s[17] > .5f;
-        boolean monitoringOn = !safetyMuted && running && s[21] > .5f;
-        route.setText(
-                safetyMuted
-                        ? tr("내 목소리 듣기 · 보호 음소거", "Voice monitoring · safety mute")
-                        : monitoringOn
-                        ? tr("내 목소리 듣기 · 켜짐", "Voice monitoring · on")
-                        : tr("내 목소리 듣기 · 꺼짐", "Voice monitoring · off")
-        );
-        route.setTextColor(safetyMuted ? StudioTheme.DANGER : monitoringOn ? StudioTheme.ACCENT : StudioTheme.OLIVE);
-        if (monitorToggle != null && monitorToggle.isSelected() != monitoringOn) {
-            paint(monitorToggle, monitoringOn);
+        a.micButton.setText(running ? tr("마이크 끄기", "Turn mic off") : tr("마이크 켜기", "Turn mic on"));
+        paint(a.micButton, running);
+
+        boolean muted = s[17] > .5f, on = !muted && running && s[21] > .5f;
+        String monitoring = muted ? tr("보호 음소거", "Safety mute") : on ? tr("모니터 켜짐", "Monitoring on") : tr("모니터 꺼짐", "Monitoring off");
+        String reduction = running && !muted ? a.feedbackReductionLabel() : "";
+        String lcdMonitoring = reduction.isEmpty() ? monitoring
+                : (muted ? tr("보호 음소거", "Muted") : on ? tr("모니터 켜짐", "Mon on") : tr("모니터 꺼짐", "Mon off")) + " · " + reduction;
+        route.setText(lcdMonitoring);
+        monitorToggle.setText(muted ? tr("보호 해제", "Reset safety") : on ? tr("목소리 듣기 켬", "Monitor ON") : tr("목소리 듣기", "Monitor"));
+        monitorToggle.setContentDescription(monitoring);
+        paint(monitorToggle, on);
+
+        inputButton.setText(tr("입력", "Input") + " ▾\n" + compactDevice(a.inputName()));
+        inputButton.setContentDescription(tr("입력 장치: ", "Input device: ") + a.inputName());
+
+        if (a.outputButton != null) {
+            a.outputButton.setText(tr("출력", "Output") + " ▾\n" + compactDevice(a.outputName()));
+            a.outputButton.setContentDescription(tr("출력 장치: ", "Output device: ") + a.outputName());
         }
 
-        if (!volumeDragging) backingVolume.setProgress(Math.round(a.values[1] * 100));
-        updateVolumeLabel(backingVolume.getProgress());
-        if (!micVolumeDragging && micVolume != null) {
-            micVolume.setProgress(Math.round(a.values[0] * 100));
-            updateMicVolumeLabel(micVolume.getProgress());
-        }
+        boolean rec = RecordingManager.active, wait = AudioService.waiting();
+        String state = a.busy ? tr("준비 / 저장 중", "PREPARING / SAVING") : rec ? (RecordingManager.paused ? tr("일시정지", "PAUSED") : "REC") : wait ? tr("예약", "COUNTDOWN") : running ? tr("마이크 켜짐", "MIC ON") : tr("대기", "READY");
+        if(NativeAudio.recentVoiceSeconds()>=0) state += running ? tr(" · 10초 보관", " · 10s history") : tr(" · 보관 대기", " · history armed");
+        String time = rec ? a.formatTime(s[8]) : wait ? String.valueOf(AudioService.remaining()) + "s" : "00:00";
+        float hz = running && Float.isFinite(s[0]) && s[0] > 0 ? s[0] : 0;
+        display.cents = hz > 0 ? Math.max(-50, Math.min(50, s[1])) : 0;
+        display.update(running ? s[3] : 0, s[4], hz, hz > 0 && Float.isFinite(s[2]) ? a.noteName((int) s[2]) : "—", state, time, rec && !RecordingManager.paused, lcdMonitoring);
 
-        inputButton.setText(tr("입력", "Input") + "\n" + compactDevice(a.inputName()));
-        inputButton.setContentDescription(tr("입력: ", "Input: ") + a.inputName());
-        a.outputButton.setText(tr("출력", "Output") + "\n" + compactDevice(a.outputName()));
-        a.outputButton.setContentDescription(tr("출력: ", "Output: ") + a.outputName());
-
-        clock.setText(
-                RecordingManager.active
-                        ? (RecordingManager.paused ? "Ⅱ " : "● ") + a.formatTime(s[8])
-                        : AudioService.waiting()
-                        ? tr("예약 ", "IN ") + AudioService.remaining() + tr("초", "s")
-                        : "00:00"
-        );
-
-        double[] cs = a.composer.state();
-        boolean backingPlaying = a.composer.playing() || s[16] > .5f;
-        if (a.composer.playing()) {
-            backing.setText(tr("작곡기 · ", "Composer · ") + tr("마디 ", "bar ") + (1 + (int) (Math.max(0, cs[0]) / MusicTheory.barBeats(a.composer.project.meter))));
-        } else if (s[16] > .5f) {
-            double[] local = NativeAudio.localPlaybackInfo();
-            backing.setText(tr("반주 · ", "Backing · ") + a.formatTime(local[0]) + " / " + a.formatTime(local[1]));
-        } else if (!a.selectedFile.isEmpty()) {
-            double[] local = NativeAudio.localPlaybackInfo();
-            backing.setText(a.selectedFile + (local[1] > 0 ? " · " + a.formatTime(local[0]) + " / " + a.formatTime(local[1]) : ""));
+        boolean composer = s[16] <= .5f && (a.composer.playing() || AudioService.composerRequested);
+        boolean playing = a.composer.playing() || s[16] > .5f;
+        if (composer) {
+            double[] cs = a.composer.state();
+            backing.setText(a.composer.project.name + " ▾");
+            backingTime.setText(a.tabletLandscape()
+                    ? tr("작곡기 · 마디 ", "Composer · bar ") + (1 + (int) (Math.max(0, cs[0]) / MusicTheory.barBeats(a.composer.project.meter))) + (!playing ? tr(" · 일시정지", " · paused") : "")
+                    : arrangementText(true));
+            backingTime.setContentDescription(arrangementText());
         } else {
-            backing.setText(tr("반주 대기", "Backing idle"));
+            double[] local = NativeAudio.localPlaybackInfo();
+            backing.setText(a.selectedFile.isEmpty() ? tr("반주 선택 ▾", "Choose backing ▾") : a.selectedFile + " ▾");
+            backingTime.setText(a.formatTime(local[0]) + " / " + a.formatTime(local[1]));
         }
-        if (backingPlayButton != null) {
-            backingPlayButton.setText(backingPlaying ? "Ⅱ" : "▶");
-            if (backingPlayButton.isSelected() != backingPlaying) {
-                paint(backingPlayButton, backingPlaying);
-            }
+        if (a.youtube.selected) {
+            backing.setText("YouTube · " + a.youtube.id);
+            backingTime.setText(tr("마이크만 녹음 · 동영상 제어 사용", "Mic-only recording · use video controls"));
+            playing = false;
         }
-
-        pitch.setText(tr("입력 음 ", "INPUT ") + (s[0] > 0 ? a.noteName((int) s[2]) : "—"));
-        float rms = Math.max(0, s[3]);
-        level.setText(rms > .00001f ? String.format(Locale.US, "%.0f dB", 20 * Math.log10(rms)) : "— dB");
-        meter.setProgress((int) (1000 * Math.max(0, Math.min(1, (20 * Math.log10(Math.max(.00001, rms)) + 60) / 60))));
+        backing.setContentDescription(tr("반주 선택: ", "Choose backing: ") + backing.getText().toString().replace(" ▾", ""));
+        ((StudioButton) backingPlayButton).glyph(playing ? "pause" : "play");
+        backingPlayButton.setCompoundDrawablePadding(0);
+        backingPlayButton.setContentDescription(playing ? tr("반주 일시정지", "Pause accompaniment") : tr("반주 재생", "Play accompaniment"));
+        paint(backingPlayButton, playing);
+        if (a.youtube.selected) {
+            ((StudioButton) backingPlayButton).glyph("pause");
+            backingPlayButton.setCompoundDrawablePadding(0);
+            backingPlayButton.setContentDescription(tr("YouTube 일시정지 · 재생은 동영상 제어 사용", "Pause YouTube · use video controls to play"));
+        }
+        backingPlayButton.setEnabled(a.youtube.selected || !a.settingsLocked());
+        if (mixer != null && mixer.getVisibility() == View.VISIBLE) mixer.poll();
+        if (arrangement != null) arrangement.setText(arrangementText());
+        boolean micOnlyTarget = RecordingManager.active ? RecordingManager.micOnly
+                : AudioService.waiting() ? AudioService.pendingMicOnly : a.youtube.selected;
+        if (recordingTarget != null) recordingTarget.setText(micOnlyTarget
+                ? (a.tabletLandscape()
+                    ? tr("녹음 대상 · 마이크만 (YouTube 소리 제외)", "Records · microphone only (YouTube excluded)")
+                    : tr("녹음 · 마이크만 (YouTube 제외)", "Records · mic only (YouTube excluded)"))
+                : tr("녹음 대상 · 전체 믹스", "Records · full mix"));
         sync();
     }
 
-    void transport(boolean busy, boolean waiting, boolean recording) {
-        if (waiting || recording) {
-            paintDanger(a.recButton);
-        } else if (a.recButton.isSelected() != !busy) {
-            paint(a.recButton, !busy);
+    String arrangementText() { return arrangementText(false); }
+
+    String arrangementText(boolean compact) {
+        ComposerSession session = a.composer;
+        ComposerProject project = session.project;
+        double[] state = session.state();
+        int index = session.playing() ? (int) state[2] : session.selectedPart;
+        if (index < 0 || index >= project.parts.size()) return tr("파트 —", "Part —");
+        ComposerProject.Part part = project.parts.get(index);
+        double bar = MusicTheory.barBeats(project.meter);
+        int position = session.playing() ? Math.max(1, Math.min(part.bars, 1 + (int) (Math.max(0, state[0] - state[3]) / bar))) : 1;
+        String next = "—";
+        double start = 0;
+        outer: for (int i = 0; i < project.order.size(); i++) {
+            ComposerProject.Order order = project.order.get(i);
+            ComposerProject.Part ordered = project.part(order.part);
+            for (int repeat = 0; repeat < order.repeats; repeat++) {
+                if (ordered == part && (!session.playing() || Math.abs(start - state[3]) < .01)) {
+                    next = repeat + 1 < order.repeats ? part.label
+                            : project.part(project.order.get((i + 1) % project.order.size()).part).label;
+                    break outer;
+                }
+                start += ordered.bars * bar;
+            }
         }
+        if (compact) return part.label + " " + position + "/" + part.bars + " → " + next;
+        return (session.playing() ? tr("현재 ", "Now ") : tr("선택 ", "Selected ")) + part.label
+                + " · " + position + "/" + part.bars + tr("마디 · 다음 ", " bars · Next ") + next;
+    }
+
+    void transport(boolean busy, boolean waiting, boolean recording) {
+        if (waiting || recording) paintDanger(a.recButton);
+        else paint(a.recButton, !busy);
         video.setEnabled(!busy && !waiting && !recording && !a.recordPermissionPending && !a.starting);
     }
 }

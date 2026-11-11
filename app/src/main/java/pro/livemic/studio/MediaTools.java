@@ -16,6 +16,9 @@ import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.AtomicMoveNotSupportedException;
 
 public final class MediaTools {
     public static final class Decoded {
@@ -244,10 +247,11 @@ public final class MediaTools {
 
     public static void makeVideo(File video, File wav, File target, long trimAudioUs, long vocalDelayUs) throws Exception {
         File audio = new File(target.getParentFile(), target.getName() + ".aac.m4a");
-        encodeAac(wav, audio);
+        File pending = new File(target.getParentFile(), target.getName() + ".pending.mp4");
         MediaExtractor v = new MediaExtractor(), a = new MediaExtractor();
         MediaMuxer muxer = null;
         try {
+            encodeAac(wav, audio);
             v.setDataSource(video.getAbsolutePath());
             a.setDataSource(audio.getAbsolutePath());
             int vi = find(v, "video/"), ai = find(a, "audio/");
@@ -256,20 +260,33 @@ public final class MediaTools {
             metadata.setDataSource(video.getAbsolutePath());
             String rotation = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
             metadata.release();
-            muxer = new MediaMuxer(target.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            muxer = new MediaMuxer(pending.getAbsolutePath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
             if (rotation != null) muxer.setOrientationHint(Integer.parseInt(rotation));
             int videoTrack = muxer.addTrack(v.getTrackFormat(vi)), audioTrack = muxer.addTrack(a.getTrackFormat(ai));
             muxer.start();
             copy(v, vi, muxer, videoTrack, -vocalDelayUs);
             copy(a, ai, muxer, audioTrack, -trimAudioUs);
             muxer.stop();
+            muxer.release();
+            muxer = null;
+            publishVideo(pending, target);
         } finally {
             v.release();
             a.release();
             if (muxer != null) muxer.release();
             audio.delete();
+            pending.delete();
         }
-        video.delete();
+        // The caller owns the original until take metadata is committed.
+    }
+
+    static void publishVideo(File pending, File target) throws IOException {
+        if (!pending.isFile() || pending.length() == 0) throw new IOException("Video output is empty");
+        try {
+            Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(pending.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private static int find(MediaExtractor e, String prefix) {
@@ -298,12 +315,38 @@ public final class MediaTools {
     }
 
     private static void encodeAac(File wav, File target) throws Exception {
+        encodeAac(wav, target, null);
+    }
+
+    static long aacTimeBudgetNanos(long pcmBytes,int channels,int rate) throws IOException {
+        if(pcmBytes<0||channels<1||channels>2||rate<8000||rate>192000||pcmBytes%(channels*2L)!=0)throw new IOException("Invalid PCM duration");
+        double frames=(double)pcmBytes/(channels*2L);
+        double budget=30_000_000_000d+frames/rate*10_000_000_000d;
+        long maximum=Long.MAX_VALUE/4;
+        return budget>=maximum?maximum:(long)Math.ceil(budget);
+    }
+
+    static void validateAacWav(RandomAccessFile in,int channels,int rate)throws IOException {
+        in.seek(0);
+        if(in.length()<=44||in.readInt()!=0x52494646||Integer.toUnsignedLong(Integer.reverseBytes(in.readInt()))!=in.length()-8
+                ||in.readInt()!=0x57415645||in.readInt()!=0x666d7420||Integer.reverseBytes(in.readInt())!=16
+                ||Short.reverseBytes(in.readShort())!=1||Short.toUnsignedInt(Short.reverseBytes(in.readShort()))!=channels
+                ||Integer.reverseBytes(in.readInt())!=rate||Integer.reverseBytes(in.readInt())!=rate*channels*2
+                ||Short.toUnsignedInt(Short.reverseBytes(in.readShort()))!=channels*2||Short.reverseBytes(in.readShort())!=16
+                ||in.readInt()!=0x64617461||Integer.toUnsignedLong(Integer.reverseBytes(in.readInt()))!=in.length()-44)
+            throw new IOException("Invalid PCM16 WAV header");
+    }
+
+    static void encodeAac(File wav, File target, java.util.concurrent.atomic.AtomicBoolean cancelled) throws Exception {
         MediaCodec encoder = null;
         MediaMuxer muxer = null;
         try (RandomAccessFile in = new RandomAccessFile(wav, "r")) {
             in.seek(22);
             int channels = Short.toUnsignedInt(Short.reverseBytes(in.readShort()));
             int rate = Integer.reverseBytes(in.readInt());
+            if(channels<1||channels>2||rate<8000||rate>192000||in.length()<=44)throw new IOException("Invalid audio format for video export");
+            validateAacWav(in,channels,rate);
+            long timeBudget=aacTimeBudgetNanos(in.length()-44,channels,rate);
             in.seek(44);
             MediaFormat format = MediaFormat.createAudioFormat("audio/mp4a-latm", rate, channels);
             format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
@@ -318,14 +361,23 @@ public final class MediaTools {
             boolean inputDone = false, done = false;
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
             byte[] bytes = new byte[16384];
+            long started = System.nanoTime(), lastProgress = started;
             while (!done) {
+                if (cancelled != null && (cancelled.get() || ExitCoordinator.isExitRequested())) throw new IOException("Cancelled");
+                if (System.nanoTime() - started > timeBudget) throw new IOException("Audio encoding exceeded its time limit");
+                if (System.nanoTime() - lastProgress > 15_000_000_000L) throw new IOException("Audio encoder stopped responding");
                 if (!inputDone) {
                     int i = encoder.dequeueInputBuffer(10000);
                     if (i >= 0) {
+                        lastProgress = System.nanoTime();
                         ByteBuffer b = encoder.getInputBuffer(i);
+                        if(b==null)throw new IOException("Audio encoder input buffer is unavailable");
                         b.clear();
                         int size = (Math.min(bytes.length, b.remaining()) / (channels * 2)) * (channels * 2);
+                        if(size<=0)throw new IOException("Audio encoder input buffer cannot hold a PCM frame");
                         int n = in.read(bytes, 0, size);
+                        if(n==0)throw new IOException("Audio input made no progress");
+                        if(n>0&&n%(channels*2)!=0)throw new IOException("Incomplete PCM audio frame");
                         long pts = samples * 1000000L / rate;
                         if (n < 0) {
                             encoder.queueInputBuffer(i, 0, 0, pts, MediaCodec.BUFFER_FLAG_END_OF_STREAM);
@@ -339,10 +391,12 @@ public final class MediaTools {
                 }
                 int i = encoder.dequeueOutputBuffer(info, 10000);
                 if (i == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    lastProgress = System.nanoTime();
                     track = muxer.addTrack(encoder.getOutputFormat());
                     muxer.start();
                 }
                 if (i >= 0) {
+                    lastProgress = System.nanoTime();
                     ByteBuffer b = encoder.getOutputBuffer(i);
                     if ((info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) info.size = 0;
                     if (info.size > 0 && track >= 0) {

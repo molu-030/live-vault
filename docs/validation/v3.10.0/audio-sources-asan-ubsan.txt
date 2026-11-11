@@ -1,0 +1,16 @@
+PASS: actual built-in speaker/mic startup chooses echo-control input; ambiguous/external/off routes stay recognition; failed/overridden presets and cleanup reported honestly
+PASS: float32 source recording, exact plain-FX rerender, +/-sync, pause frame counts, fixed backing, unsupported harmony, source failure original retention, cancellation and bounded opt-in recent voice
+PASS: 44100Hz capture extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 44100Hz local-file PCM extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 44100Hz procedural backing extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 44100Hz composer backing extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 44100Hz voice-only FX tail changes; capture/local stereo sum uses processed voice + clean backing before final clipping
+PASS: 44100Hz +/-250ms recording alignment leaves digital capture FX-independent
+PASS: 44100Hz negative control: delayed backing entering mic changes with voice FX, while digital capture stays on clean bus
+PASS: 48000Hz capture extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 48000Hz local-file PCM extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 48000Hz procedural backing extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 48000Hz composer backing extreme FX on/off recorded WAV byte-identical; clean analyzers isolated
+PASS: 48000Hz voice-only FX tail changes; capture/local stereo sum uses processed voice + clean backing before final clipping
+PASS: 48000Hz +/-250ms recording alignment leaves digital capture FX-independent
+PASS: 48000Hz negative control: delayed backing entering mic changes with voice FX, while digital capture stays on clean bus

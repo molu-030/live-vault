@@ -18,7 +18,7 @@ public class LanguageSwitchTest {
   a.drawer();Button language=StudioScreenshotTest.findButtonContaining(a.drawerPopup.getContentView(),"언어");assertNotNull(language);language.performClick();Dialog choices=ShadowDialog.getLatestDialog();Button english=StudioScreenshotTest.findButton(choices.getWindow().getDecorView(),"English");assertNotNull(english);english.performClick();ShadowLooper.idleMainLooper();a.handler.removeCallbacks(a.tick);
   assertTrue(AppLanguage.english(a));assertEquals("내 직접 이름",a.composer.project.name);assertEquals(project,a.composer.project.json().toString());assertTrue(AudioService.active);assertTrue(AudioService.playbackActive);assertEquals(9,a.pendingAction);assertTrue(a.recordPermissionPending);
   assertEquals("Live",((android.widget.TextView)a.nav.getChildAt(0)).getText().toString());assertEquals("Composer",((android.widget.TextView)a.nav.getChildAt(1)).getText().toString());assertEquals("Library",((android.widget.TextView)a.nav.getChildAt(2)).getText().toString());
-  a.chooseTab(7);assertNotNull(StudioScreenshotTest.findButtonContaining(a.page,"Export for AI"));a.chooseTab(9);assertEquals("English",AppLanguage.text(a,"한국어","English"));
+  a.chooseTab(7);assertNotNull(StudioScreenshotTest.findButtonContaining(a.page,"AI export"));assertNotNull(StudioScreenshotTest.findButtonContaining(a.page,"Import JSON"));a.chooseTab(9);assertEquals("English",AppLanguage.text(a,"한국어","English"));
   a.io.shutdown();MainActivity recreated=Robolectric.buildActivity(MainActivity.class).setup().get();recreated.handler.removeCallbacks(recreated.tick);assertTrue(AppLanguage.english(recreated));recreated.io.shutdown();
  }
 }

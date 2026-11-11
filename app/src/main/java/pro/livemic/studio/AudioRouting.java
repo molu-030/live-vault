@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.audiofx.AcousticEchoCanceler;
+import android.media.audiofx.AudioEffect;
 import android.media.audiofx.AutomaticGainControl;
 import android.media.audiofx.NoiseSuppressor;
 import android.os.Build;
@@ -19,10 +20,22 @@ public final class AudioRouting implements AutoCloseable {
     private final AudioManager manager;
     private int previousMode;
     private final int savedInput, savedOutput, savedMode, savedBluetooth;
+    private final String savedInputIdentity, savedOutputIdentity;
     private boolean changedMode = false, communicationDevice = false;
+    public enum EchoStatus { OFF, UNAVAILABLE, ACTIVE, ERROR }
+
     private AcousticEchoCanceler echo;
+    private int effectsSession;
+    private boolean echoError;
     private NoiseSuppressor noise;
     private AutomaticGainControl automaticGain;
+
+    static SharedPreferences studioPreferences(Context context){
+        String name=MainActivity.class.getName(),prefix=context.getPackageName()+".";
+        if(name.startsWith(prefix))name=name.substring(prefix.length());
+        return context.getSharedPreferences(name,0);
+    }
+    static boolean includesDevice(AudioDeviceInfo[] devices,int id){if(id<=0||devices==null)return false;for(AudioDeviceInfo device:devices)if(device!=null&&device.getId()==id)return true;return false;}
 
     public static SharedPreferences prefs(Context c) {
         return c.getSharedPreferences("routing", 0);
@@ -60,20 +73,116 @@ public final class AudioRouting implements AutoCloseable {
         return prefs(c).getInt("mode", 0);
     }
 
+    // A connected device is not necessarily the stream's current output. Only
+    // positively identified personal listening devices bypass feedback control.
+    static boolean feedbackRiskForType(int type) {
+        return type != AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+                && type != AudioDeviceInfo.TYPE_WIRED_HEADSET
+                && type != AudioDeviceInfo.TYPE_USB_HEADSET
+                && type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                && type != AudioDeviceInfo.TYPE_BLE_HEADSET
+                && type != AudioDeviceInfo.TYPE_HEARING_AID;
+    }
+
+    public static void refreshFeedbackProtection(Context c) {
+        int actual = NativeAudio.outputDevice();
+        boolean risky = true;
+        if (actual > 0) {
+            for (AudioDeviceInfo device : listOutputs(c)) {
+                if (device.getId() == actual) {
+                    risky = feedbackRiskForType(device.getType());
+                    break;
+                }
+            }
+        }
+        NativeAudio.feedbackProtection(risky);
+    }
+
     public static int selectedInput(Context c) {
-        return prefs(c).getInt("inputDevice", 0);
+        return selectedDevice(c, "inputDevice", listInputs(c));
     }
 
     public static int selectedOutput(Context c) {
-        return prefs(c).getInt("outputDevice", 0);
+        return selectedDevice(c, "outputDevice", listOutputs(c));
     }
 
     public static void chooseInput(Context c, int id) {
-        prefs(c).edit().putInt("inputDevice", id).apply();
+        chooseDevice(c, "inputDevice", id, listInputs(c));
     }
 
     public static void chooseOutput(Context c, int id) {
-        prefs(c).edit().putInt("outputDevice", id).putInt("mode", 0).apply();
+        chooseDevice(c, "outputDevice", id, listOutputs(c));
+        prefs(c).edit().putInt("mode", 0).apply();
+    }
+
+    private static String identity(AudioDeviceInfo device) {
+        org.json.JSONArray value = new org.json.JSONArray();
+        value.put(device.getType());
+        value.put(device.getProductName() == null ? "" : device.getProductName().toString().trim());
+        value.put(device.getAddress() == null ? "" : device.getAddress());
+        return value.toString();
+    }
+
+    private static void chooseDevice(Context c, String key, int id, List<AudioDeviceInfo> devices) {
+        SharedPreferences.Editor edit = prefs(c).edit().putInt(key, id).remove(key + "Identity");
+        for (AudioDeviceInfo device : devices) {
+            if (device.getId() == id) { edit.putString(key + "Identity", identity(device)); break; }
+        }
+        edit.apply();
+    }
+
+    // Android assigns a new port ID after USB reconnection. Retain the selected
+    // device's identity, while refusing an ambiguous replacement or a fallback mic.
+    private static int selectedDevice(Context c, String key, List<AudioDeviceInfo> devices) {
+        SharedPreferences preferences = prefs(c);
+        int id = preferences.getInt(key, 0);
+        if (id <= 0) return id;
+        String saved = preferences.getString(key + "Identity", "");
+        if (saved.isEmpty()) {
+            // Upgrade an old ID-only preference only while that port is present.
+            for (AudioDeviceInfo device : devices) if (device.getId() == id) {
+                preferences.edit().putString(key + "Identity", identity(device)).apply();
+                break;
+            }
+            return id;
+        }
+        AudioDeviceInfo resolved = resolveIdentity(saved, devices, id);
+        if (resolved != null && resolved.getId() != id) {
+            id = resolved.getId();
+            preferences.edit().putInt(key, id).apply();
+        }
+        return id;
+    }
+
+    private static AudioDeviceInfo resolveIdentity(String saved, List<AudioDeviceInfo> devices, int currentId) {
+        try {
+            org.json.JSONArray value = new org.json.JSONArray(saved);
+            int type = value.getInt(0);
+            String name = value.getString(1), address = value.getString(2);
+            AudioDeviceInfo named = null, addressed = null;
+            int names = 0, addresses = 0;
+            for (AudioDeviceInfo device : devices) {
+                String product = device.getProductName() == null ? "" : device.getProductName().toString().trim();
+                if (device.getType() != type || !name.equals(product)) continue;
+                String currentAddress = device.getAddress() == null ? "" : device.getAddress();
+                if (device.getId() == currentId && address.equals(currentAddress)) return device;
+                if (address.isEmpty() && (device.getAddress() == null || device.getAddress().isEmpty())) { named = device; names++; }
+                if (!address.isEmpty() && address.equals(device.getAddress())) { addressed = device; addresses++; }
+            }
+            return addresses == 1 ? addressed : address.isEmpty() && names == 1 && !name.isEmpty() ? named : null;
+        } catch (org.json.JSONException malformed) {
+            return null;
+        }
+    }
+
+    private static boolean selectionAvailable(Context c, String key, int id, List<AudioDeviceInfo> devices) {
+        String saved = prefs(c).getString(key + "Identity", "");
+        if (!saved.isEmpty()) {
+            AudioDeviceInfo resolved = resolveIdentity(saved, devices, id);
+            return resolved != null && resolved.getId() == id;
+        }
+        for (AudioDeviceInfo device : devices) if (device.getId() == id) return true;
+        return false;
     }
 
     private static boolean isRoutableDevice(AudioDeviceInfo d) {
@@ -159,12 +268,19 @@ public final class AudioRouting implements AutoCloseable {
     }
 
     public static String inputLabel(Context c) {
-        return selectedLabel(c, selectedInput(c), listInputs(c));
+        int id = selectedInput(c);
+        List<AudioDeviceInfo> devices = listInputs(c);
+        return selectedLabel(c, id, id != 0 && !selectionAvailable(c, "inputDevice", id, devices)
+                ? java.util.Collections.emptyList() : devices);
     }
 
     public static String outputLabel(Context c) {
         int id = selectedOutput(c);
-        if (id != 0) return selectedLabel(c, id, listOutputs(c));
+        if (id != 0) {
+            List<AudioDeviceInfo> devices = listOutputs(c);
+            return selectedLabel(c, id, selectionAvailable(c, "outputDevice", id, devices)
+                    ? devices : java.util.Collections.emptyList());
+        }
         int mode = selected(c);
         if (mode == 1) return AppLanguage.text(c, "휴대폰 스피커", "Phone speaker");
         if (mode == 2) return AppLanguage.text(c, "블루투스 스피커", "Bluetooth speaker");
@@ -194,29 +310,27 @@ public final class AudioRouting implements AutoCloseable {
         savedOutput = selectedOutput(c);
         savedMode = prefs(c).getInt("mode", 0);
         savedBluetooth = prefs(c).getInt("bluetoothDevice", 0);
+        savedInputIdentity = prefs(c).getString("inputDeviceIdentity", "");
+        savedOutputIdentity = prefs(c).getString("outputDeviceIdentity", "");
 
         int in = selectedInput(c);
         if (in == 0 && requestedInput > 0 && !prefs(c).contains("inputDevice")) {
             in = requestedInput;
         }
-        if (withMic && in > 0) {
-            boolean found = false;
-            for (AudioDeviceInfo d : listInputs(c)) {
-                if (d.getId() == in) found = true;
-            }
-            if (!found) {
+        if (withMic && in != 0) {
+            if (!selectionAvailable(c, "inputDevice", in, listInputs(c))) {
                 throw new IllegalStateException(AppLanguage.text(c, "선택한 입력 장치가 연결되지 않았습니다.", "The selected input device is disconnected."));
             }
         }
 
         int out = selectedOutput(c), resolvedMode = selected(c);
         String name = outputLabel(c);
-        if (out > 0) {
+        if (out != 0) {
             AudioDeviceInfo chosen = null;
             for (AudioDeviceInfo d : listOutputs(c)) {
                 if (d.getId() == out) chosen = d;
             }
-            if (chosen == null) {
+            if (chosen == null || !selectionAvailable(c, "outputDevice", out, listOutputs(c))) {
                 throw new IllegalStateException(AppLanguage.text(c, "선택한 출력 장치가 연결되지 않았습니다.", "The selected output device is disconnected."));
             }
             int type = chosen.getType();
@@ -265,6 +379,8 @@ public final class AudioRouting implements AutoCloseable {
                 .edit()
                 .putInt("inputDevice", savedInput)
                 .putInt("outputDevice", savedOutput)
+                .putString("inputDeviceIdentity", savedInputIdentity)
+                .putString("outputDeviceIdentity", savedOutputIdentity)
                 .putInt("mode", savedMode)
                 .putInt("bluetoothDevice", savedBluetooth)
                 .apply();
@@ -302,15 +418,20 @@ public final class AudioRouting implements AutoCloseable {
     }
 
     public void attachEffects() {
+        refreshFeedbackProtection(context);
+        releaseEffects();
         int session = NativeAudio.inputSession();
-        if (session <= 0 && mode == 0) return;
+        effectsSession = session;
+        if (session <= 0) return;
         if (session > 0) {
             try {
                 if (AcousticEchoCanceler.isAvailable()) {
                     echo = AcousticEchoCanceler.create(session);
-                    if (echo != null) echo.setEnabled(echoCancellationPreferred(context));
+                    if (echo == null) echoError = true;
+                    else syncEchoCancellation();
                 }
             } catch (Exception ignored) {
+                echoError = true;
             }
             try {
                 if (NoiseSuppressor.isAvailable()) {
@@ -327,9 +448,6 @@ public final class AudioRouting implements AutoCloseable {
             } catch (Exception ignored) {
             }
         }
-        if (mode > 0) {
-            NativeAudio.monitorLevel(.18f);
-        }
     }
 
     private boolean noiseReductionEnabled() {
@@ -343,12 +461,7 @@ public final class AudioRouting implements AutoCloseable {
             } catch (Exception ignored) {
             }
         }
-        if (echo != null) {
-            try {
-                echo.setEnabled(echoCancellationPreferred(context));
-            } catch (Exception ignored) {
-            }
-        }
+        syncEchoCancellation();
         if (automaticGain != null) {
             try {
                 automaticGain.setEnabled(autoGainPreferred(context));
@@ -357,24 +470,59 @@ public final class AudioRouting implements AutoCloseable {
         }
     }
 
+    private void syncEchoCancellation() {
+        if (echo == null) return;
+        try {
+            boolean enabled = echoCancellationPreferred(context);
+            echoError = !echo.hasControl()
+                    || echo.setEnabled(enabled) != AudioEffect.SUCCESS
+                    || echo.getEnabled() != enabled;
+        } catch (Exception ignored) {
+            echoError = true;
+        }
+    }
+
+    /** Reports only verified app-managed cancellation on the current input session. */
+    public EchoStatus echoStatus() {
+        if (!echoCancellationPreferred(context)) return EchoStatus.OFF;
+        if (effectsSession <= 0 || NativeAudio.inputSession() != effectsSession) return EchoStatus.UNAVAILABLE;
+        if (echoError) return EchoStatus.ERROR;
+        if (echo == null) return EchoStatus.UNAVAILABLE;
+        try {
+            return echo.hasControl() && echo.getEnabled() ? EchoStatus.ACTIVE : EchoStatus.ERROR;
+        } catch (Exception ignored) {
+            return EchoStatus.ERROR;
+        }
+    }
+
     public boolean echoEnabled() {
-        return (echo != null && echo.getEnabled()) || echoCancellationPreferred(context);
+        return echoStatus() == EchoStatus.ACTIVE;
+    }
+
+    public void detachEffects() {
+        releaseEffects();
+    }
+
+    private void releaseEffects() {
+        if (echo != null) {
+            try { echo.release(); } catch (Exception ignored) { }
+            echo = null;
+        }
+        if (noise != null) {
+            try { noise.release(); } catch (Exception ignored) { }
+            noise = null;
+        }
+        if (automaticGain != null) {
+            try { automaticGain.release(); } catch (Exception ignored) { }
+            automaticGain = null;
+        }
+        effectsSession = 0;
+        echoError = false;
     }
 
     @Override
     public void close() {
-        if (echo != null) {
-            echo.release();
-            echo = null;
-        }
-        if (noise != null) {
-            noise.release();
-            noise = null;
-        }
-        if (automaticGain != null) {
-            automaticGain.release();
-            automaticGain = null;
-        }
+        releaseEffects();
         if (communicationDevice && Build.VERSION.SDK_INT >= 31) {
             try {
                 manager.clearCommunicationDevice();

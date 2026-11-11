@@ -14,6 +14,10 @@ final class HarmonyScreen {
     Button record;
     ProgressBar progress;
     int selected = 0;
+    LinearLayout partsGrid;
+    final LinearLayout[] tiles = new LinearLayout[4];
+    final Button[] selectors = new Button[4], muteButtons = new Button[4], mixButtons = new Button[4], restoreButtons = new Button[4], recordButtons = new Button[4], menuButtons = new Button[4];
+    final TextView[] tileStates = new TextView[4];
 
     HarmonyScreen(MainActivity a, HarmonySession s) {
         this.a = a;
@@ -120,37 +124,14 @@ final class HarmonyScreen {
                 + new String[]{"4/4", "3/4", AppLanguage.text(a, "6/8 · 큰박", "6/8 · dotted beat")}[s.meter]
                 + " · " + s.bars + AppLanguage.text(a, "마디 ▾", " bars ▾"), this::loop));
 
-        a.add(a.text(AppLanguage.text(a, "성부 · 4", "Parts · 4"), 18, MainActivity.TEXT));
-        for (int i = 0; i < 4; i++) {
-            int slot = i;
-            LinearLayout old = a.beginCard();
-            String state = s.state[5] == i
-                    ? AppLanguage.text(a, "녹음 중", "Recording")
-                    : s.state[4] == i
-                    ? AppLanguage.text(a, "대기 중", "Waiting")
-                    : s.files[i] == null
-                    ? AppLanguage.text(a, "비어 있음", "Empty")
-                    : AppLanguage.text(a, "저장됨", "Saved");
-            Button select = a.button(s.names[i] + " · " + state + (s.muted[i] ? AppLanguage.text(a, " · 뮤트", " · muted") : ""), () -> {
-                if (select(slot)) refresh();
-            });
-            select.setMaxLines(2);
-            select.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            ((StudioButton) select).role(StudioButton.CHIP);
-            StudioTheme.selected(select, selected == i);
-            a.add(select);
-
-            LinearLayout actions = a.row();
-            a.weighted(actions, a.button(s.muted[i] ? AppLanguage.text(a, "듣기", "Unmute") : AppLanguage.text(a, "뮤트", "Mute"), () -> {
-                s.muted[slot] = !s.muted[slot];
-                s.levels(slot);
-                refresh();
-            }), 48);
-            a.weighted(actions, a.button(AppLanguage.text(a, "볼륨 · 팬", "Volume · pan"), () -> levels(slot)), 48);
-            a.weighted(actions, a.button("⋯", () -> menu(slot)), 48);
-            a.add(actions);
-            a.endCard(old);
-        }
+        TextView partsHeading=a.text(AppLanguage.text(a, "성부 · 4", "Parts · 4"), StudioTheme.TYPE_HEADLINE, MainActivity.TEXT);
+        partsHeading.setTypeface(StudioTheme.bold(a));
+        LinearLayout.LayoutParams headingSpacing=new LinearLayout.LayoutParams(-1,-2);
+        int previousGap=0;
+        if(a.content.getChildCount()>0){View previous=a.content.getChildAt(a.content.getChildCount()-1);if(previous.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)previousGap=((ViewGroup.MarginLayoutParams)previous.getLayoutParams()).bottomMargin;}
+        headingSpacing.topMargin=Math.max(0,a.dp(StudioTheme.SPACE_24)-previousGap);
+        headingSpacing.bottomMargin=a.dp(StudioTheme.SPACE_8);a.content.addView(partsHeading,headingSpacing);
+        drawParts();
 
         a.add(a.button(AppLanguage.text(a, "전체 믹스 녹음", "Record full mix"), a::toggleRecord));
         a.add(a.button(AppLanguage.text(a, "목소리 악기로 돌아가기 ›", "Back to voice instrument ›"), () -> a.chooseTab(8)));
@@ -158,28 +139,131 @@ final class HarmonyScreen {
         poll();
     }
 
+    void drawParts() {
+        partsGrid = a.column();
+        partsGrid.setTag("harmony-parts");
+        android.content.res.Configuration config = a.getResources().getConfiguration();
+        int columns = config.smallestScreenWidthDp >= 600 && config.screenWidthDp >= 600 ? 2 : 1;
+        for (int start = 0; start < 4; start += columns) {
+            LinearLayout row = a.row();
+            row.setGravity(Gravity.TOP);
+            for (int i = start; i < Math.min(4, start + columns); i++) {
+                LinearLayout tile = partTile(i);
+                LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1);
+                if (i > start) cell.leftMargin = a.dp(StudioTheme.SPACE_16);
+                row.addView(tile, cell);
+            }
+            LinearLayout.LayoutParams line = new LinearLayout.LayoutParams(-1, -2);
+            line.bottomMargin = a.dp(StudioTheme.SPACE_16);
+            partsGrid.addView(row, line);
+        }
+        a.add(partsGrid);
+    }
+
+    LinearLayout partTile(int slot) {
+        LinearLayout tile = StudioTheme.card(a);
+        tile.setTag("harmony-part-" + slot);
+        tiles[slot] = tile;
+        LinearLayout heading = a.row();
+        selectors[slot] = a.button("", () -> { if (select(slot)) poll(); });
+        ((StudioButton) selectors[slot]).role(StudioButton.CHIP);
+        selectors[slot].setMaxLines(2);
+        heading.addView(selectors[slot], new LinearLayout.LayoutParams(0, -2, 1));
+        menuButtons[slot] = a.button("⋯", () -> menu(slot));
+        menuButtons[slot].setContentDescription(AppLanguage.text(a, "성부 이름 변경 또는 삭제", "Rename or delete part"));
+        LinearLayout.LayoutParams menuSpacing=new LinearLayout.LayoutParams(a.dp(StudioTheme.TOUCH_TARGET),a.dp(StudioTheme.TOUCH_TARGET));
+        menuSpacing.leftMargin=a.dp(StudioTheme.SPACE_8);heading.addView(menuButtons[slot],menuSpacing);
+        tile.addView(heading);
+        tileStates[slot] = a.text("", 14, MainActivity.MUTED);
+        tileStates[slot].setPadding(0, a.dp(StudioTheme.SPACE_8), 0, a.dp(StudioTheme.SPACE_8));
+        tile.addView(tileStates[slot], new LinearLayout.LayoutParams(-1, -2));
+
+        LinearLayout mix = a.row();
+        muteButtons[slot] = a.button("", () -> {
+            s.muted[slot] = !s.muted[slot];
+            s.levels(slot);
+            poll();
+        });
+        mixButtons[slot] = a.button("", () -> levels(slot));
+        muteButtons[slot].setMaxLines(2);
+        mixButtons[slot].setMaxLines(2);
+        LinearLayout.LayoutParams mute = new LinearLayout.LayoutParams(0, -1, 1);
+        LinearLayout.LayoutParams level = new LinearLayout.LayoutParams(0, -1, 2);
+        level.leftMargin = a.dp(StudioTheme.SPACE_8);
+        mix.addView(muteButtons[slot], mute);
+        mix.addView(mixButtons[slot], level);
+        tile.addView(mix);
+
+        recordButtons[slot] = a.button("", () -> {
+            if (select(slot)) { startRecord(); poll(); }
+        });
+        recordButtons[slot].setMaxLines(2);
+        LinearLayout.LayoutParams action = new LinearLayout.LayoutParams(-1, -2);
+        action.topMargin = a.dp(StudioTheme.SPACE_8);
+        tile.addView(recordButtons[slot], action);
+        restoreButtons[slot] = a.button("", () -> {
+            if (!selectionLocked()) { s.undo(slot); poll(); }
+        });
+        restoreButtons[slot].setMaxLines(2);
+        LinearLayout.LayoutParams restore = new LinearLayout.LayoutParams(-1, -2);
+        restore.topMargin = a.dp(StudioTheme.SPACE_8);
+        tile.addView(restoreButtons[slot], restore);
+        return tile;
+    }
+
+    String partState(int slot) {
+        if (s.savingSlot == slot) return AppLanguage.text(a, "저장 중 · 이전 성부 보존", "Saving · previous part retained");
+        if (!s.partErrors[slot].isEmpty()) return s.partErrors[slot];
+        if (s.state[5] == slot) return AppLanguage.text(a, "녹음 중 · 이 성부에 저장", "Recording · saving to this part");
+        if (s.state[4] == slot || (a.pendingAction == 9 && selected == slot))
+            return AppLanguage.text(a, "대기 중 · 녹음 대상", "Waiting · recording target");
+        if (s.files[slot] == null) return AppLanguage.text(a, "비어 있음", "Empty");
+        if (s.muted[slot]) return AppLanguage.text(a, "뮤트 · 저장됨", "Muted · saved");
+        return s.state[0] > .5 ? AppLanguage.text(a, "재생 중", "Playing")
+                : AppLanguage.text(a, "저장됨 · 재생 대기", "Saved · ready to play");
+    }
+
+    void pollParts() {
+        boolean locked = selectionLocked();
+        for (int i = 0; i < 4; i++) {
+            if (selectors[i] == null) continue;
+            selectors[i].setText(s.partName(i) + (selected == i
+                    ? AppLanguage.text(a, " · 선택됨", " · selected") : AppLanguage.text(a, " · 선택", " · select")));
+            selectors[i].setEnabled(!locked);
+            StudioTheme.selected(selectors[i], selected == i);
+            tileStates[i].setText(partState(i));
+            tileStates[i].setTextColor(!s.partErrors[i].isEmpty() ? StudioTheme.DANGER
+                    : s.state[5] == i || s.state[4] == i || s.savingSlot == i ? MainActivity.LIME : MainActivity.MUTED);
+            muteButtons[i].setText(s.muted[i] ? AppLanguage.text(a, "뮤트 해제", "Unmute") : AppLanguage.text(a, "뮤트", "Mute"));
+            muteButtons[i].setEnabled(s.files[i] != null);
+            StudioTheme.selected(muteButtons[i], s.muted[i]);
+            String pan = Math.abs(s.pan[i]) < .005f ? AppLanguage.text(a, "중앙", "center")
+                    : (s.pan[i] < 0 ? "L " : "R ") + Math.round(Math.abs(s.pan[i]) * 100);
+            mixButtons[i].setText(AppLanguage.text(a, "볼륨 ", "Volume ") + Math.round(s.volume[i] * 100)
+                    + AppLanguage.text(a, "% · 팬 ", "% · pan ") + pan);
+            recordButtons[i].setText(s.files[i] == null ? AppLanguage.text(a, "이 성부 녹음", "Record this part")
+                    : AppLanguage.text(a, "재녹음 · 저장된 성부 교체", "Re-record · replace saved part"));
+            recordButtons[i].setEnabled(!locked);
+            restoreButtons[i].setText(s.previous[i] != null ? AppLanguage.text(a, "이전 성부 복구", "Restore previous part")
+                    : AppLanguage.text(a, "이전 성부 없음", "No previous part"));
+            restoreButtons[i].setEnabled(!locked && s.previous[i] != null);
+            menuButtons[i].setEnabled(!locked);
+        }
+    }
+
     void menu(int i) {
-        StudioDialogs.choose(a, s.names[i], new String[]{
-                AppLanguage.text(a, "녹음 · 재녹음", "Record · re-record"),
-                AppLanguage.text(a, "이전 성부 되돌리기", "Restore previous part"),
+        if (selectionLocked()) return;
+        StudioDialogs.choose(a, s.partName(i), new String[]{
                 AppLanguage.text(a, "이름 변경", "Rename"),
                 AppLanguage.text(a, "성부 삭제", "Delete part")
         }, -1, n -> {
-            if (n == 0) {
-                if (select(i)) startRecord();
-            } else if (n == 1) {
-                s.undo(i);
-                refresh();
-            } else if (n == 2) {
-                rename(i);
-            } else {
-                StudioDialogs.confirmDanger(a, AppLanguage.text(a, "성부 삭제", "Delete part"),
-                        AppLanguage.text(a, "저장된 성부를 비울까요? 이전 성부로 되돌릴 수 있습니다.", "Clear this saved part? You can restore the previous part."),
-                        AppLanguage.text(a, "삭제", "Delete"), () -> {
-                            s.clear(i);
-                            refresh();
-                        });
-            }
+            if (n == 0) rename(i);
+            else StudioDialogs.confirmDanger(a, AppLanguage.text(a, "성부 삭제", "Delete part"),
+                    AppLanguage.text(a, "저장된 성부를 비울까요? 이전 성부로 되돌릴 수 있습니다.", "Clear this saved part? You can restore the previous part."),
+                    AppLanguage.text(a, "삭제", "Delete"), () -> {
+                        s.clear(i);
+                        refresh();
+                    });
         });
     }
 
@@ -194,6 +278,13 @@ final class HarmonyScreen {
             s.arm(selected);
             refresh();
         }
+    }
+
+    void peerAction(LinearLayout row,View view){
+        view.setMinimumHeight(a.dp(StudioTheme.TOUCH_TARGET));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);
+        if(row.getChildCount()>0)lp.leftMargin=a.dp(StudioTheme.SPACE_8);
+        row.addView(view,lp);
     }
 
     void dock() {
@@ -217,19 +308,20 @@ final class HarmonyScreen {
             refresh();
         });
         StudioTheme.selected(play, true);
-        a.weighted(row, play, 48);
-        a.weighted(row, a.button(AppLanguage.text(a, "■ 정지", "■ Stop"), () -> {
+        peerAction(row,play);
+        peerAction(row,a.button(AppLanguage.text(a, "■ 정지", "■ Stop"), () -> {
             s.stop();
             refresh();
-        }), 48);
+        }));
         a.actionDock.addView(row);
 
         boolean pending = s.state[4] >= 0 || s.state[5] >= 0;
         record = StudioTheme.styled(a,
-                pending ? AppLanguage.text(a, "녹음 취소 · 이전 성부 유지", "Cancel recording · keep previous part") : s.names[selected] + AppLanguage.text(a, " 녹음", " Record"),
+                pending ? AppLanguage.text(a, "녹음 취소 · 이전 성부 유지", "Cancel recording · keep previous part") : s.partName(selected) + AppLanguage.text(a, " 녹음", " Record"),
                 StudioButton.RECORD,
                 () -> {
-                    if (pending) {
+                    if (s.state[4] >= 0 || s.state[5] >= 0 || a.pendingAction == 9) {
+                        if (a.pendingAction == 9) a.pendingAction = 0;
                         s.cancel();
                         refresh();
                     } else {
@@ -243,6 +335,14 @@ final class HarmonyScreen {
     }
 
     void poll() {
+        pollParts();
+        if (record != null) {
+            boolean pending = s.state[4] >= 0 || s.state[5] >= 0 || a.pendingAction == 9;
+            record.setText(pending ? AppLanguage.text(a, "녹음 취소 · 이전 성부 유지", "Cancel recording · keep previous part")
+                    : AppLanguage.text(a, "녹음 대상: ", "Record target: ") + s.partName(selected)
+                            + (s.files[selected] == null ? "" : AppLanguage.text(a, " · 재녹음(교체)", " · re-record (replace)")));
+            record.setEnabled(pending || !s.busy);
+        }
         if (play != null) {
             play.setText(s.state[0] > .5 ? AppLanguage.text(a, "Ⅱ 일시정지", "Ⅱ Pause") : AppLanguage.text(a, "▶ 루프 재생", "▶ Play loop"));
         }
@@ -258,13 +358,14 @@ final class HarmonyScreen {
             int bar = Math.min(s.bars, 1 + (int) (beat / beats)), inBar = 1 + (int) beat % beats;
             String position = bar + " / " + s.bars + AppLanguage.text(a, "마디 · ", " bars · ") + inBar + AppLanguage.text(a, "박", " beat");
             if (s.busy) {
-                status.setText(AppLanguage.text(a, "저장 중… · ", "Saving… · ") + position);
+                status.setText(AppLanguage.text(a, "저장 중… · ", "Saving… · ") + position
+                        + (s.savingSlot >= 0 ? "\n" + s.partName(s.savingSlot) : ""));
             } else if (st[5] >= 0 && st[5] < 4) {
-                status.setText(AppLanguage.text(a, "녹음 중 · ", "Recording · ") + position + "\n" + s.names[(int) st[5]]);
+                status.setText(AppLanguage.text(a, "녹음 중 · ", "Recording · ") + position + "\n" + s.partName((int) st[5]));
             } else if (st[4] >= 0 && st[4] < 4) {
                 status.setText((st[3] > 0
                         ? AppLanguage.text(a, "카운트인 ", "Count-in ") + (int) Math.ceil(st[3]) + AppLanguage.text(a, "박", " beat")
-                        : AppLanguage.text(a, "다음 루프에서 녹음 · ", "Recording on next loop · ") + position) + "\n" + s.names[(int) st[4]]);
+                        : AppLanguage.text(a, "다음 루프에서 녹음 · ", "Recording on next loop · ") + position) + "\n" + s.partName((int) st[4]));
             } else {
                 status.setText(position + (st[0] > .5 ? AppLanguage.text(a, " · 재생 중", " · Playing") : AppLanguage.text(a, " · 대기", " · Ready")));
             }
@@ -280,7 +381,7 @@ final class HarmonyScreen {
         field.setSingleLine();
         field.setTextColor(MainActivity.TEXT);
         field.setTypeface(StudioTheme.body(a));
-        field.setPadding(a.dp(14), a.dp(12), a.dp(14), a.dp(12));
+        field.setPadding(a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL), a.dp(StudioTheme.BUTTON_PADDING_HORIZONTAL), a.dp(StudioTheme.BUTTON_PADDING_VERTICAL));
         field.setBackground(StudioTheme.background(a, StudioTheme.RAISED, 12));
         field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(40)});
         field.setSelectAllOnFocus(true);
@@ -302,7 +403,7 @@ final class HarmonyScreen {
         float[] before = {s.wet, s.dry, s.spread};
         LinearLayout p = a.column();
         TextView explanation = a.text(AppLanguage.text(a, "자동 화음이 켜져 있을 때 적용됩니다.", "Applies when automatic harmony is on."), 14, MainActivity.MUTED);
-        explanation.setPadding(0, 0, 0, a.dp(12));
+        explanation.setPadding(0, 0, 0, a.dp(StudioTheme.SPACE_12));
         p.addView(explanation);
         p.addView(new StudioFader(a, AppLanguage.text(a, "화음", "Harmony"), 0, 1, s.wet, v -> Math.round(v * 100) + "%", v -> {
             s.wet = v;
@@ -339,7 +440,7 @@ final class HarmonyScreen {
             s.pan[i] = v;
             NativeHarmony.layer(i, s.volume[i], s.pan[i], s.muted[i]);
         }));
-        StudioDialogs.form(a, s.names[i], p, AppLanguage.text(a, "저장", "Save"), () -> {
+        StudioDialogs.form(a, s.partName(i), p, AppLanguage.text(a, "저장", "Save"), () -> {
             s.levels(i);
             refresh();
         }, () -> {

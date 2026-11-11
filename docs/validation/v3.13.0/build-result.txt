@@ -1,0 +1,7 @@
+Tasks: :app:testPersonalDebugUnitTest :app:assemblePersonalDebug
+BUILD SUCCESSFUL
+Java/UI: 365 tests, 0 failures, 0 errors, 0 skipped.
+Android APK: personalDebug, arm64-v8a / armeabi-v7a / x86_64.
+Package/certificate/linked Oboe and shared STL/all 74 JNI methods: verified; see apk-checks.json.
+Pre-existing TinySoundFont compiler warnings remain; no compiler errors.
+Actual device, USB, latency and battery measurements are deferred.

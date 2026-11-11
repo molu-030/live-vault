@@ -12,6 +12,6 @@
 ## TinySoundFont
 
 - <https://github.com/schellingb/TinySoundFont>, 체크아웃 시 HEAD `853a0a171759f1ddba0de1442133a75912bbeffa`.
-- 원본 `tsf.h` 및 MIT 라이선스를 `app/src/main/cpp/vendor`에 보존했다.
+- `tsf.h`와 원본 MIT 라이선스를 `app/src/main/cpp/vendor`에 포함한다. 3.9.3에서 `GEN_UINT_ADD15`의 음수 signed left shift 한 곳을 동등한 signed 곱셈으로 수정했다. 원래 short 범위에서 32비트 int 곱셈이 안전하며 unsigned 주소 누산은 유지한다. 원본 음원 데이터는 변경하지 않았다.
 - APK에도 `assets/licenses/TinySoundFont-LICENSE.txt`를 포함한다.
 - TSF 기본 모듈레이터 구현의 범위 안에서 사용하는 샘플 프리셋이다. 하드웨어 GS 장치와 음색이 완전히 동일하다는 주장은 하지 않는다.

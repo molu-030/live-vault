@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <utility>
+#include "bounded_tail.h"
 namespace lm {
 constexpr double PI=3.14159265358979323846;
 inline float hz(int midi) { return 440.f*std::pow(2.f,(midi-69)/12.f); }
@@ -26,7 +28,7 @@ struct Pitch { float frequency=0,confidence=0,rms=0; };
 // YIN difference and cumulative normalization with parabolic interpolation.
 inline Pitch detectPitch(const float* x,int n,int sr) {
     Pitch p; double energy=0; for(int i=0;i<n;i++) energy+=x[i]*x[i];
-    p.rms=std::sqrt(energy/n); if(p.rms<0.007f) return p;
+    p.rms=std::sqrt(energy/n); if(p.rms<0.0025f) return p;
     int maxLag=std::min(n/2-1,sr/75),minLag=std::max(2,sr/1100);
     std::array<float,1025> diff{};
     if(maxLag>1023)maxLag=1023;
@@ -39,6 +41,11 @@ inline Pitch detectPitch(const float* x,int n,int sr) {
     for(int lag=minLag;lag<maxLag;lag++)if(diff[lag]<0.13f){
         while(lag+1<maxLag&&diff[lag+1]<diff[lag])lag++;
         best=lag;break;
+    }
+    if(best<0){
+        int minIdx=minLag;
+        for(int lag=minLag+1;lag<maxLag;lag++)if(diff[lag]<diff[minIdx])minIdx=lag;
+        if(diff[minIdx]<0.30f)best=minIdx;
     }
     if(best<0)return p;
     float offset=0,den=2*(2*diff[best]-diff[best-1]-diff[best+1]);
@@ -75,6 +82,7 @@ public:
     // Call only before the stream and capture producer start.
     void reset(){enabled=false;samples.reset();}
     void configure(bool on,float amount){gain=std::clamp(amount,0.f,1.5f);enabled=on;}
+    bool isEnabled() const {return enabled.load();}
     size_t push(const float* data,size_t count){return enabled?samples.push(data,count-count%2):0;}
     void read(float* out,size_t count){
         size_t n=samples.pop(out,count);std::fill(out+n,out+count,0.f);
@@ -93,48 +101,223 @@ struct Biquad {
         else {B0=1+alpha*A;B1=-2*c;B2=1-alpha*A;a0=1+alpha/A;A1=-2*c;A2=1-alpha/A;}
         b0=B0/a0;b1=B1/a0;b2=B2/a0;a1=A1/a0;a2=A2/a0;
     }
-    float tick(float x){float y=b0*x+z1;z1=b1*x-a1*y+z2;z2=b2*x-a2*y;return y;}
+    float tick(float x){float y=b0*x+z1;z1=b1*x-a1*y+z2+1e-25f;z2=b2*x-a2*y;return y;}
 };
 class Reverb {
-    std::array<std::vector<float>,4> lines;
-    std::array<size_t,4> positions{};
-    std::array<float,4> damp{},feedback{};float cachedDecay=-1,damping=.3f;int cachedType=-1;
-    std::vector<float> allpass; size_t ap=0; float rate=48000;
+    static constexpr int NUM_COMBS = 8;
+    static constexpr int NUM_ALLPASS = 4;
+    std::array<std::vector<float>, NUM_COMBS> combLines;
+    std::array<size_t, NUM_COMBS> combPos{};
+    std::array<float, NUM_COMBS> combFilter{}, combFeedback{};
+    std::array<std::vector<float>, NUM_ALLPASS> allpassLines;
+    std::array<size_t, NUM_ALLPASS> allpassPos{};
+    float cachedDecay = -1, roomFeedback = 0.7f, damping = 0.25f;
+    int cachedType = -1;
+    float rate = 48000;
 public:
-    void init(int sr,int stereo){rate=sr;cachedDecay=-1;cachedType=-1;const float times[]={.0297f,.0371f,.0411f,.0437f};
-        for(int i=0;i<4;i++){lines[i].assign(int(sr*times[i])+stereo*23,0);positions[i]=0;damp[i]=0;}
-        allpass.assign(int(sr*.005f)+stereo*11,0);ap=0;
+    void init(int sr, int stereo) {
+        rate = float(sr);
+        cachedDecay = -1;
+        cachedType = -1;
+        const int combTunings[NUM_COMBS] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
+        const int allpassTunings[NUM_ALLPASS] = {556, 441, 341, 225};
+        float scale = rate / 44100.f;
+        int spread = stereo * 23;
+        for (int i = 0; i < NUM_COMBS; i++) {
+            int len = std::max(16, int(combTunings[i] * scale) + spread);
+            combLines[i].assign(len, 0.f);
+            combPos[i] = 0;
+            combFilter[i] = 0.f;
+        }
+        for (int i = 0; i < NUM_ALLPASS; i++) {
+            int len = std::max(8, int(allpassTunings[i] * scale) + spread);
+            allpassLines[i].assign(len, 0.f);
+            allpassPos[i] = 0;
+        }
     }
-    float tick(float x,float decay,int type){float sum=0;
-        if(decay!=cachedDecay||type!=cachedType){cachedDecay=decay;cachedType=type;damping=type==2?.15f:type==3?.5f:.3f;
-            for(int i=0;i<4;i++)feedback[i]=std::pow(0.001f,float(lines[i].size())/(rate*std::max(.2f,decay)));
+
+    std::pair<const float*, size_t> tailSpan(size_t i) const {
+        if (i < NUM_COMBS) return {combLines[i].data(), combLines[i].size()};
+        const auto& line = allpassLines[i - NUM_COMBS];
+        return {line.data(), line.size()};
+    }
+    float tick(float x, float decay, int type, bool* quietWrites = nullptr) {
+        if (decay != cachedDecay || type != cachedType) {
+            cachedDecay = decay;
+            cachedType = type;
+            damping = type == 2 ? 0.12f : type == 3 ? 0.45f : 0.25f;
+            float targetSec = std::clamp(decay, 0.3f, 6.0f);
+            for (int i = 0; i < NUM_COMBS; i++) combFeedback[i] = std::pow(0.001f, float(combLines[i].size()) / (rate * targetSec));
         }
-        for(int i=0;i<4;i++) {auto& line=lines[i];size_t& pos=positions[i];float v=line[pos];damp[i]=v*(1-damping)+damp[i]*damping;
-            line[pos]=x*.25f+damp[i]*feedback[i];if(++pos==line.size())pos=0;sum+=v;
+
+        // 8 Parallel Lowpass Feedback Comb Filters
+        float sum = 0.f;
+        for (int i = 0; i < NUM_COMBS; i++) {
+            auto& line = combLines[i];
+            size_t& pos = combPos[i];
+            float out = line[pos];
+            combFilter[i] = out * (1.f - damping) + combFilter[i] * damping + 1e-25f;
+            line[pos] = x * 0.125f + combFilter[i] * combFeedback[i];
+            if (quietWrites && *quietWrites)
+                *quietWrites = BoundedTail::quiet(line[pos]) && BoundedTail::quiet(combFilter[i]);
+            if (++pos >= line.size()) pos = 0;
+            sum += out;
         }
-        float v=allpass[ap],out=v-sum*.5f;allpass[ap]=sum+v*.5f;if(++ap==allpass.size())ap=0;return out;
+
+        // 4 Series Allpass Filters
+        float ap = sum;
+        for (int i = 0; i < NUM_ALLPASS; i++) {
+            auto& line = allpassLines[i];
+            size_t& pos = allpassPos[i];
+            float buf = line[pos];
+            line[pos] = ap + buf * 0.5f + 1e-25f;
+            if (quietWrites && *quietWrites) *quietWrites = BoundedTail::quiet(line[pos]);
+            ap = buf - ap * 0.5f;
+            if (++pos >= line.size()) pos = 0;
+        }
+        return ap;
     }
 };
+
 class DSP {
-    Biquad low,mid,high;Reverb left,right;std::vector<float> delay;size_t di=0;
-    float hpX=0,hpY=0,envelope=0,delayTone=0;int sr=48000;
-    float cachedLow=999,cachedMid=999,cachedHigh=999;
+    Biquad low, mid, high;
+    Reverb left, right;
+    std::vector<float> delay;
+    std::vector<float> preDelay;
+    size_t di = 0, prePos = 0;
+    float currentOffset = 1000.f, compTarget = 1.f, compGain = 1.f;
+    uint32_t compCounter = 0;
+    bool signalIdle = true;
+    bool tailConfigurationSafe = true;
+    BoundedTail tail;
+    float hpX = 0, hpY = 0, envelope = 0, delayToneL = 0, delayToneR = 0;
+    int sr = 48000;
+    float cachedLow = 999, cachedMid = 999, cachedHigh = 999;
 public:
-    void init(int rate){sr=rate;left.init(sr,0);right.init(sr,1);delay.assign(sr*2,0);di=0;hpX=hpY=envelope=delayTone=0;cachedLow=cachedMid=cachedHigh=999;}
-    void configure(const float* p){if(p[7]!=cachedLow){low.set(0,p[7],180,sr);cachedLow=p[7];}if(p[8]!=cachedMid){mid.set(1,p[8],1400,sr);cachedMid=p[8];}if(p[9]!=cachedHigh){high.set(2,p[9],6500,sr);cachedHigh=p[9];}}
-    void tick(float input,const float* p,float& l,float& r){
-        float x=input-hpX+.990f*hpY;hpX=input;hpY=x;
-        x=high.tick(mid.tick(low.tick(x*p[0])));
-        float level=std::abs(x);envelope+=(level-envelope)*(level>envelope?.008f:.00012f);
-        if(p[10]>.5f&&envelope>.16f)x*=std::pow(.16f/envelope,.65f);
-        // A soft expander reduces room noise without abruptly cutting note tails.
-        if(p[19]>.5f&&envelope<.008f)x*=std::clamp(envelope/.008f,0.f,1.f);
-        size_t offset=std::clamp(int(p[5]*sr/1000),1,int(delay.size()-1));
-        float echo=delay[(di+delay.size()-offset)%delay.size()];delayTone+=(echo-delayTone)*.35f;
-        delay[di]=x+delayTone*std::clamp(p[6],0.f,.7f);di=(di+1)%delay.size();
-        float revL=left.tick(x,p[3],int(p[18])),revR=right.tick(x,p[3],int(p[18]));
-        l=x*(1-p[2]*.25f)+revL*p[2]+delayTone*p[4];
-        r=x*(1-p[2]*.25f)+revR*p[2]+delayTone*p[4];
+    void init(int rate) {
+        sr = rate;
+        tail.init();
+        left.init(sr, 0);
+        right.init(sr, 1);
+        preDelay.assign(std::max(1, int(sr * 0.015f)), 0.f);
+        prePos = 0;
+        delay.assign(sr * 2, 0.f);
+        di = 0;
+        currentOffset = float(sr / 4);
+        hpX = hpY = envelope = delayToneL = delayToneR = 0.f;
+        cachedLow = cachedMid = cachedHigh = 999.f;
+        compTarget = compGain = 1.f; compCounter = 0;
+        // Existing init() retains EQ filter history. Only skip a truly pristine
+        // bus; reopening a stream with retained filter state follows tick().
+        signalIdle = low.z1 == 0.f && low.z2 == 0.f && mid.z1 == 0.f
+                && mid.z2 == 0.f && high.z1 == 0.f && high.z2 == 0.f;
+    }
+
+    void configure(const float* p) {
+        tailConfigurationSafe = true;
+        for (int i = 0; i < 20; ++i) tailConfigurationSafe = tailConfigurationSafe && std::isfinite(p[i]);
+        // Leave unusual/corrupt finite gains on the full path: the certificate's
+        // numerical error margin assumes bounded mixes and the supported EQ range.
+        tailConfigurationSafe = tailConfigurationSafe && std::abs(p[0]) <= 4.f
+                && std::abs(p[2]) <= 4.f && std::abs(p[4]) <= 4.f
+                && std::abs(p[7]) <= 12.f && std::abs(p[8]) <= 12.f && std::abs(p[9]) <= 12.f
+                && p[18] >= 0.f && p[18] <= 3.f;
+        if (p[7] != cachedLow) { low.set(0, p[7], 180, sr); cachedLow = p[7]; }
+        if (p[8] != cachedMid) { mid.set(1, p[8], 1400, sr); cachedMid = p[8]; }
+        if (p[9] != cachedHigh) { high.set(2, p[9], 6500, sr); cachedHigh = p[9]; }
+    }
+
+    bool idle() const { return signalIdle; }
+    size_t tailInspected() const { return tail.inspected(); }
+    // Retirement requires a complete bounded certificate over all ring contents
+    // with no nonquiet writes during that certificate, plus quiet scalar state.
+    // 1e-18 is far below the 1e-12 equivalence tolerance even after the reverb's
+    // parallel comb sum and four allpasses. No ring is cleared on the callback.
+    // Monitoring flags never gate processing needed for recordings or loops.
+    void process(float input, const float* p, float& l, float& r) {
+        if (signalIdle && input == 0.f && tailConfigurationSafe) {
+            // Preserve delay-time smoothing and compressor cadence while asleep.
+            float target = std::clamp(p[5] * sr / 1000.f, 1.f, float(delay.size() - 2));
+            currentOffset += (target - currentOffset) * .005f;
+            if ((compCounter++ & 15) == 0) compTarget = 1.f;
+            compGain += (compTarget - compGain) * .02f;
+            if (++di >= delay.size()) di = 0;
+            if (++prePos >= preDelay.size()) prePos = 0;
+            l = r = 0.f;
+            return;
+        }
+        signalIdle = false;
+        tick(input, p, l, r, true);
+    }
+
+    void tick(float input, const float* p, float& l, float& r, bool certifyTail = false) {
+        float x = input - hpX + 0.990f * hpY;
+        hpX = input;
+        hpY = x;
+
+        x = high.tick(mid.tick(low.tick(x * p[0])));
+
+        float level = std::abs(x);
+        envelope += (level - envelope) * (level > envelope ? 0.008f : 0.00012f) + 1e-25f;
+
+        // Compressor: exact pow() evaluated every 16 samples, gain smoothed per sample
+        if ((compCounter++ & 15) == 0)
+            compTarget = (p[10] > 0.5f && envelope > 0.16f) ? std::pow(0.16f / envelope, 0.65f) : 1.f;
+        compGain += (compTarget - compGain) * 0.02f;
+        x *= compGain;
+
+        if (p[19] > 0.5f && envelope < 0.008f) {
+            x *= std::clamp(envelope / 0.008f, 0.f, 1.f);
+        }
+
+        // Smooth delay time tracking & linear interpolation with stereo Haas widening
+        float targetOffset = std::clamp(p[5] * sr / 1000.f, 1.f, float(delay.size() - 2));
+        currentOffset += (targetOffset - currentOffset) * 0.005f;
+
+        auto readDelay = [&](float off) {
+            float readPos = float(di) + float(delay.size()) - off;
+            size_t i0 = size_t(readPos) % delay.size();
+            size_t i1 = (i0 + 1) % delay.size();
+            float frac = readPos - size_t(readPos);
+            return delay[i0] * (1.f - frac) + delay[i1] * frac;
+        };
+
+        float echoL = readDelay(currentOffset);
+        float offsetR = std::min(float(delay.size() - 2), currentOffset + sr * 0.011f);
+        float echoR = readDelay(offsetR);
+
+        delayToneL += (echoL - delayToneL) * 0.40f + 1e-25f;
+        delayToneR += (echoR - delayToneR) * 0.40f + 1e-25f;
+        float feedback = (delayToneL + delayToneR) * 0.5f * std::clamp(p[6], 0.f, 0.70f);
+        delay[di] = x + feedback;
+        di = (di + 1) % delay.size();
+
+        // Vocal reverb pre-delay (~15ms)
+        float preOut = preDelay[prePos];
+        preDelay[prePos] = x;
+        prePos = (prePos + 1) % preDelay.size();
+
+        bool quietWrites = certifyTail && tailConfigurationSafe && input == 0.f
+                && BoundedTail::quiet(hpX) && BoundedTail::quiet(hpY)
+                && BoundedTail::quiet(low.z1) && BoundedTail::quiet(low.z2)
+                && BoundedTail::quiet(mid.z1) && BoundedTail::quiet(mid.z2)
+                && BoundedTail::quiet(high.z1) && BoundedTail::quiet(high.z2)
+                && BoundedTail::quiet(envelope) && BoundedTail::quiet(x)
+                && BoundedTail::quiet(delayToneL) && BoundedTail::quiet(delayToneR)
+                && BoundedTail::quiet(delay[(di + delay.size() - 1) % delay.size()]);
+        bool* probe = quietWrites ? &quietWrites : nullptr;
+        float revL = left.tick(preOut, p[3], int(p[18]), probe);
+        float revR = right.tick(preOut, p[3], int(p[18]), probe);
+
+        float dryMix = 1.f - p[2] * 0.25f;
+        l = x * dryMix + revL * p[2] + delayToneL * p[4];
+        r = x * dryMix + revR * p[2] + delayToneR * p[4];
+        if (certifyTail && tail.step(quietWrites, 26, [&](size_t span) {
+                if (span < 12) return left.tailSpan(span);
+                if (span < 24) return right.tailSpan(span - 12);
+                const auto& line = span == 24 ? delay : preDelay;
+                return std::pair<const float*, size_t>{line.data(), line.size()};
+            })) signalIdle = true;
     }
 };
 inline std::vector<uint8_t> midiFile(const std::vector<Note>& notes,int bpm){

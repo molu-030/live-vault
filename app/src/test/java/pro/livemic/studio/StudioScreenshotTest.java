@@ -23,28 +23,64 @@ import static org.junit.Assert.*;
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 public class StudioScreenshotTest {
- @Before public void resetComposer()throws Exception{java.lang.reflect.Field f=ComposerSession.class.getDeclaredField("instance");f.setAccessible(true);ComposerSession old=(ComposerSession)f.get(null);if(old!=null)old.worker.shutdownNow();f.set(null,null);AudioService.active=false;AudioService.playbackActive=false;Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};Composer.performance=new double[0];Audio.supplied=null;Audio.changes.clear();}
+ @Before public void resetComposer()throws Exception{java.lang.reflect.Field f=ComposerSession.class.getDeclaredField("instance");f.setAccessible(true);ComposerSession old=(ComposerSession)f.get(null);if(old!=null)old.worker.shutdownNow();f.set(null,null);AudioService.active=false;AudioService.playbackActive=false;Composer.current=new double[]{0,0,0,0,32,-1,-1,0,0,0};Composer.performance=new double[0];Audio.supplied=null;Audio.feedbackReductionDb=0;Audio.changes.clear();}
  @org.robolectric.annotation.internal.DoNotInstrument
  @Implements(value=NativeAudio.class,isInAndroidSdk=false)
  public static class Audio {
-  static double lastSeek=-1;static float[] supplied;static final java.util.List<float[]> changes=new java.util.ArrayList<>();
-  static final java.util.List<Boolean> rerouteMic=new java.util.ArrayList<>();static final java.util.ArrayDeque<Boolean> rerouteResults=new java.util.ArrayDeque<>();static int microphoneStarts,playbackStarts,inputSessions;static final java.util.List<Integer> burstCalls=new java.util.ArrayList<>();
+  static double lastSeek=-1;static final java.util.List<Boolean> localPlayCalls=new java.util.ArrayList<>();static float[] supplied;static final java.util.List<float[]> changes=new java.util.ArrayList<>();
+  static final java.util.List<Boolean> rerouteMic=new java.util.ArrayList<>();static final java.util.ArrayDeque<Boolean> rerouteResults=new java.util.ArrayDeque<>();static int microphoneStarts,playbackStarts,inputSessions,statsCalls,stopCalls,suspendCalls;static final java.util.List<Integer> burstCalls=new java.util.ArrayList<>();
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static void set(int k,float v){changes.add(new float[]{k,v});}
-  @Implementation protected static float[] stats(){if(supplied!=null)return supplied.clone();float[] f=new float[22];f[2]=-1;f[6]=48000;return f;}
+  @Implementation protected static float[] stats(){statsCalls++;if(supplied!=null)return supplied.clone();float[] f=new float[22];f[2]=-1;f[6]=48000;return f;}
   @Implementation protected static float[] roll(){return new float[0];}
   @Implementation protected static double[] localPlaybackInfo(){return new double[]{0,6};}
   @Implementation protected static void seekLocal(double seconds){lastSeek=seconds;}
+  @Implementation protected static void playLocal(boolean playing){localPlayCalls.add(playing);}
   @Implementation protected static boolean loadLocalFile(String p,int r,int c){return true;}
   @Implementation protected static void guideTone(float f){}
-  @Implementation protected static void stop(){}
+  @Implementation protected static void stop(){stopCalls++;}
+  @Implementation protected static void suspend(){suspendCalls++;}
   @Implementation protected static boolean startPlayback(int out,int mode){playbackStarts++;return true;}
   @Implementation protected static boolean start(int input,int output,int mode){microphoneStarts++;return true;}
   @Implementation protected static boolean reroute(int input,int output,int mode,boolean microphone){rerouteMic.add(microphone);return rerouteResults.isEmpty()||rerouteResults.removeFirst();}
   @Implementation protected static boolean bufferBursts(int n){burstCalls.add(n);return true;}
   @Implementation protected static int[] latencyInfo(){return new int[]{0,0,0,48000,0};}
+  @Implementation protected static double[] diagnostics(){double[] values=new double[21];values[0]=1;return values;}
   @Implementation protected static int inputSession(){inputSessions++;return 0;}
+  static int actualOutputDevice,feedbackResets,inputProfile,echoInputConfigurations;
+  static boolean echoInputSupported,echoDefaultSafe;
+  static int[] echoSpeakers=new int[0],echoMicrophones=new int[0];
+  @Implementation protected static int inputProfile(){return inputProfile;}
+  @Implementation protected static void configureEchoInput(boolean enabled,int[] speakers,int[] microphones,boolean defaultSafe){echoInputConfigurations++;echoInputSupported=enabled;echoSpeakers=speakers.clone();echoMicrophones=microphones.clone();echoDefaultSafe=defaultSafe;}
+  static float feedbackReductionDb;
+  @Implementation protected static float feedbackReductionDb(){return feedbackReductionDb;}
+  static final java.util.List<Boolean> feedbackProtectionCalls=new java.util.ArrayList<>();
+  static final java.util.List<Float> monitorLevelCalls=new java.util.ArrayList<>();
+  @Implementation protected static int outputDevice(){return actualOutputDevice;}
+  @Implementation protected static void feedbackProtection(boolean risky){feedbackProtectionCalls.add(risky);}
+  @Implementation protected static void monitorLevel(float level){monitorLevelCalls.add(level);}
+  @Implementation protected static void resetFeedback(){feedbackResets++;}
   @Implementation protected static void microphoneOff(){}
+  static final java.util.List<Boolean> micOnlyCalls=new java.util.ArrayList<>();
+  static final java.util.List<Integer> syncCalls=new java.util.ArrayList<>();
+  @Implementation protected static void enablePlaybackCapture(boolean enabled,float gain){}
+  @Implementation protected static void recordMicOnly(boolean enabled){micOnlyCalls.add(enabled);}
+  @Implementation protected static void recordSync(int milliseconds){syncCalls.add(milliseconds);}
+  @Implementation protected static boolean beginRecord(String path){return true;}
+  @Implementation protected static boolean beginRecordSources(String mix,String raw,String fixed){return NativeAudio.beginRecord(mix);}
+  @Implementation protected static boolean beginRecordStems(String mix,String raw,String fixed,String vocal){return NativeAudio.beginRecordSources(mix,raw,fixed);}
+  @Implementation protected static boolean recordVocalStemValid(){return false;}
+  @Implementation protected static boolean renderVocalStem(String vocal,String fixed,String output,float[] values,int sync){return false;}
+  @Implementation protected static boolean recordSourcesValid(){return false;}
+  @Implementation protected static boolean recordSourcesEditable(){return false;}
+  @Implementation protected static boolean renderTakeSources(String raw,String fixed,String output,float[] values,int sync){return false;}
+  @Implementation protected static void cancelTakeRender(){}
+  @Implementation protected static void recentVoiceEnabled(boolean enabled){}
+  @Implementation protected static int recentVoiceSeconds(){return -1;}
+  @Implementation protected static long saveRecentVoice(String path){return -1;}
+  @Implementation protected static boolean commitRecentVoice(long token){return false;}
+  static int actualInputDevice;
+  @Implementation protected static int inputDevice(){return actualInputDevice;}
  }
  @org.robolectric.annotation.internal.DoNotInstrument
  @Implements(value=NativeComposer.class,isInAndroidSdk=false)
@@ -74,11 +110,12 @@ public class StudioScreenshotTest {
  public static class Harmony {
   static double[] current={0,0,0,0,-1,-1,0,0,-1,-1,-1,0,0,-1};
   static boolean failSave=false,loadedWhilePlaying=false;
+  static final java.util.List<Integer> transportCalls=new java.util.ArrayList<>();
   @Implementation protected static void __staticInitializer__(){}
   @Implementation protected static boolean prepare(int bpm,int meter,int bars){current[2]=60.0/bpm*bars*(meter==1?3:4);return true;}
   @Implementation protected static void configure(boolean enabled,int key,int scale,int preset,float wet,float dry,float spread){}
   @Implementation protected static void monitor(boolean enabled){}
-  @Implementation protected static void transport(int command){current[0]=command==1?1:0;}
+  @Implementation protected static void transport(int command){transportCalls.add(command);current[0]=command==1?1:0;if(command==0)current[1]=0;}
   @Implementation protected static boolean arm(int slot){current[4]=slot;return true;}
   @Implementation protected static void cancel(){current[4]=-1;current[5]=-1;}
   @Implementation protected static void layer(int slot,float volume,float pan,boolean muted){}
@@ -138,7 +175,7 @@ public class StudioScreenshotTest {
   for(int width:new int[]{360,412}){
    int physicalHeight=width==360?800:915,height=physicalHeight-72;
    RuntimeEnvironment.setQualifiers("w"+width+"dp-h"+height+"dp-mdpi");
-   MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.activityVisible=false;
+   MainActivity a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);a.activityVisible=true;
    assertEquals("Top navigation has three items",3,a.nav.getChildCount());
    seed(a);a.selectedFile="보컬 연습 01.wav";a.preset(1);a.set(0,.8f);a.handler.removeCallbacks(a.tick);
    a.getResources().getDisplayMetrics().density=1;a.getResources().getDisplayMetrics().scaledDensity=1;a.getResources().getDisplayMetrics().widthPixels=width;a.getResources().getDisplayMetrics().heightPixels=height;
@@ -150,8 +187,8 @@ public class StudioScreenshotTest {
      finally{RecordingManager.active=false;a.tick.run();a.handler.removeCallbacks(a.tick);}
      float[] fixture=new float[22];fixture[0]=440;fixture[2]=69;fixture[3]=.05f;fixture[10]=1;a.liveScreen.poll(fixture,true);capture(a,width,height,new File(out,width+"-0-fixture.png"),false);a.drawer();capture(a,width,height,new File(out,width+"-drawer.png"),true);a.drawerPopup.dismiss();}
    }
-  // Verify the live voice-level knob exposes a real accessible adjustment action.
-  a.tab=0;a.showTab();a.liveScreen.select(2);SharedEffectDial f=a.liveScreen.dial;assertNotNull(f);Bundle args=new Bundle();args.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.65f);assertTrue(f.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),args));assertEquals(.65f,a.values[0],.001f);
+  // The main mic gain remains a real native parameter adjustment.
+  a.tab=0;a.showTab();a.liveScreen.micVolume.setProgress(64);int gainStep=a.liveScreen.micVolume.getKeyProgressIncrement();Audio.changes.clear();assertTrue(a.liveScreen.micVolume.onKeyDown(KeyEvent.KEYCODE_DPAD_RIGHT,new KeyEvent(KeyEvent.ACTION_DOWN,KeyEvent.KEYCODE_DPAD_RIGHT)));float expectedGain=(64+gainStep)/100f;assertEquals(expectedGain,a.values[0],.001f);assertFalse(Audio.changes.isEmpty());for(float[] change:Audio.changes){assertEquals(0,(int)change[0]);assertEquals(expectedGain,change[1],.001f);}
   assertEquals(18,StudioMidiPreview.read(a.store.file("render_fixture_1",".mid")).length);
   a.tab=1;a.showTab();assertNotNull(a.playerLine);Bundle seekArgs=new Bundle();seekArgs.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.3f);assertTrue(a.playerLine.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),seekArgs));assertEquals(1.8,Audio.lastSeek,.001);a.playerLine.setEnabled(false);seekArgs.putFloat(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE,.8f);assertFalse(a.playerLine.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.getId(),seekArgs));assertEquals(1.8,Audio.lastSeek,.001);
   a.io.shutdown();
@@ -173,7 +210,7 @@ public class StudioScreenshotTest {
    a.tick.run();a.handler.removeCallbacks(a.tick);a.tick.run();a.handler.removeCallbacks(a.tick);
    String prefix="s26u-"+(fontScale==1?"default":"large")+(navigationBottom==48?"-buttons":"");
    capture(a,412,893,new File(out,prefix+"-live.png"),false);
-   LinearLayout header=(LinearLayout)a.root.getChildAt(0);assertTrue("Preset must retain a tappable width",a.presetChip.getWidth()>=48);assertTrue("Emergency output control must retain a tappable width",header.getChildAt(header.getChildCount()-1).getWidth()>=48);
+   LinearLayout header=(LinearLayout)a.root.getChildAt(0);assertTrue("Details retains a tappable width",a.liveScreen.detailsButton.getWidth()>=48);assertTrue("Details retains a tappable height",a.liveScreen.detailsButton.getHeight()>=48);a.liveScreen.detailsButton.performClick();Dialog effects=ShadowDialog.getLatestDialog();assertNotNull(effects);assertNotNull("Preset remains accessible in Details",findButtonContaining(effects.getWindow().getDecorView(),a.tr("프리셋","Preset")));effects.dismiss();assertTrue("Emergency output control must retain a tappable width",header.getChildAt(header.getChildCount()-1).getWidth()>=48);
    Rect record=bounds(a,a.recButton);assertTrue(record.top>=a.pageScroll.getBottom());assertTrue(record.bottom<=a.root.getHeight()-a.root.getPaddingBottom());assertTrue(bounds(a,a.nav).bottom<=bounds(a,a.pageScroll).top);assertTrue(a.root.getPaddingTop()>=36);assertEquals(3,a.nav.getChildCount());
    a.pageScroll.scrollTo(0,a.page.getHeight());assertEquals(record,bounds(a,a.recButton));a.pageScroll.scrollTo(0,0);a.drawer();assertTrue(a.drawerTop+a.drawerPopup.getHeight()<=893-navigationBottom);capture(a,412,893,new File(out,prefix+"-drawer.png"),true);a.drawerPopup.dismiss();
    try{RecordingManager.active=true;a.tick.run();a.handler.removeCallbacks(a.tick);capture(a,412,893,new File(out,prefix+"-recording.png"),false);assertEquals(record,bounds(a,a.recButton));}
@@ -198,7 +235,7 @@ public class StudioScreenshotTest {
  static EditText findInput(View v,String hint){if(v instanceof EditText&&hint.contentEquals(((EditText)v).getHint()))return (EditText)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){EditText x=findInput(g.getChildAt(i),hint);if(x!=null)return x;}}return null;}
  static Button findButtonContaining(View v,String text){if(v instanceof Button&&((Button)v).getText().toString().contains(text))return (Button)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){Button x=findButtonContaining(g.getChildAt(i),text);if(x!=null)return x;}}return null;}
  static int countButtonsContaining(View v,String text){int n=v instanceof Button&&((Button)v).getText().toString().toLowerCase().contains(text.toLowerCase())?1:0;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++)n+=countButtonsContaining(g.getChildAt(i),text);}return n;}
- static Rect bounds(MainActivity a,View view){Rect b=new Rect(0,0,view.getWidth(),view.getHeight());a.root.offsetDescendantRectToMyCoords(view,b);return b;}
+ static Rect bounds(MainActivity a,View view){Rect b=new Rect();view.getDrawingRect(b);a.root.offsetDescendantRectToMyCoords(view,b);return b;}
  static View findDescription(View view,String prefix){if(view.getContentDescription()!=null&&view.getContentDescription().toString().startsWith(prefix))return view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){View match=findDescription(group.getChildAt(i),prefix);if(match!=null)return match;}}return null;}
  static Button findButton(View view,String label){if(view instanceof Button&&label.contentEquals(((Button)view).getText()))return (Button)view;if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){Button found=findButton(group.getChildAt(i),label);if(found!=null)return found;}}return null;}
  static void capture(MainActivity a,int w,int h,File output,boolean drawer)throws Exception {

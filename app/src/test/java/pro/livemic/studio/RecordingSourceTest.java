@@ -29,13 +29,24 @@ public class RecordingSourceTest {
   @Implementation protected static void request(Activity a,int code){requests++;if(fail)throw new IllegalStateException("projection unavailable");}
  }
  MainActivity a;
- @Before public void setup(){Context c=RuntimeEnvironment.getApplication();c.getSharedPreferences("MainActivity",0).edit().clear().commit();org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.RECORD_AUDIO);Projection.requests=0;Projection.fail=false;AudioService.active=false;AudioService.playbackActive=false;RecordingManager.active=false;}
+ @Before public void setup(){Context c=RuntimeEnvironment.getApplication();c.getSharedPreferences("MainActivity",0).edit().clear().commit();org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.RECORD_AUDIO);Projection.requests=0;Projection.fail=false;AudioService.active=false;AudioService.playbackActive=false;AudioService.youtubeSelected=false;RecordingManager.active=false;}
  @After public void cleanup(){if(a!=null){a.handler.removeCallbacks(a.tick);a.io.shutdown();}AudioService.active=false;AudioService.playbackActive=false;}
  void launch(){a=Robolectric.buildActivity(MainActivity.class).setup().get();a.handler.removeCallbacks(a.tick);while(org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getNextStartedService()!=null){}}
  Intent next(){return org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getNextStartedService();}
  void selectExternal(){a.recordingOptions();AlertDialog d=(AlertDialog)ShadowDialog.getLatestDialog();Switch s=findSwitch(d.getWindow().getDecorView());assertNotNull(s);s.setChecked(true);d.getButton(AlertDialog.BUTTON_POSITIVE).performClick();org.robolectric.shadows.ShadowLooper.idleMainLooper();assertTrue("opt-in applied",a.captureOtherApps);}
  static Switch findSwitch(View v){if(v instanceof Switch)return (Switch)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){Switch s=findSwitch(g.getChildAt(i));if(s!=null)return s;}}return null;}
  void assertMicIntent(Intent i){assertNotNull(i);assertEquals(AudioService.RECORD,i.getAction());assertFalse(i.getBooleanExtra("capture",true));assertFalse(i.hasExtra("projection"));}
+ @Test public void youtubeDisarmsExternalCaptureAndLateProjectionCannotStartAnotherRecording(){
+  launch();a.youtube.selected=true;AudioService.youtubeSelected=true;a.captureOtherApps=true;a.pendingCapture=true;
+  a.requestRecording();Intent recording=next();assertMicIntent(recording);assertTrue(recording.getBooleanExtra("micOnly",false));assertEquals(0,Projection.requests);assertFalse(a.captureOtherApps);assertFalse(a.pendingCapture);assertFalse(a.recordPermissionPending);
+  a.onActivityResult(30,Activity.RESULT_OK,new Intent("late.projection"));assertNull(next());assertFalse(a.pendingCapture);AudioService.youtubeSelected=false;
+ }
+ @Test public void pendingProjectionPreventsYouTubeSelectionUntilCancelled(){
+  org.junit.Assume.assumeTrue(BuildConfig.PLAYBACK_CAPTURE);launch();selectExternal();a.requestRecording();
+  a.getPreferences(0).edit().putBoolean("youtubeConsent",true).commit();a.selectYouTube("dQw4w9WgXcQ");
+  assertFalse(a.youtube.selected);assertTrue(a.recordPermissionPending);assertEquals(1,Projection.requests);assertNull(next());
+  a.onActivityResult(30,Activity.RESULT_CANCELED,null);assertFalse(a.recordPermissionPending);assertNull(next());
+ }
  @Test public void legacyPreferenceCannotTriggerProjectionForOrdinaryRecord(){
   RuntimeEnvironment.getApplication().getSharedPreferences("MainActivity",0).edit().putBoolean("captureOtherApps",true).commit();launch();
   assertFalse(a.captureOtherApps);assertFalse(a.getPreferences(0).getBoolean("captureOtherApps",false));

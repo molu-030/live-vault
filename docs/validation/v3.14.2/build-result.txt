@@ -1,0 +1,5 @@
+Tasks: :app:testPersonalDebugUnitTest :app:assemblePersonalDebug
+BUILD SUCCESSFUL
+Final single full run:63 classes,428 tests,0 failures,0 errors,0 skipped.
+Personal3.14.2-preview/code39; three ABI build, original certificate and all82 declared JNI exports verified.
+Physical device playback validation pending.

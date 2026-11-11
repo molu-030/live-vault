@@ -55,7 +55,9 @@ final class ComposerTransport {
             else if(t.family()==3)tones=MusicTheory.guitar(root,Math.max(0,Math.min(10,q)),0);
             else{int[] intervals=MusicTheory.INTERVALS[Math.max(0,Math.min(10,q))];tones=new int[intervals.length];for(int i=0;i<tones.length;i++)tones[i]=root+intervals[i];}
             event(start+n.beat,4,channel,(int)n.bend,n.expression,0,0,0,0);
-            for(double[] point:n.curve)if(n.beat+point[0]<duration)event(start+n.beat+point[0],4,channel,(int)point[1],point[2],0,0,0,0);
+            // A shortened/quantized note can retain later expression points in its saved data.
+            // Exclude its endpoint too: the following note owns expression at that beat.
+            for(double[] point:n.curve)if(point[0]>=0&&point[0]<n.length&&n.beat+point[0]<duration)event(start+n.beat+point[0],4,channel,(int)point[1],point[2],0,0,0,0);
             for(int i=0;i<tones.length;i++){double offset=t.family()==3?i*n.offset:0;if(offset>=n.length)continue;note(start+n.beat+offset,Math.min(n.length-offset,duration-n.beat-offset),channel,tones[i],n.velocity/127.,false);}
         }
     }
@@ -81,50 +83,123 @@ final class ComposerTransport {
         event(at,1,ch,pitch,gain,0,0,0,0);double[] stop={off,0,ch,pitch,0,0,0,0,0};events.add(stop);offEvent[ch][pitch]=stop;pendingOff[ch][pitch]=off;
     }
     private static double[] subdivisions(double length,double step){double[] result=new double[(int)Math.ceil(length/step)];for(int i=0;i<result.length;i++)result[i]=i*step;return result;}
+    private static int pattern(TrackConfig t){int count=t.drums()?5:t.family()>=7&&t.family()<=10?5:7;return t.pattern>=0&&t.pattern<count?t.pattern:0;}
     private int[] play(TrackConfig t,int ch,ComposerProject.Chord chord,ComposerProject.Chord next,double pos,double length,double barStart,int rhythm,int barIndex,int bars,ComposerProject.Part part,int[] previous){
         double end=pos+length;int root=48+chord.root,bass=36+(chord.bass>=0?chord.bass:chord.root);int[] tones=MusicTheory.INTERVALS[chord.quality];int family=t.family();
         if(t.drums()){
             boolean fill=part.fill&&barIndex==bars-1;
-            for(ComposerRhythm.Hit hit:ComposerRhythm.drums(rhythm,fill,barIndex,part.energy)){
+            for(ComposerRhythm.Hit hit:ComposerRhythm.drums(rhythm,fill,barIndex,part.energy,pattern(t))){
+                // Energy shapes orchestration, not only loudness: quiet parts keep
+                // main-beat cymbals; their closing fill leaves two clear pickups.
+                boolean closing=fill&&hit.beat>=bar-1;
+                if(closing&&((hit.note==45&&part.energy<.75)||(hit.note==50&&part.energy<.4)))continue;
+                boolean cymbal=hit.note==42||hit.note==44||hit.note==46||hit.note==49||hit.note==51;
+                // Compound 6/8 has two dotted-quarter beats (0,1.5), while
+                // simple meters retain quarter-note beats. Keep the meter's feel.
+                double pulse=project.meter==2?1.5:1;
+                if(!closing&&part.energy<.4&&cymbal&&Math.abs(hit.beat/pulse-Math.rint(hit.beat/pulse))>1e-6)continue;
                 double at=barStart+hit.beat;if(at>=pos-.00001&&at<end-.00001)autoNote(at,ms(70),ch,hit.note,hit.gain,pos,end,part,hit.note==38||hit.note==37?ms(5*part.humanize):0);
             }return previous;
         }
-        if(family==4){
-            double[] attacks=t.pattern==3?subdivisions(bar,1):ComposerRhythm.kicks(rhythm,barIndex);
+                if(family==4){
+            int pMod = pattern(t);
+            if(pMod == 6){
+                autoNote(pos, Math.min(length * .95, 3.8), ch, MusicTheory.fit(bass, 24, 46), .88, pos, end, part, 0);
+                return previous;
+            }
+            double[] attacks = (pMod == 3 || rhythm==6&&(pMod==1||pMod==2)) ? subdivisions(bar, 1) : (pMod == 4 || pMod == 5) ? subdivisions(bar, .5) : ComposerRhythm.kicks(rhythm, barIndex);
             boolean anchored=false;for(double a:attacks)if(Math.abs(barStart+a-pos)<.00001)anchored=true;
             if(!anchored)autoNote(pos,Math.min(.65,length*.75),ch,MusicTheory.fit(bass,28,55),.72,pos,end,part,0);
             for(int i=0;i<attacks.length;i++){
                 double at=barStart+attacks[i];if(at<pos-.00001||at>=end-.00001)continue;
-                int pitch=bass;if(t.pattern==1&&i%2==1)pitch+=7;else if(t.pattern==2&&i%2==1)pitch+=12;else if(t.pattern==3&&Math.abs(at-pos)>.00001)pitch+=tones[i%tones.length];
+                int pitch=bass;
+                if(pMod==1&&i%2==1)pitch+=7;
+                else if((pMod==2||pMod==4)&&i%2==1)pitch+=12;
+                else if(pMod==3&&Math.abs(at-pos)>.00001)pitch+=tones[i%tones.length];
                 boolean last=true;for(int j=i+1;j<attacks.length;j++)if(barStart+attacks[j]<end-.00001){last=false;break;}
-                if(next!=null&&last&&at>pos+.00001&&end-at<=1.01&&barIndex%4==3&&part.energy>.4){int target=36+(next.bass>=0?next.bass:next.root);pitch=target+(target>=bass?-1:1);}
+                // A walking line approaches each actual bass change by a semitone.
+                // Other bass roles reserve that pickup for energetic four-bar/part
+                // cadences. Never replace the harmony's initial root/slash-bass anchor.
+                boolean cadence=(barIndex+1)%4==0||barIndex==bars-1;
+                int nextBass=next==null?bass:36+(next.bass>=0?next.bass:next.root);
+                boolean changing=MusicTheory.pc(nextBass)!=MusicTheory.pc(bass);
+                if(changing&&last&&at>pos+.00001&&end-at<=1.01
+                        &&((pMod==3&&part.energy>.4)||(cadence&&part.energy>.65))){
+                    int target=MusicTheory.fit(nextBass,28,55);
+                    while(target-pitch>6&&target-12>=28)target-=12;
+                    while(pitch-target>6&&target+12<=55)target+=12;
+                    pitch=target+(target>=pitch?-1:1);
+                }
                 double until=i+1<attacks.length?barStart+attacks[i+1]-at:end-at;
-                autoNote(at,Math.min(until*.8,end-at),ch,MusicTheory.fit(pitch,28,55),.78,pos,end,part,0);
+                double dur = (pMod == 4) ? Math.min(.22, until*.6) : Math.min(until*.8, end-at);
+                autoNote(at,dur,ch,MusicTheory.fit(pitch,28,55),pMod==4?.85:.78,pos,end,part,0);
             }
             return previous;
         }
         if(family==3){
-            int[] voicing=MusicTheory.guitar(root,chord.quality,t.pattern,previous,chord.bass);
-            double[] attacks=t.pattern==1||t.pattern==2?subdivisions(bar,.5):ComposerRhythm.strums(rhythm);
+            int pMod = pattern(t);
+            int guitarPat = pMod == 3 ? 3 : 0;
+            int[] voicing=MusicTheory.guitar(root,chord.quality,guitarPat,previous,chord.bass);
+            if(pMod==6){
+                // Thumb on the low string with an independent upper-string melody.
+                // Restart at each harmony boundary, including short split chords.
+                for(double at=0;at<length-.01;at+=.5){
+                    int pulse=(int)Math.round(at*2);
+                    if(pulse%2==0&&voicing.length>0)autoNote(pos+at,Math.min(.9,length-at),ch,voicing[0],.68,pos,end,part,0);
+                    if(voicing.length>1){int n=voicing.length-1-(pulse%Math.min(3,voicing.length-1));
+                        autoNote(pos+at,Math.min(.72,length-at),ch,voicing[n],pulse%2==0?.52:.59,pos,end,part,ms(pulse%2==0?12:0));}
+                }return voicing;
+            }
+            if(pMod==5){
+                // Sparse, swung upper-string comping rather than full eighth-note strums.
+                for(double at=0;at<length-.01;at+=1){double attack=at+(at==0?0:2./3);
+                    if(attack>=length)continue;
+                    for(int string=1;string<Math.min(4,voicing.length);string++){
+                        int n=voicing.length-string;
+                        autoNote(pos+attack,Math.min(.28,length-attack),ch,voicing[n],at==0?.58:.46,pos,end,part,ms((string-1)*7));
+                    }
+                }return voicing;
+            }
+            boolean isArp = pMod == 1;
+            double[] attacks = isArp ? subdivisions(bar, .5) : (pMod == 2) ? subdivisions(bar, .5) : (pMod == 4) ? subdivisions(bar, .25) : (pMod == 5) ? subdivisions(bar, .5) : ComposerRhythm.strums(rhythm);
             for(int i=0;i<attacks.length;i++){
                 double at=barStart+attacks[i];if(at<pos-.00001||at>=end-.00001)continue;
-                if(t.pattern==1){if(voicing.length>0)autoNote(at,Math.min(.65,end-at),ch,voicing[i%voicing.length],.6,pos,end,part,0);}
+                if(isArp){if(voicing.length>0)autoNote(at,Math.min(.65,end-at),ch,voicing[i%voicing.length],.6,pos,end,part,0);}
                 else {boolean up=i%2==1;int count=up?Math.min(4,voicing.length):voicing.length;
                     for(int string=0;string<count;string++){
                         int n=up?voicing.length-1-string:string;
-                        double offset=ms(string*(up?7:10));double sustain=t.pattern==2?.14:Math.min(.85,end-at);
+                        double offset=ms(string*(up?7:10));
+                        double sustain=(pMod==2)? .14 : (pMod==3)? .35 : Math.min(.85,end-at);
                         autoNote(at,sustain,ch,voicing[n],up?.48:.63,pos,end,part,offset);
                     }
                 }
             }return voicing;
         }
         if(family==7||family==8||family==9||family==10){
-            double step=t.pattern==1?length:1;for(double at=0;at<length-.01;at+=step){int n=tones[(int)Math.round(at/step)%tones.length];autoNote(pos+at,Math.min(step*.8,length-at),ch,MusicTheory.fit(60+chord.root+n,55,84),.54,pos,end,part,0);}return previous;
+            int pMod = pattern(t);
+            double step = (pMod == 1 || pMod == 4) ? length : (pMod == 2 || pMod == 3) ? .5 : 1;
+            for(double at=0;at<length-.01;at+=step){
+                int n=tones[(int)Math.round(at/step)%tones.length];
+                int pitch=MusicTheory.fit(60+chord.root+n,55,pMod==4?72:84);
+                double gate=Math.min(pMod==2?.25:step*.8,length-at);
+                autoNote(pos+at,gate,ch,pitch,.54,pos,end,part,0);
+                if(pMod==4)autoNote(pos+at,gate,ch,pitch+12,.43,pos,end,part,0);
+            }return previous;
         }
+        int pMod = pattern(t);
         int[] voicing=MusicTheory.voicing(60+chord.root,chord.quality,previous,48,79);
-        boolean sustain=t.pattern==2||(t.pattern!=1&&((t.program>=40&&t.program<=44)||family==6||family==11));double step=sustain?length:t.pattern==1?.5:1;
+        if(pMod==5||pMod==6){
+            for(double at=0;at<length-.01;at+=1){
+                // Straight offbeats vs triplet offbeats, with separate gates and accents.
+                double attack=at+(pMod==6?2./3:.5);
+                if(attack>=length-.001)continue;
+                for(int pitch:voicing)autoNote(pos+attack,Math.min(pMod==6?.30:.18,length-attack),ch,pitch,pMod==6?.56:.46,pos,end,part,0);
+            }return voicing;
+        }
+        boolean sustain=pMod==2||(pMod!=1&&pMod!=3&&((t.program>=40&&t.program<=44)||family==6||family==11));
+        double step=sustain?length:(pMod==1)? .5 : (pMod==3)? .25 : (pMod==4)? .75 : 1;
         for(double at=0;at<length-.01;at+=step){
-            if(t.pattern==1&&!sustain)autoNote(pos+at,Math.min(step*.85,length-at),ch,voicing[(int)Math.round(at/step)%voicing.length],.5,pos,end,part,0);
+            if((pMod==1||pMod==3)&&!sustain)autoNote(pos+at,Math.min(step*.85,length-at),ch,voicing[(int)Math.round(at/step)%voicing.length],.5,pos,end,part,0);
             else for(int pitch:voicing)autoNote(pos+at,Math.min(sustain?length-at:step*.88,length-at),ch,pitch,.5,pos,end,part,0);
         }return voicing;
     }

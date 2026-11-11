@@ -1,0 +1,25 @@
+{
+  "scope": "ExitFlowTest11 + AudioServiceRoutingTest20 after final completed-phrase save guard",
+  "totals": {
+    "tests": 31,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "classes": [
+    {
+      "name": "pro.livemic.studio.AudioServiceRoutingTest",
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.ExitFlowTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ]
+}

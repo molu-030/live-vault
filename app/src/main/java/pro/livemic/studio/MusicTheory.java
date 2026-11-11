@@ -11,7 +11,7 @@ final class MusicTheory {
     static final int[][] INTERVALS={{0,4,7},{0,3,7},{0,3,6},{0,4,8},{0,2,7},{0,5,7},{0,4,7,10},{0,4,7,11},{0,3,7,10},{0,3,6,10},{0,4,7,14}};
     static final String[] PRESETS={"팝 I–V–vi–IV","발라드 I–vi–IV–V","캐논 I–V–vi–iii–IV–I–IV–V","재즈 ii7–V7–Imaj7","마이너 i–VI–III–VII","마이너 종지 i–VI–iv–V7"};
     static final int[][] PROGRESSIONS={{0,4,5,3},{0,5,3,4},{0,4,5,2,3,0,3,4},{1,4,0,0},{0,5,2,6},{0,5,3,4}};
-    static final String[] RHYTHMS={"팝 8비트","팝 16비트","셔플","R&B","록","보사노바","왈츠","6/8 발라드"};
+    static final String[] RHYTHMS={"팝 8비트","팝 16비트","셔플","R&B","록","보사노바","왈츠","6/8 발라드","힙합"};
     static int pc(int n){return Math.floorMod(n,12);}
     static String note(int n){return ROOTS[pc(n)]+(Math.floorDiv(n,12)-1);}
     static int quality(int scale,int degree,boolean seventh){
@@ -23,7 +23,7 @@ final class MusicTheory {
     static double barBeats(int meter){return meter==0?4:3;}
     static double quarterBpm(int bpm,int meter){return meter==2?bpm*1.5:bpm;}
     static double split(int meter){return meter==0?2:meter==1?2:1.5;}
-    static boolean rhythmFits(int rhythm,int meter){return meter==0?rhythm<6:meter==1?rhythm==6:rhythm==7;}
+    static boolean rhythmFits(int rhythm,int meter){return rhythm>=0&&rhythm<RHYTHMS.length&&(meter==0?(rhythm<6||rhythm==8):meter==1?rhythm==6:meter==2&&rhythm==7);}
     static int fit(int midi,int lo,int hi){while(midi<lo)midi+=12;while(midi>hi)midi-=12;return midi;}
     /** Compact inversion with minimal movement from the preceding chord. */
     static int[] voicing(int root,int quality,int[] previous,int lo,int hi){

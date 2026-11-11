@@ -13,6 +13,15 @@ int main(){
         float data[2048];for(int i=0;i<2048;i++)data[i]=.3f*std::sin(2*PI*frequency*i/sr)+.07f*std::sin(4*PI*frequency*i/sr);
         auto p=detectPitch(data,2048,sr);double cents=1200*std::log2(p.frequency/frequency);assert(p.frequency>0&&std::abs(cents)<8);}
     float silence[2048]={};assert(detectPitch(silence,2048,48000).frequency==0);
+    // Quiet voice pitch detection (rms ~ 0.004f, below old 0.007f gate, above new 0.0025f gate)
+    {
+        float quietVoice[2048];
+        for(int i=0;i<2048;i++) quietVoice[i]=.00566f*std::sin(2*PI*220.f*i/48000);
+        auto qp=detectPitch(quietVoice,2048,48000);
+        assert(qp.rms>=0.0035f&&qp.rms<=0.0045f);
+        assert(qp.frequency>0&&std::abs(1200*std::log2(qp.frequency/220.f))<8);
+        assert(qp.confidence>0.8f);
+    }
     auto midi=midiFile({{60,100,0,.5},{64,80,.5,1}},120);assert(std::string(midi.begin(),midi.begin()+4)=="MThd");assert(midi[12]==1&&midi[13]==224);
     uint32_t len=(uint32_t(midi[18])<<24)|(uint32_t(midi[19])<<16)|(uint32_t(midi[20])<<8)|midi[21];assert(len+22==midi.size());
     assert(midi[midi.size()-3]==255&&midi[midi.size()-2]==47&&midi.back()==0);
@@ -26,6 +35,34 @@ int main(){
     DSP dsp;dsp.init(48000);float params[]={1,.55,.4,2.2,.2,280,.25,0,0,1,1,0,0,0,0,78,0,0,0,1};dsp.configure(params);double tail=0;
     for(int i=0;i<48000*3;i++){float l,r;dsp.tick(i==0?.7f:0,params,l,r);assert(std::isfinite(l)&&std::isfinite(r));assert(std::abs(l)<2&&std::abs(r)<2);if(i>4800&&i<24000)tail+=l*l+r*r;}
     assert(tail>.00001);std::cout<<"PASS: pitch at 44.1/48 kHz, silence gate, SMF structure, SPSC wrapping, stable DSP/reverb tail\n";
+    // Stereo Haas echo verification: left and right channels differ during echo repeats when p[4] > 0
+    {
+        DSP haasDsp; haasDsp.init(48000);
+        float echoParams[]={1,0,0,2.2,.4f,120,.4f,0,0,0,0,0,0,0,0,78,0,0,0,0};
+        haasDsp.configure(echoParams);
+        double diffStereo=0;
+        for(int i=0;i<48000;i++){
+            float l,r;
+            haasDsp.tick(i==0?0.8f:0.f,echoParams,l,r);
+            assert(std::isfinite(l)&&std::isfinite(r));
+            if(i>5500&&i<15000)diffStereo+=std::abs(l-r);
+        }
+        assert(diffStereo>0.01);
+    }
+    // Smooth delay modulation stability
+    {
+        DSP modDsp; modDsp.init(48000);
+        float modParams[]={1,0,0,2.2,.4f,100,.3f,0,0,0,0,0,0,0,0,78,0,0,0,0};
+        modDsp.configure(modParams);
+        for(int i=0;i<48000*2;i++){
+            float l,r;
+            modParams[5]=100.f+400.f*float(i)/(48000.f*2.f);
+            modDsp.tick(std::sin(2*PI*300*i/48000)*0.1f,modParams,l,r);
+            assert(std::isfinite(l)&&std::isfinite(r));
+            assert(std::abs(l)<2&&std::abs(r)<2);
+        }
+    }
+    std::cout<<"PASS: stereo Haas echo and delay modulation stability\n";
     // Compare identical DSP paths with only the noise-reduction switch changed.
     float cleanParams[]={1,0,0,2.2,0,280,0,0,0,0,0,0,0,0,0,78,0,0,0,0};
     float reducedParams[20];std::copy(cleanParams,cleanParams+20,reducedParams);reducedParams[19]=1;

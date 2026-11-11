@@ -1,0 +1,35 @@
+Native verification evidence, 2026-11-10 UTC
+Working directory: /workspace/scratch/live-vault-recovery
+Captured stdout below transcribed from completed exec tool results; commands were not rerun for this report.
+
+$ scripts/test-oboe-engine.sh
+Exit code: 0
+PASS native defaults and invalid/live/recording/writer/capture/playback provider rejection
+PASS real initial Oboe output-open/input-open/output-start/input-start failures retry complete AAudio; requested/applied/reason truth survives repeated start; failed fallback is unapplied
+PASS failed microphone join retains Oboe backing output, captured/local playback and transport/frame clocks
+PASS Oboe metadata follows successful start; render gate holds through start/metadata callbacks; negotiated device/session/stereo 44.1kHz SRC published together; invalid metadata closes input and preserves backing output
+PASS real Oboe Engine render shares adaptive FIFO/downmix/SRC, Harmony pitch, analyzers and exact 2048-frame WAV writer; counter reset on reopen; read-error fail-closed; callback malloc/new/mutex/trylock=0
+
+$ SANITIZE=1 scripts/test-oboe-engine.sh
+Exit code: 0
+PASS native defaults and invalid/live/recording/writer/capture/playback provider rejection
+PASS real initial Oboe output-open/input-open/output-start/input-start failures retry complete AAudio; requested/applied/reason truth survives repeated start; failed fallback is unapplied
+PASS failed microphone join retains Oboe backing output, captured/local playback and transport/frame clocks
+PASS Oboe metadata follows successful start; render gate holds through start/metadata callbacks; negotiated device/session/stereo 44.1kHz SRC published together; invalid metadata closes input and preserves backing output
+PASS real Oboe Engine render shares adaptive FIFO/downmix/SRC, Harmony pitch, analyzers and exact 2048-frame WAV writer; counter reset on reopen; read-error fail-closed; callback malloc/new/mutex/trylock=0
+
+$ scripts/test-input-engine-drift.sh
+Exit code: 0
+PASS real Engine default same-rate mono enters adaptive FIFO; finite queue drained, zero-ppm bit-exact after8ms, analyzer/frame continuity, callbackalloc0
+PASS actualavailable0 performs no speculative read; largefinite backlog drains only boundednominal+2target, no fakeoverflow/allocation
+PASS unavailable hardware counters use bounded finite reads; short/zero reads do not invent samples or turn off a valid stream
+PASS hardware read error fails closed; reopen44100/stereo resets FIFO/servo/counters; absent stream outputs silence without old audio
+PASS actual44100/stereo hardware despite48000/mono request; downmix/SRC,8ms warmup and output-unit diagnostic384/48000 truthful
+PASS real WAV writer retains2048 output/recordingframes across empty hardware/FIFO dropout/reprime; exact filelength,callbackalloc0
+PASS productioncallback120s synthetic finite hardware clock +200->-200ppm step; correction=-200.22ppm maxSlew=50ppm/s; no under/overflow,callbackalloc0 (not USB measurement)
+
+$ git diff --check
+Exit code: 0
+No output.
+
+Scope: host native tests with fake hardware-facing OboeBackend. Actual USB hardware reproduction remains untested. No Gradle/version/product edits were made when writing this report.

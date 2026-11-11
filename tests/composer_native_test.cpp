@@ -10,6 +10,23 @@ static void* trackedRealloc(void* p,size_t n){if(rendering)allocations++;return 
 #define TSF_REALLOC trackedRealloc
 #include "../app/src/main/cpp/composer_engine.h"
 
+static void coarseAddressOffsets(){
+    for(int value:{-32768,-1,0,1,32767}){
+        tsf_hydra_genamount amount{};amount.shortAmount=static_cast<short>(value);
+        for(int generator:{4,12,45,50}){
+            tsf_region region{};
+            region.offset=region.end=region.loop_start=region.loop_end=0x80000000u;
+            tsf_region_operator(&region,static_cast<tsf_u16>(generator),&amount,nullptr);
+            // Unsigned multiplication defines the original modulo-address behavior.
+            unsigned expected=0x80000000u+static_cast<unsigned>(value)*32768u;
+            assert(region.offset==(generator==4?expected:0x80000000u));
+            assert(region.end==(generator==12?expected:0x80000000u));
+            assert(region.loop_start==(generator==45?expected:0x80000000u));
+            assert(region.loop_end==(generator==50?expected:0x80000000u));
+        }
+    }
+    std::cout<<"PASS: coarse sample address offsets preserve signed-short boundaries and unsigned accumulation\n";
+}
 static void tracker(){
     for(int sr:{44100,48000}){
         lv::VoiceTracker tracker;std::array<float,2048> window{};int onset=-1,off=-1;
@@ -71,4 +88,22 @@ static void muteEndsAtPartBoundary(const char* path,int sr){
     assert(muted<1e-8);assert(restored>1e-5);
     std::cout<<"PASS: "<<sr<<"Hz immediate mute ends at next part\n";
 }
-int main(int argc,char**argv){assert(argc==2);tracker();clearSoloPreservesMix(argv[1]);muteEndsAtPartBoundary(argv[1],44100);muteEndsAtPartBoundary(argv[1],48000);synth(argv[1],44100);synth(argv[1],48000);}
+static void liveRhythmBounds(const char* path){
+    std::vector<float> reference(200*512);
+    for(int pattern:{0,8,-1,9,999}){
+        auto e=std::make_unique<lv::ComposerEngine>();assert(e->load(path));e->sampleRate(48000);
+        std::vector<lv::Event> events={{0,3,0,0,1,pattern,0,0,0}};
+        assert(e->publish(events,4,4,240,0,0));
+        e->settings(true,24,1,0,false,false,0,0,true,false,.85,.007);
+        e->transport(1);
+        std::array<float,512> music{},voice{};std::array<float,256> count{};
+        e->render(music.data(),voice.data(),count.data(),256);
+        lv::VoiceCommand on;on.kind=1;on.input=on.midi=60;on.velocity=100;on.expression=1;
+        e->voiceCommands.push(on);
+        double energy=0;
+        for(int b=0;b<200;b++){rendering=true;e->render(music.data(),voice.data(),count.data(),256);rendering=false;for(size_t i=0;i<voice.size();i++){float f=voice[i];assert(std::isfinite(f));energy+=f*f;if(pattern==0)reference[b*512+i]=f;else if(pattern!=8)assert(f==reference[b*512+i]);}}
+        assert(energy>0);assert(allocations==0);
+    }
+    std::cout<<"PASS: live chord hip-hop rhythm index8 and invalid-index fallback, fixed allocation\n";
+}
+int main(int argc,char**argv){assert(argc==2);coarseAddressOffsets();tracker();liveRhythmBounds(argv[1]);clearSoloPreservesMix(argv[1]);muteEndsAtPartBoundary(argv[1],44100);muteEndsAtPartBoundary(argv[1],48000);synth(argv[1],44100);synth(argv[1],48000);}

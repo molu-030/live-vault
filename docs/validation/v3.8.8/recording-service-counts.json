@@ -1,0 +1,36 @@
+{
+  "tests": 51,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "classes": [
+    {
+      "name": "pro.livemic.studio.AudioServiceRoutingTest",
+      "tests": 20,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.ComposerCaptureTargetTest",
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.ComposerEditorTest",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "pro.livemic.studio.ExitFlowTest",
+      "tests": 12,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "applicationId": "pro.livemic.studio.personal",
+  "versionName": "3.9.4-preview",
+  "versionCode": 31,
+  "bytes": 36052522,
+  "sha256": "447ee7a331b3f4cb0265b939f2ad3599467fa8b389cf89b59e4e8bf99b90af0e",
+  "certificateSha256": "6a61c39da7f13d3c7622c12068efd1e5bcb43bae2b7748821e2d2a9af169a139",
+  "abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86_64"
+  ]
+}

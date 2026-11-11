@@ -81,4 +81,76 @@ public class AudioRoutingTest {
         assertFalse(AudioRouting.echoCancellationPreferred(context));
         assertTrue(AudioRouting.autoGainPreferred(context));
     }
+    private android.media.AudioDeviceInfo usb(int id, String name, String address) {
+        android.media.AudioDeviceInfo device = FeedbackRoutingTest.device(id, android.media.AudioDeviceInfo.TYPE_USB_DEVICE);
+        Object port = org.robolectric.util.ReflectionHelpers.getField(device, "mPort");
+        org.robolectric.util.ReflectionHelpers.setField(port, "mName", name);
+        org.robolectric.util.ReflectionHelpers.setField(port, "mAddress", address);
+        return device;
+    }
+
+    private void inputs(android.media.AudioDeviceInfo... devices) {
+        android.media.AudioManager manager = (android.media.AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        org.robolectric.Shadows.shadowOf(manager).setInputDevices(java.util.Arrays.asList(devices));
+    }
+
+    private void expectMissingInput() throws Exception {
+        try { new AudioRouting(context, 0); fail("unresolved explicit input must fail"); }
+        catch (IllegalStateException expected) { assertTrue(expected.getMessage().length() > 0); }
+    }
+
+    @Test public void usbSelectionSurvivesNewPortIdWithoutChangingOutput() throws Exception {
+        inputs(usb(41, "USB microphone", "usb:one"));
+        AudioRouting.chooseInput(context, 41);
+        AudioRouting.chooseOutput(context, 0);
+        inputs();
+        expectMissingInput();
+        inputs(usb(77, "USB microphone", "usb:one"));
+        assertEquals(77, AudioRouting.selectedInput(context));
+        assertEquals(77, new AudioRouting(context, 41).input);
+        assertEquals(0, AudioRouting.selectedOutput(context));
+    }
+
+    @Test public void recycledIdAndDifferentUsbAddressCannotReplaceSelection() throws Exception {
+        inputs(usb(41, "USB microphone", "usb:one"));
+        AudioRouting.chooseInput(context, 41);
+        inputs(usb(41, "Other microphone", "usb:two"));
+        expectMissingInput();
+        inputs(usb(77, "USB microphone", "usb:two"));
+        expectMissingInput();
+        assertEquals(41, AudioRouting.selectedInput(context));
+    }
+
+    @Test public void addresslessReconnectRequiresUniqueNameAndType() throws Exception {
+        inputs(usb(41, "USB microphone", ""));
+        AudioRouting.chooseInput(context, 41);
+        inputs(usb(77, "USB microphone", ""), usb(78, "USB microphone", ""));
+        expectMissingInput();
+        inputs(usb(77, "USB microphone", ""));
+        assertEquals(77, new AudioRouting(context, 0).input);
+    }
+
+    @Test public void rollbackRestoresIdentityTogetherWithInputId() throws Exception {
+        inputs(usb(41, "First microphone", "usb:one"), usb(51, "Second microphone", "usb:two"));
+        AudioRouting.chooseInput(context, 41);
+        AudioRouting old = new AudioRouting(context, 0);
+        AudioRouting.chooseInput(context, 51);
+        old.restoreSelection();
+        inputs(usb(77, "First microphone", "usb:one"), usb(51, "Second microphone", "usb:two"));
+        assertEquals(77, new AudioRouting(context, 0).input);
+    }
+
+    @Test public void explicitCurrentPortStillWorksWithIdenticalAddresslessDevices() throws Exception {
+        inputs(usb(41, "USB microphone", ""), usb(51, "USB microphone", ""));
+        AudioRouting.chooseInput(context, 51);
+        assertEquals(51, new AudioRouting(context, 0).input);
+    }
+
+    @Test public void recycledInputPortIsLabelledDisconnected() {
+        inputs(usb(41, "USB microphone", "usb:one"));
+        AudioRouting.chooseInput(context, 41);
+        inputs(usb(41, "Other microphone", "usb:two"));
+        assertFalse(AudioRouting.inputLabel(context).contains("Other microphone"));
+    }
+
 }
